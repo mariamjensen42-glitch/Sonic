@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tag_editor_title">编辑标签</string>
+    <string name="tag_editor_song_not_found">歌曲未找到</string>
+    <string name="tag_editor_title_label">标题</string>
+    <string name="tag_editor_title_placeholder">输入歌曲标题</string>
+    <string name="tag_editor_artist_label">艺术家</string>
+    <string name="tag_editor_artist_placeholder">输入艺术家名称</string>
+    <string name="tag_editor_album_label">专辑</string>
+    <string name="tag_editor_album_placeholder">输入专辑名称</string>
+    <string name="tag_editor_year_label">年份</string>
+    <string name="tag_editor_year_placeholder">输入年份</string>
+    <string name="tag_editor_genre_label">流派</string>
+    <string name="tag_editor_genre_placeholder">输入流派</string>
+    <string name="tag_editor_composer_label">作曲</string>
+    <string name="tag_editor_composer_placeholder">输入作曲者</string>
+    <string name="tag_editor_save">保存</string>
+    <string name="tag_editor_saving">保存中...</string>
+    <string name="tag_editor_cancel">取消</string>
+    <string name="tag_editor_discard_title">放弃更改？</string>
+    <string name="tag_editor_discard_message">您有未保存的更改，确定要放弃吗？</string>
+    <string name="tag_editor_discard">放弃</string>
+    <string name="tag_editor_keep_editing">继续编辑</string>
+</resources>

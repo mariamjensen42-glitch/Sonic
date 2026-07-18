@@ -1,0 +1,224 @@
+package com.cycling.domain.lyrics.parser
+
+import com.cycling.domain.lyrics.model.SyncedLyrics
+import com.cycling.domain.lyrics.model.karaoke.KaraokeAlignment
+import com.cycling.domain.lyrics.model.karaoke.KaraokeLine
+import com.cycling.domain.lyrics.model.karaoke.KaraokeSyllable
+import com.cycling.domain.lyrics.utils.SimpleXmlParser
+import com.cycling.domain.lyrics.utils.XmlElement
+import com.cycling.domain.lyrics.utils.parseAsTime
+import kotlin.collections.get
+
+object TTMLParser : ILyricsParser {
+    override fun parse(lines: List<String>): SyncedLyrics {
+        return parse(lines.joinToString("") { it.trimIndent() })
+    }
+
+    private fun preformattingTTML(content: String): String =
+        content
+            .replace("  ","")
+            .replace(" </span><span", "</span> <span")
+            .replace(",</span><span", ",</span> <span")
+
+    private fun decodeXmlEntities(text: String): String {
+        return text
+            .replace("&amp;", "&")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&apos;", "'")
+            .replace("&quot;", "\"")
+    }
+
+    private fun splitTranslationByBracket(text: String): Pair<String, String?> {
+        val regex = Regex("^(.*?)（(.*?)）$")
+        val match = regex.find(text)
+        return if (match != null) {
+            val outside = match.groupValues[1].trim()
+            val inside = match.groupValues[2].trim()
+            Pair(outside, inside.ifEmpty { null })
+        } else {
+            Pair(text.trim(), null)
+        }
+    }
+
+    override fun parse(content: String): SyncedLyrics {
+        val content = preformattingTTML(content)
+        val parsedLines = mutableListOf<KaraokeLine>()
+        val parser = SimpleXmlParser()
+        val rootElement = parser.parse(content)
+
+        val agentAlignments = parseMetadata(rootElement)
+        val iTunesTranslations = parseITunesTranslations(rootElement)
+        val allPElements = findAllPElements(rootElement)
+
+        allPElements.forEach { pElement ->
+            val begin = pElement.attributes.find { it.name == "begin" }?.value
+            val end = pElement.attributes.find { it.name == "end" }?.value
+
+            if (begin != null && end != null) {
+                val currentAlignment = getAlignmentFromAgent(pElement, agentAlignments)
+
+                val pLevelTranslationSpan = pElement.children.find { child ->
+                    child.attributes.any { it.name.endsWith(":role") && it.value == "x-translation" } &&
+                            child.attributes.none { it.name.endsWith(":role") && it.value == "x-bg" }
+                }
+
+                val iTunesLineKey = pElement.attributes.find { it.name == "itunes:key" || it.name == "key" }?.value
+                val iTunesTranslationRaw = if (iTunesLineKey != null) iTunesTranslations[iTunesLineKey] else null
+                val iTunesTranslationPair = if (iTunesTranslationRaw != null) splitTranslationByBracket(iTunesTranslationRaw) else null
+
+                val syllables = parseSyllablesFromChildren(pElement.children)
+
+                if (syllables.isNotEmpty()) {
+                    parsedLines.add(
+                        KaraokeLine(
+                            syllables = syllables,
+                            translation = pLevelTranslationSpan?.text?.trim()
+                                ?: iTunesTranslationPair?.first,
+                            isAccompaniment = false,
+                            alignment = currentAlignment,
+                            start = begin.parseAsTime(),
+                            end = end.parseAsTime()
+                        )
+                    )
+                }
+
+                pElement.children.forEach { child ->
+                    if (child.name == "span" && child.attributes.any {
+                            it.name.endsWith(":role") && it.value == "x-bg"
+                        }) {
+                        val bgSpanBegin = child.attributes.find { it.name == "begin" }?.value
+                        val bgSpanEnd = child.attributes.find { it.name == "end" }?.value
+
+                        val accompanimentSyllables = parseSyllablesFromChildren(child.children)
+                        if (accompanimentSyllables.isNotEmpty()) {
+                            val bgTranslationSpan = child.children.find { bgChild ->
+                                bgChild.attributes.any { it.name.endsWith(":role") && it.value == "x-translation" }
+                            }
+
+                            val bgITunesLineKey = child.attributes.find { it.name == "itunes:key" || it.name == "key" }?.value
+                                ?: iTunesLineKey
+                            val bgITunesTranslationRaw = if (bgITunesLineKey != null) iTunesTranslations[bgITunesLineKey] else null
+                            val bgITunesTranslationPair = if (bgITunesTranslationRaw != null) splitTranslationByBracket(bgITunesTranslationRaw) else null
+
+                            parsedLines.add(
+                                KaraokeLine(
+                                    syllables = accompanimentSyllables,
+                                    translation = bgTranslationSpan?.text?.trim()
+                                        ?: bgITunesTranslationPair?.second
+                                        ?: bgITunesTranslationPair?.first,
+                                    isAccompaniment = true,
+                                    alignment = currentAlignment,
+                                    start = bgSpanBegin?.parseAsTime()
+                                        ?: accompanimentSyllables.first().start,
+                                    end = bgSpanEnd?.parseAsTime()
+                                        ?: accompanimentSyllables.last().end
+                                )
+                            )
+                        }
+
+                    }
+                }
+            }
+        }
+
+        return SyncedLyrics(lines = parsedLines.sortedBy { it.start })
+    }
+
+    private fun parseITunesTranslations(element: XmlElement): Map<String, String> {
+        val translations = mutableMapOf<String, String>()
+        fun findTranslations(elem: XmlElement) {
+            if (elem.name == "translation" || elem.name.endsWith(":translation")) {
+                elem.children.forEach { textElem ->
+                    if (textElem.name == "text") {
+                        val key = textElem.attributes.find { it.name == "for" }?.value
+                        val value = textElem.text
+                        if (key != null && value.isNotBlank()) {
+                            translations[key] = value.trim()
+                        }
+                    }
+                }
+            }
+            elem.children.forEach { findTranslations(it) }
+        }
+        findTranslations(element)
+        return translations
+    }
+
+    private fun parseSyllablesFromChildren(children: List<XmlElement>): List<KaraokeSyllable> {
+        val syllables = mutableListOf<KaraokeSyllable>()
+        for (i in children.indices) {
+            val child = children[i]
+
+            if (child.name == "span" && child.attributes.none {
+                    it.name.endsWith(":role") && (it.value == "x-translation" || it.value == "x-bg")
+                }) {
+                val spanBegin = child.attributes.find { it.name == "begin" }?.value
+                val spanEnd = child.attributes.find { it.name == "end" }?.value
+
+                if (spanBegin != null && spanEnd != null && child.text.isNotEmpty()) {
+
+                    var syllableContent = decodeXmlEntities(child.text)
+
+                    val nextSibling = children.getOrNull(i + 1)
+                    if (nextSibling != null && nextSibling.name == "#text") {
+                        syllableContent += decodeXmlEntities(nextSibling.text)
+                    }
+
+                    syllables.add(
+                        KaraokeSyllable(
+                            content = syllableContent,
+                            start = spanBegin.parseAsTime(),
+                            end = spanEnd.parseAsTime()
+                        )
+                    )
+                }
+            }
+        }
+
+        if (syllables.isNotEmpty()) {
+            val last = syllables.last()
+            syllables[syllables.lastIndex] =
+                last.copy(content = last.content.trimEnd())
+        }
+
+        return syllables
+    }
+
+    private fun parseMetadata(element: XmlElement): Map<String, KaraokeAlignment> {
+        fun findMetadata(elem: XmlElement): XmlElement? {
+            if (elem.name == "metadata") return elem
+            return elem.children.firstNotNullOfOrNull { findMetadata(it) }
+        }
+
+        val metadata = findMetadata(element) ?: return emptyMap()
+
+        return metadata.children
+            .filter { it.name.endsWith(":agent") || it.name == "agent" }
+            .mapIndexed { index, agent ->
+                val id = agent.attributes.find {
+                    it.name == "xml:id" || it.name == "id"
+                }?.value ?: ""
+                id to if (index == 0) KaraokeAlignment.Start else KaraokeAlignment.End
+            }.toMap()
+    }
+
+    private fun getAlignmentFromAgent(
+        element: XmlElement,
+        agentAlignments: Map<String, KaraokeAlignment>
+    ): KaraokeAlignment {
+        val agentId = element.attributes.find { it.name == "ttm:agent" }?.value
+        return agentAlignments[agentId] ?: KaraokeAlignment.Start
+    }
+
+    private fun findAllPElements(element: XmlElement): List<XmlElement> {
+        val pElements = mutableListOf<XmlElement>()
+        if (element.name == "p") {
+            pElements.add(element)
+        }
+        element.children.forEach { child ->
+            pElements.addAll(findAllPElements(child))
+        }
+        return pElements
+    }
+}

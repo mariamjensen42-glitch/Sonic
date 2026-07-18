@@ -1,0 +1,13 @@
+- [x] PlaylistsScreen 显示播放列表列表
+- [x] PlaylistsScreen 支持创建新播放列表
+- [x] PlaylistsScreen 支持删除播放列表
+- [x] PlaylistsScreen 支持重命名播放列表
+- [x] PlaylistsScreen 点击列表项可导航到详情页
+- [x] PlaylistsScreen 空状态显示正确
+- [x] PlaylistDetailScreen 显示播放列表信息
+- [x] PlaylistDetailScreen 显示歌曲列表
+- [x] PlaylistDetailScreen 支持播放全部
+- [x] PlaylistDetailScreen 支持随机播放
+- [x] PlaylistDetailScreen 支持移除歌曲
+- [x] PlaylistDetailScreen 空状态显示正确
+- [x] 导航配置正确连接两个页面

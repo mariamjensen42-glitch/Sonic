@@ -1,0 +1,13 @@
+- [x] PlayerRepository 接口包含 playNext 方法签名
+- [x] PlayerRepository 接口包含 moveQueueItem 方法签名
+- [x] PlayerManager.playNext 正确将歌曲插入到当前播放歌曲之后
+- [x] PlayerManager.moveQueueItem 正确移动歌曲并更新当前播放索引
+- [x] PlayerContract 包含 PlayNext 和 MoveQueueItem Intent
+- [x] PlayerViewModel 正确处理 PlayNext Intent
+- [x] PlayerViewModel 正确处理 MoveQueueItem Intent
+- [x] 播放队列项显示拖拽手柄图标
+- [x] 拖拽队列项时显示视觉反馈效果
+- [x] 拖拽完成后队列顺序正确更新
+- [x] 歌曲列表更多菜单包含"下一首播放"选项
+- [x] 点击"下一首播放"后歌曲被正确插入队列
+- [x] 操作完成后显示 Toast 提示

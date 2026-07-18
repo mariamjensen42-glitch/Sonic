@@ -1,0 +1,12 @@
+- [ ] PlayerService 后台播放服务正常工作
+- [ ] 通知栏显示播放控制按钮
+- [ ] PlayerManager 正确管理播放状态
+- [ ] MiniPlayer 显示当前播放歌曲信息
+- [ ] MiniPlayer 播放/暂停按钮正常工作
+- [ ] 点击 MiniPlayer 可展开全屏播放器
+- [ ] PlayerScreen 显示大封面和歌曲信息
+- [ ] PlayerScreen 进度条可拖动
+- [ ] PlayerScreen 上一首/下一首按钮正常工作
+- [ ] PlayerScreen 循环模式切换正常
+- [ ] 播放队列显示正确
+- [ ] 从各页面点击歌曲可开始播放
