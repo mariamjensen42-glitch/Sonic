@@ -56,7 +56,8 @@ fun PlaylistEntity.toDomain(): Playlist {
         name = name,
         dateAdded = dateAdded,
         dateModified = dateModified,
-        numberOfSongs = 0
+        numberOfSongs = 0,
+        albumArt = null
     )
 }
 

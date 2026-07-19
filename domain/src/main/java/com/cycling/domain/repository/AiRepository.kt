@@ -25,6 +25,7 @@ interface AiRepository {
     
     suspend fun generatePlaylistByTheme(
         theme: String,
-        songs: List<Song>
+        songs: List<Song>,
+        songCount: Int
     ): Result<List<Long>>
 }

@@ -38,6 +38,7 @@ import com.cycling.core.ui.theme.M3ComponentSize
 import com.cycling.core.ui.theme.M3Spacing
 import com.cycling.core.ui.theme.SpotifyColors
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import com.cycling.presentation.R
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -62,9 +63,9 @@ fun ArtistsScreen(
     Scaffold(
         topBar = {
             M3DetailTopAppBar(
-                title = "歌手",
+                title = stringResource(R.string.artists_title),
                 navigationIcon = Icons.AutoMirrored.Filled.ArrowBack,
-                navigationIconContentDescription = "返回",
+                navigationIconContentDescription = stringResource(R.string.artists_back_desc),
                 onNavigationClick = onNavigateBack,
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = SpotifyColors.Background,
@@ -97,12 +98,12 @@ fun ArtistsScreen(
                     )
                     Spacer(modifier = Modifier.height(M3Spacing.medium))
                     Text(
-                        text = "暂无歌手",
+                        text = stringResource(R.string.artists_empty_title),
                         style = MaterialTheme.typography.titleMedium,
                         color = SpotifyColors.TextPrimary
                     )
                     Text(
-                        text = "您的音乐库中没有歌手信息",
+                        text = stringResource(R.string.artists_empty_subtitle),
                         style = MaterialTheme.typography.bodyMedium,
                         color = SpotifyColors.TextSecondary
                     )

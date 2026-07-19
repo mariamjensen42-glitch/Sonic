@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.cycling.presentation.R
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -41,8 +42,13 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             playerRepository.playerState.collect { state ->
                 val currentSong = state.currentSong
-                _uiState.update {
+                val songChanged = currentSong?.path != null && currentSong.path != lastLyricsSongPath
+                _uiState.update { prev ->
                     state.toUiState().copy(
+                        viewMode = prev.viewMode,
+                        lyrics = if (songChanged) null else prev.lyrics,
+                        isLoadingLyrics = if (songChanged) false else prev.isLoadingLyrics,
+                        hasLyrics = if (songChanged) false else prev.hasLyrics,
                         isFavorite = currentSong?.isFavorite ?: false
                     )
                 }
@@ -187,14 +193,14 @@ class PlayerViewModel @Inject constructor(
     private fun addToQueue(song: com.cycling.domain.model.Song) {
         playerRepository.addToQueue(song)
         viewModelScope.launch {
-            _uiEffect.emit(PlayerEffect.ShowToast("已添加到播放队列"))
+            _uiEffect.emit(PlayerEffect.ShowToast(R.string.player_added_to_queue))
         }
     }
 
     private fun playNext(song: com.cycling.domain.model.Song) {
         playerRepository.playNext(song)
         viewModelScope.launch {
-            _uiEffect.emit(PlayerEffect.ShowToast("已设为下一首播放"))
+            _uiEffect.emit(PlayerEffect.ShowToast(R.string.player_play_next))
         }
     }
 
@@ -219,7 +225,7 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             val newFavoriteStatus = songRepository.toggleFavorite(currentSong.id)
             _uiState.update { it.copy(isFavorite = newFavoriteStatus) }
-            val message = if (newFavoriteStatus) "已添加到喜欢" else "已从喜欢移除"
+            val message = if (newFavoriteStatus) R.string.player_added_to_favorites else R.string.player_removed_from_favorites
             _uiEffect.emit(PlayerEffect.ShowToast(message))
         }
     }

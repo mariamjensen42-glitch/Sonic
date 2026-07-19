@@ -2,23 +2,39 @@ package com.cycling.core.ui.theme
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.media.MediaMetadataRetriever
 import androidx.compose.ui.graphics.Color
-import androidx.core.graphics.drawable.toBitmap
 import androidx.palette.graphics.Palette
-import coil.imageLoader
-import coil.request.ImageRequest
-import coil.size.Size
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/**
- * Extracts a dominant color from an album/artist artwork URI.
- *
- * Uses Coil to load the bitmap — handles all URI types (content://, file://, http://)
- * that the app's AsyncImage already supports.
- */
 object ArtColorExtractor {
 
+    /**
+     * 从本地音乐文件路径提取封面主色。
+     * 使用 MediaMetadataRetriever 获取嵌入的封面图片，再用 Palette 取色。
+     */
+    suspend fun extractColorFromMusicFile(
+        filePath: String,
+        fallbackColor: Color = SpotifyColors.Background
+    ): Color {
+        return withContext(Dispatchers.IO) {
+            try {
+                val bitmap = getAlbumArtFromFile(filePath) ?: return@withContext fallbackColor
+                val palette = Palette.from(bitmap).generate()
+                val swatch = palette.vibrantSwatch
+                    ?: palette.darkVibrantSwatch
+                    ?: palette.mutedSwatch
+                    ?: palette.dominantSwatch
+                if (swatch != null) Color(swatch.rgb or (0xFF shl 24)) else fallbackColor
+            } catch (e: Exception) {
+                fallbackColor
+            }
+        }
+    }
+
+    /** 保留给其他页面使用的旧方法，通过 URI 加载图片 */
     suspend fun extractColorFromImageUrl(
         context: Context,
         imageUrl: String,
@@ -26,36 +42,33 @@ object ArtColorExtractor {
     ): Color {
         return withContext(Dispatchers.IO) {
             try {
-                val bitmap = loadBitmapViaCoil(context, imageUrl)
-                bitmap?.let { extractColorFromBitmap(it, fallbackColor) } ?: fallbackColor
+                val uri = android.net.Uri.parse(imageUrl)
+                val inputStream = context.contentResolver.openInputStream(uri)
+                val bitmap = android.graphics.BitmapFactory.decodeStream(inputStream)
+                inputStream?.close()
+                if (bitmap == null) return@withContext fallbackColor
+                val palette = Palette.from(bitmap).generate()
+                val swatch = palette.vibrantSwatch
+                    ?: palette.darkVibrantSwatch
+                    ?: palette.mutedSwatch
+                    ?: palette.dominantSwatch
+                if (swatch != null) Color(swatch.rgb or (0xFF shl 24)) else fallbackColor
             } catch (e: Exception) {
                 fallbackColor
             }
         }
     }
 
-    private suspend fun loadBitmapViaCoil(context: Context, imageUrl: String): Bitmap? {
-        val loader = context.imageLoader
-        val request = ImageRequest.Builder(context)
-            .data(imageUrl)
-            .size(Size(50, 50))       // scale down for performance
-            .memoryCacheKey("artcolor_$imageUrl")
-            .build()
-
-        val result = loader.execute(request)
-        return result.drawable?.toBitmap()
-    }
-
-    private fun extractColorFromBitmap(bitmap: Bitmap, fallbackColor: Color): Color {
-        val palette = Palette.from(bitmap).maximumColorCount(16).generate()
-
-        // Match reference project: mutedSwatch first
-        val rgb = palette?.mutedSwatch?.rgb
-            ?: palette?.darkVibrantSwatch?.rgb
-            ?: palette?.vibrantSwatch?.rgb
-            ?: palette?.dominantSwatch?.rgb
-            ?: return fallbackColor
-
-        return Color(rgb or (0xFF shl 24))
+    private fun getAlbumArtFromFile(filePath: String): Bitmap? {
+        val retriever = MediaMetadataRetriever()
+        try {
+            retriever.setDataSource(filePath)
+            val data = retriever.embeddedPicture ?: return null
+            return BitmapFactory.decodeByteArray(data, 0, data.size)
+        } catch (e: Exception) {
+            return null
+        } finally {
+            retriever.release()
+        }
     }
 }

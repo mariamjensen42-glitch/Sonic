@@ -53,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -62,6 +63,7 @@ import coil3.compose.AsyncImage
 import com.cycling.core.ui.components.M3FilledButton
 import com.cycling.domain.model.AudioMetadata
 import com.cycling.domain.model.Song
+import com.cycling.presentation.R
 import com.cycling.presentation.components.formatDuration
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -86,14 +88,14 @@ fun SongDetailScreen(
                 is SongDetailEffect.ShowAddToPlaylistDialog -> {}
                 is SongDetailEffect.ShowCopiedMessage -> {
                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    val clip = ClipData.newPlainText("Song Path", effect.message)
+                    val clip = ClipData.newPlainText("Song Path", context.getString(effect.message))
                     clipboard.setPrimaryClip(clip)
                 }
                 is SongDetailEffect.ShowError -> {
-                    Toast.makeText(context, effect.message, Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, context.getString(effect.message), Toast.LENGTH_LONG).show()
                 }
                 is SongDetailEffect.ShowToast -> {
-                    Toast.makeText(context, effect.message, Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(effect.message), Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -111,7 +113,7 @@ fun SongDetailScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = if (uiState.isEditMode) "编辑歌曲信息" else "歌曲详情",
+                        text = if (uiState.isEditMode) stringResource(R.string.song_detail_title_edit) else stringResource(R.string.song_detail_title_view),
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -126,7 +128,7 @@ fun SongDetailScreen(
                     }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "返回"
+                            contentDescription = stringResource(R.string.song_detail_back_desc)
                         )
                     }
                 },
@@ -145,7 +147,7 @@ fun SongDetailScreen(
                             } else {
                                 Icon(
                                     imageVector = Icons.Default.Check,
-                                    contentDescription = "保存",
+                                    contentDescription = stringResource(R.string.song_detail_save_desc),
                                     tint = if (uiState.hasChanges) MaterialTheme.colorScheme.primary
                                     else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -156,7 +158,7 @@ fun SongDetailScreen(
                             IconButton(onClick = { viewModel.handleIntent(SongDetailIntent.EnterEditMode) }) {
                                 Icon(
                                     imageVector = Icons.Default.Edit,
-                                    contentDescription = "编辑"
+                                    contentDescription = stringResource(R.string.song_detail_edit_desc)
                                 )
                             }
                         }
@@ -289,47 +291,47 @@ private fun EditModeContent(
                 .padding(horizontal = 16.dp)
         ) {
             EditTextField(
-                label = "标题",
+                label = stringResource(R.string.song_detail_title_label),
                 value = uiState.editedTitle,
                 onValueChange = onTitleChange,
-                placeholder = "输入标题"
+                placeholder = stringResource(R.string.song_detail_title_placeholder)
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
             EditTextField(
-                label = "艺术家",
+                label = stringResource(R.string.song_detail_artist_label),
                 value = uiState.editedArtist,
                 onValueChange = onArtistChange,
-                placeholder = "输入艺术家"
+                placeholder = stringResource(R.string.song_detail_artist_placeholder)
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
             EditTextField(
-                label = "专辑",
+                label = stringResource(R.string.song_detail_album_label),
                 value = uiState.editedAlbum,
                 onValueChange = onAlbumChange,
-                placeholder = "输入专辑"
+                placeholder = stringResource(R.string.song_detail_album_placeholder)
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
             EditTextField(
-                label = "年份",
+                label = stringResource(R.string.song_detail_year_label),
                 value = uiState.editedYear,
                 onValueChange = onYearChange,
-                placeholder = "输入年份",
+                placeholder = stringResource(R.string.song_detail_year_placeholder),
                 keyboardType = KeyboardType.Number
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
             EditTextField(
-                label = "流派",
+                label = stringResource(R.string.song_detail_genre_label),
                 value = uiState.editedGenre,
                 onValueChange = onGenreChange,
-                placeholder = "输入流派"
+                placeholder = stringResource(R.string.song_detail_genre_placeholder)
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -339,7 +341,7 @@ private fun EditModeContent(
                 modifier = Modifier.fillMaxWidth(),
                 enabled = uiState.hasChanges && !uiState.isSaving
             ) {
-                Text(text = if (uiState.isSaving) "保存中..." else "保存")
+                Text(text = if (uiState.isSaving) stringResource(R.string.song_detail_saving) else stringResource(R.string.song_detail_save))
             }
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -349,7 +351,7 @@ private fun EditModeContent(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = "取消",
+                    text = stringResource(R.string.song_detail_cancel),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -393,19 +395,19 @@ private fun DiscardChangesDialog(
 ) {
     AlertDialog(
         onDismissRequest = onKeepEditing,
-        title = { Text(text = "放弃更改") },
-        text = { Text(text = "您有未保存的更改，确定要放弃吗？") },
+        title = { Text(text = stringResource(R.string.song_detail_discard_title)) },
+        text = { Text(text = stringResource(R.string.song_detail_discard_message)) },
         confirmButton = {
             TextButton(onClick = onDiscard) {
                 Text(
-                    text = "放弃",
+                    text = stringResource(R.string.song_detail_discard),
                     color = Color(0xFFFF453A)
                 )
             }
         },
         dismissButton = {
             TextButton(onClick = onKeepEditing) {
-                Text(text = "继续编辑")
+                Text(text = stringResource(R.string.song_detail_keep_editing))
             }
         }
     )
@@ -496,7 +498,7 @@ private fun ActionButtons(
             icon = Icons.Default.PlayArrow,
             modifier = Modifier.weight(1f)
         ) {
-            Text(text = "播放")
+            Text(text = stringResource(R.string.song_detail_play))
         }
 
         IconButton(
@@ -511,7 +513,7 @@ private fun ActionButtons(
         ) {
             Icon(
                 imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                contentDescription = if (isFavorite) "取消收藏" else "收藏",
+                contentDescription = if (isFavorite) stringResource(R.string.player_unfavorite_desc) else stringResource(R.string.player_favorite_desc),
                 tint = if (isFavorite) Color(0xFFFF453A) else MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
@@ -525,7 +527,7 @@ private fun ActionButtons(
         ) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.PlaylistAdd,
-                contentDescription = "添加到播放列表",
+                contentDescription = stringResource(R.string.song_detail_add_to_playlist_desc),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
@@ -540,7 +542,7 @@ private fun SongInfoSection(song: Song, audioMetadata: AudioMetadata?) {
             .padding(horizontal = 16.dp)
     ) {
         Text(
-            text = "基本信息",
+            text = stringResource(R.string.song_detail_section_basic),
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onBackground,
             fontWeight = FontWeight.SemiBold
@@ -548,26 +550,26 @@ private fun SongInfoSection(song: Song, audioMetadata: AudioMetadata?) {
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        InfoItem(label = "时长", value = formatDuration(song.duration))
-        InfoItem(label = "格式", value = getFormatFromMimeType(song.mimeType))
-        InfoItem(label = "文件大小", value = formatFileSize(song.size))
+        InfoItem(label = stringResource(R.string.song_detail_duration), value = formatDuration(song.duration))
+        InfoItem(label = stringResource(R.string.song_detail_format), value = getFormatFromMimeType(song.mimeType, stringResource(R.string.song_detail_unknown)))
+        InfoItem(label = stringResource(R.string.song_detail_file_size), value = formatFileSize(song.size))
 
         audioMetadata?.let { metadata ->
             if (metadata.year != null) {
-                InfoItem(label = "年份", value = metadata.year!!)
+                InfoItem(label = stringResource(R.string.song_detail_year), value = metadata.year!!)
             }
             if (metadata.genre != null) {
-                InfoItem(label = "流派", value = metadata.genre!!)
+                InfoItem(label = stringResource(R.string.song_detail_genre), value = metadata.genre!!)
             }
             if (metadata.composer != null) {
-                InfoItem(label = "作曲", value = metadata.composer!!)
+                InfoItem(label = stringResource(R.string.song_detail_composer), value = metadata.composer!!)
             }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "音频信息",
+            text = stringResource(R.string.song_detail_section_audio),
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onBackground,
             fontWeight = FontWeight.SemiBold
@@ -576,24 +578,24 @@ private fun SongInfoSection(song: Song, audioMetadata: AudioMetadata?) {
         Spacer(modifier = Modifier.height(12.dp))
 
         val bitrate = audioMetadata?.bitrate ?: song.bitrate
-        InfoItem(label = "比特率", value = if (bitrate > 0) "$bitrate kbps" else "未知")
+        InfoItem(label = stringResource(R.string.song_detail_bitrate), value = if (bitrate > 0) "$bitrate kbps" else stringResource(R.string.song_detail_unknown))
         
         audioMetadata?.let { metadata ->
             if (metadata.sampleRate > 0) {
-                InfoItem(label = "采样率", value = "${metadata.sampleRate} Hz")
+                InfoItem(label = stringResource(R.string.song_detail_sample_rate), value = "${metadata.sampleRate} Hz")
             }
             if (metadata.channels > 0) {
-                InfoItem(label = "声道", value = if (metadata.channels == 2) "立体声" else "单声道")
+                InfoItem(label = stringResource(R.string.song_detail_channels), value = if (metadata.channels == 2) stringResource(R.string.song_detail_stereo) else stringResource(R.string.song_detail_mono))
             }
             if (metadata.encodingType.isNotEmpty()) {
-                InfoItem(label = "编码", value = metadata.encodingType)
+                InfoItem(label = stringResource(R.string.song_detail_encoding), value = metadata.encodingType)
             }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "文件信息",
+            text = stringResource(R.string.song_detail_section_file),
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onBackground,
             fontWeight = FontWeight.SemiBold
@@ -601,13 +603,13 @@ private fun SongInfoSection(song: Song, audioMetadata: AudioMetadata?) {
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        InfoItem(label = "添加日期", value = formatDate(song.dateAdded))
-        InfoItem(label = "修改日期", value = formatDate(song.dateModified))
+        InfoItem(label = stringResource(R.string.song_detail_added_date), value = formatDate(song.dateAdded, stringResource(R.string.song_detail_unknown)))
+        InfoItem(label = stringResource(R.string.song_detail_modified_date), value = formatDate(song.dateModified, stringResource(R.string.song_detail_unknown)))
 
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "文件路径",
+            text = stringResource(R.string.song_detail_section_path),
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onBackground,
             fontWeight = FontWeight.SemiBold
@@ -674,16 +676,16 @@ private fun PathItem(path: String) {
         ) {
             Icon(
                 imageVector = Icons.Default.ContentCopy,
-                contentDescription = "复制",
+                contentDescription = stringResource(R.string.song_detail_copy_desc),
                 modifier = Modifier.size(16.dp)
             )
             Spacer(modifier = Modifier.width(4.dp))
-            Text("复制")
+            Text(stringResource(R.string.song_detail_copy))
         }
     }
 }
 
-private fun getFormatFromMimeType(mimeType: String): String {
+private fun getFormatFromMimeType(mimeType: String, unknownLabel: String = "未知"): String {
     return when {
         mimeType.contains("mp3", ignoreCase = true) -> "MP3"
         mimeType.contains("mpeg", ignoreCase = true) -> "MPEG"
@@ -695,7 +697,7 @@ private fun getFormatFromMimeType(mimeType: String): String {
         mimeType.contains("wma", ignoreCase = true) -> "WMA"
         mimeType.contains("m4a", ignoreCase = true) -> "M4A"
         mimeType.contains("3gpp", ignoreCase = true) -> "3GPP"
-        else -> mimeType.ifEmpty { "未知" }
+        else -> mimeType.ifEmpty { unknownLabel }
     }
 }
 
@@ -708,8 +710,8 @@ private fun formatFileSize(size: Long): String {
     }
 }
 
-private fun formatDate(timestamp: Long): String {
-    if (timestamp <= 0) return "未知"
+private fun formatDate(timestamp: Long, unknownLabel: String = "未知"): String {
+    if (timestamp <= 0) return unknownLabel
     val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
     return sdf.format(Date(timestamp))
 }

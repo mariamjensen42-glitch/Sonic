@@ -1,6 +1,7 @@
 package com.cycling.presentation.songdetail
 
 import com.cycling.domain.model.AudioMetadata
+import androidx.annotation.StringRes
 import com.cycling.domain.model.Song
 
 data class SongDetailUiState(
@@ -40,7 +41,7 @@ sealed interface SongDetailIntent {
 sealed interface SongDetailEffect {
     data class NavigateToPlayer(val songId: Long) : SongDetailEffect
     data object ShowAddToPlaylistDialog : SongDetailEffect
-    data class ShowCopiedMessage(val message: String) : SongDetailEffect
-    data class ShowError(val message: String) : SongDetailEffect
-    data class ShowToast(val message: String) : SongDetailEffect
+    data class ShowCopiedMessage(@StringRes val message: Int) : SongDetailEffect
+    data class ShowError(@StringRes val message: Int) : SongDetailEffect
+    data class ShowToast(@StringRes val message: Int) : SongDetailEffect
 }

@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -45,6 +46,7 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
@@ -62,6 +64,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -90,34 +93,39 @@ fun PlayerScreen(
     uiState: PlayerUiState,
     onIntent: (PlayerIntent) -> Unit,
     onNavigateBack: () -> Unit,
+    onNavigateToLyrics: () -> Unit = {},
     modifier: Modifier = Modifier,
     accentColor: Color = MaterialTheme.colorScheme.primary,
     gradientStartColor: Color = accentColor
 ) {
-    var showQueue by remember { mutableStateOf(false) }
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val currentSong = uiState.currentSong
-    var sliderValue by remember { mutableStateOf<Float?>(null) }
+   var showQueue by remember { mutableStateOf(false) }
+   val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+   val currentSong = uiState.currentSong
+   val dominantColors = rememberDominantColors(currentSong?.albumArt)
+   val effectiveAccent = if (currentSong?.albumArt != null) dominantColors.primary else accentColor
+   val effectiveGradientStart = if (currentSong?.albumArt != null) dominantColors.secondary else gradientStartColor
+    val queueSheetBg = MaterialTheme.colorScheme.surfaceContainer
 
-    val playbackProgress = if (uiState.duration > 0) {
-        uiState.playbackPosition.toFloat() / uiState.duration.toFloat()
-    } else 0f
+   val playbackProgress = if (uiState.duration > 0) {
+       uiState.playbackPosition.toFloat() / uiState.duration.toFloat()
+   } else 0f
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(gradientStartColor, Color.Black),
-                    startY = 100f
-                )
-            )
-            .statusBarsPadding(),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        // ── Top Bar (Neptune style: back + "PLAYING SONG" + more) ──
+   Column(
+       modifier = modifier
+           .fillMaxSize()
+           .background(
+               Brush.verticalGradient(
+                    colors = listOf(effectiveGradientStart, Color.Black),
+                   startY = 100f
+               )
+           )
+           .statusBarsPadding(),
+       horizontalAlignment = Alignment.CenterHorizontally
+   ) {
+       // ── Top Bar (Neptune style: back + "PLAYING SONG" + more) ──
         PlayerTopBar(
             onNavigateBack = onNavigateBack,
+            onNavigateToLyrics = onNavigateToLyrics,
             onToggleQueue = { showQueue = true }
         )
 
@@ -168,6 +176,7 @@ fun PlayerScreen(
             )
 
             // Progress Slider
+            var sliderValue by remember { mutableStateOf<Float?>(null) }
             val progress = sliderValue ?: playbackProgress
             CustomSlider(
                 value = progress,
@@ -231,7 +240,7 @@ fun PlayerScreen(
         ModalBottomSheet(
             onDismissRequest = { showQueue = false },
             sheetState = sheetState,
-            containerColor = MaterialTheme.colorScheme.surfaceContainer
+            containerColor = queueSheetBg
         ) {
             Column(
                 modifier = Modifier
@@ -244,7 +253,7 @@ fun PlayerScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "播放队列",
+                        text = stringResource(R.string.player_queue_title),
                         style = MaterialTheme.typography.titleLarge
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -254,13 +263,20 @@ fun PlayerScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         if (uiState.playbackQueue.isNotEmpty()) {
-                            Spacer(modifier = Modifier.width(M3Spacing.medium))
-                            IconButton(onClick = { onIntent(PlayerIntent.ClearQueue) }) {
+                            Spacer(modifier = Modifier.width(M3Spacing.small))
+                            TextButton(
+                                onClick = { onIntent(PlayerIntent.ClearQueue) },
+                                colors = ButtonDefaults.textButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.error
+                                )
+                            ) {
                                 Icon(
                                     imageVector = Icons.Default.Delete,
-                                    contentDescription = "清空队列",
-                                    tint = MaterialTheme.colorScheme.error
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
                                 )
+                                Spacer(modifier = Modifier.width(M3Spacing.extraSmall))
+                                Text(stringResource(R.string.player_clear_queue), style = MaterialTheme.typography.labelMedium)
                             }
                         }
                     }
@@ -276,7 +292,7 @@ fun PlayerScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "播放队列为空",
+                            text = stringResource(R.string.player_empty_queue),
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -285,7 +301,7 @@ fun PlayerScreen(
                     DraggableQueueList(
                         queue = uiState.playbackQueue,
                         currentIndex = uiState.queueIndex,
-                        accentColor = accentColor,
+                        accentColor = effectiveAccent,
                         onPlayFromQueue = { index -> onIntent(PlayerIntent.PlayFromQueue(index)) },
                         onRemoveFromQueue = { index -> onIntent(PlayerIntent.RemoveFromQueue(index)) },
                         onMoveItem = { from, to -> onIntent(PlayerIntent.MoveQueueItem(from, to)) }
@@ -305,6 +321,7 @@ fun PlayerScreen(
 @Composable
 private fun PlayerTopBar(
     onNavigateBack: () -> Unit,
+    onNavigateToLyrics: () -> Unit,
     onToggleQueue: () -> Unit
 ) {
     Row(
@@ -324,27 +341,47 @@ private fun PlayerTopBar(
                 ),
             painter = painterResource(id = R.drawable.ic_down),
             tint = Color.White,
-            contentDescription = "关闭"
+            contentDescription = stringResource(R.string.player_close)
         )
         Text(
-            text = "正在播放",
+            text = stringResource(R.string.player_now_playing),
             color = SpotifyColors.TextSecondary,
             fontSize = 11.sp,
             fontWeight = FontWeight.Medium,
             letterSpacing = 1.sp
         )
-        Icon(
-            modifier = Modifier
-                .size(23.dp)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = onToggleQueue
-                ),
-            imageVector = Icons.AutoMirrored.Filled.List,
-            tint = Color.White,
-            contentDescription = "播放队列"
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onNavigateToLyrics
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_lyrics),
+                    contentDescription = stringResource(R.string.player_toggle_lyrics),
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            Spacer(Modifier.width(4.dp))
+            Icon(
+                modifier = Modifier
+                    .size(23.dp)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onToggleQueue
+                    ),
+                painter = painterResource(id = R.drawable.ic_dots),
+                tint = Color.White,
+                contentDescription = stringResource(R.string.player_queue_desc)
+            )
+        }
     }
 }
 
@@ -404,7 +441,7 @@ private fun PlayerInfo(
                 ),
             painter = if (isFavorite) painterResource(id = R.drawable.added) else painterResource(id = R.drawable.ic_add),
             tint = if (isFavorite) SpotifyColors.Accent else Color.White,
-            contentDescription = if (isFavorite) "取消收藏" else "收藏"
+            contentDescription = if (isFavorite) stringResource(R.string.player_unfavorite_desc) else stringResource(R.string.player_favorite_desc)
         )
     }
 }
@@ -478,7 +515,7 @@ private fun PlayerFullControls(
         // Shuffle
         ControlIconButton(
             icon = R.drawable.ic_player_shuffle,
-            contentDescription = "随机播放",
+            contentDescription = stringResource(R.string.player_shuffle_desc),
             onClick = onToggleShuffle,
             tint = if (shuffleMode) SpotifyColors.Accent else Color.White,
             size = 25.dp
@@ -487,7 +524,7 @@ private fun PlayerFullControls(
         // Previous
         ControlIconButton(
             icon = R.drawable.ic_player_back,
-            contentDescription = "上一首",
+            contentDescription = stringResource(R.string.player_previous_desc),
             onClick = onSkipPrevious,
             tint = Color.White,
             size = 35.dp
@@ -516,7 +553,7 @@ private fun PlayerFullControls(
         ) {
             Icon(
                 painter = if (isPlaying) painterResource(id = R.drawable.ic_playing) else painterResource(id = R.drawable.play_svgrepo_com),
-                contentDescription = if (isPlaying) "暂停" else "播放",
+                contentDescription = if (isPlaying) stringResource(R.string.player_pause_desc) else stringResource(R.string.player_play_desc),
                 modifier = Modifier.size(30.dp),
                 tint = Color.Black
             )
@@ -525,16 +562,20 @@ private fun PlayerFullControls(
         // Next
         ControlIconButton(
             icon = R.drawable.ic_player_skip,
-            contentDescription = "下一首",
+            contentDescription = stringResource(R.string.player_next_desc),
             onClick = onSkipNext,
             tint = Color.White,
             size = 35.dp
         )
 
         // Repeat
+        val repeatIcon = when (repeatMode) {
+            RepeatMode.ONE -> R.drawable.ic_repeat_active
+            else -> R.drawable.ic_repeat
+        }
         ControlIconButton(
-            icon = R.drawable.ic_repeat,
-            contentDescription = "循环模式",
+            icon = repeatIcon,
+            contentDescription = stringResource(R.string.player_repeat_desc),
             onClick = onToggleRepeat,
             tint = if (repeatMode != RepeatMode.OFF) SpotifyColors.Accent else Color.White,
             size = 20.dp
@@ -623,15 +664,16 @@ private fun DraggableQueueList(
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .background(MaterialTheme.colorScheme.errorContainer)
                                 .clip(M3Shapes.cornerMedium),
                             contentAlignment = Alignment.CenterEnd
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Delete,
-                                contentDescription = "删除",
-                                tint = MaterialTheme.colorScheme.onErrorContainer,
-                                modifier = Modifier.padding(end = M3Spacing.medium)
+                                contentDescription = stringResource(R.string.player_swipe_delete_desc),
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier
+                                    .padding(end = M3Spacing.medium)
+                                    .size(24.dp)
                             )
                         }
                     },
@@ -670,7 +712,7 @@ private fun QueueSongItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(if (isCurrentSong) accentColor.copy(alpha = 0.1f) else Color.Transparent)
+            .background(if (isCurrentSong) accentColor.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surface)
             .clip(M3Shapes.cornerSmall)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
@@ -683,7 +725,7 @@ private fun QueueSongItem(
         // Drag handle
         Icon(
             imageVector = Icons.Default.DragHandle,
-            contentDescription = "拖动排序",
+            contentDescription = stringResource(R.string.player_drag_handle_desc),
             modifier = Modifier
                 .size(24.dp)
                 .pointerInput(Unit) {
@@ -733,7 +775,8 @@ private fun QueueSongItem(
             Text(
                 text = song.title,
                 style = MaterialTheme.typography.bodyMedium,
-                color = if (isCurrentSong) accentColor else MaterialTheme.colorScheme.onSurface,
+                fontWeight = if (isCurrentSong) FontWeight.SemiBold else FontWeight.Normal,
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -747,6 +790,9 @@ private fun QueueSongItem(
         }
 
         if (isCurrentSong) {
+
+
+            
             Icon(
                 imageVector = Icons.Default.PlayArrow,
                 contentDescription = null,

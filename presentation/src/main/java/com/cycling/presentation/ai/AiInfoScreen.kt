@@ -29,6 +29,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -38,6 +39,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cycling.core.ui.components.M3DetailTopAppBar
 import com.cycling.core.ui.theme.SpotifyColors
+import com.cycling.presentation.R
 import dev.jeziellago.compose.markdowntext.MarkdownText
 
 private val AiAccent = androidx.compose.ui.graphics.Color(0xFFBB86FC)
@@ -65,9 +67,9 @@ fun AiInfoScreen(
     Scaffold(
         topBar = {
             M3DetailTopAppBar(
-                title = "AI 解读",
+                title = stringResource(R.string.ai_title),
                 navigationIcon = Icons.AutoMirrored.Filled.ArrowBack,
-                navigationIconContentDescription = "返回",
+                navigationIconContentDescription = stringResource(R.string.ai_back_desc),
                 onNavigationClick = onNavigateBack,
                 actions = {
                     Icon(
@@ -139,20 +141,20 @@ private fun ApiKeyRequiredContent(
             )
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                text = "需要配置 API Key",
+                text = stringResource(R.string.ai_need_api_key_title),
                 color = SpotifyColors.TextPrimary,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "请先在设置中配置 DeepSeek API Key 以使用 AI 功能",
+                text = stringResource(R.string.ai_need_api_key_desc),
                 color = SpotifyColors.TextTertiary,
                 fontSize = 13.sp
             )
             Spacer(modifier = Modifier.height(24.dp))
             TextButton(onClick = onNavigateToApiKeyConfig) {
-                Text("前往配置", color = AiAccent)
+                Text(stringResource(R.string.ai_go_to_settings), color = AiAccent)
             }
         }
     }
@@ -172,7 +174,7 @@ private fun LoadingContent() {
             )
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                text = "AI 正在分析...",
+                text = stringResource(R.string.ai_loading),
                 color = SpotifyColors.TextSecondary,
                 fontSize = 13.sp
             )
@@ -193,7 +195,7 @@ private fun ErrorContent(
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
-                text = "获取失败",
+                text = stringResource(R.string.ai_error),
                 color = Color(0xFFFF6B6B),
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold
@@ -213,7 +215,7 @@ private fun ErrorContent(
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("重试", color = AiAccent)
+                Text(stringResource(R.string.ai_retry), color = AiAccent)
             }
         }
     }

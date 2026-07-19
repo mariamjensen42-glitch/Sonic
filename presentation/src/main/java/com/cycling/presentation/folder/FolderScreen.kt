@@ -47,6 +47,8 @@ import com.cycling.domain.model.FolderItem
 import com.cycling.domain.model.Song
 import com.cycling.presentation.components.SongListItem
 import com.cycling.presentation.components.formatDuration
+import androidx.compose.ui.res.stringResource
+import com.cycling.presentation.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,7 +68,7 @@ fun FolderScreen(
                     onNavigateToPlayer(effect.songId, effect.songs)
                 }
                 is FolderEffect.ShowToast -> {
-                    Toast.makeText(context, effect.message, Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(effect.message), Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -77,7 +79,7 @@ fun FolderScreen(
             M3DetailTopAppBar(
                 title = uiState.title,
                 navigationIcon = Icons.AutoMirrored.Filled.ArrowBack,
-                navigationIconContentDescription = "返回",
+                navigationIconContentDescription = stringResource(R.string.folder_back_desc),
                 onNavigationClick = if (uiState.parentPath != null) {
                     { viewModel.handleIntent(FolderIntent.NavigateBack) }
                 } else {
@@ -118,14 +120,14 @@ fun FolderScreen(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "暂无内容",
+                            text = stringResource(R.string.folder_empty_title),
                             color = SpotifyColors.TextPrimary,
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "此文件夹中没有音乐文件",
+                            text = stringResource(R.string.folder_empty_subtitle),
                             color = SpotifyColors.TextTertiary,
                             fontSize = 13.sp
                         )
@@ -207,7 +209,7 @@ private fun FolderItem(
                 fontWeight = FontWeight.Medium
             )
             Text(
-                text = "${folder.songCount} 首歌曲",
+                text = stringResource(R.string.folder_song_count, folder.songCount),
                 color = SpotifyColors.TextTertiary,
                 fontSize = 12.sp
             )

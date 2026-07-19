@@ -111,9 +111,10 @@ class AiRepositoryImpl @Inject constructor(
 
     override suspend fun generatePlaylistByTheme(
         theme: String,
-        songs: List<Song>
+        songs: List<Song>,
+        songCount: Int
     ): Result<List<Long>> {
-        Timber.d("generatePlaylistByTheme: theme=$theme, songCount=${songs.size}")
+        Timber.d("generatePlaylistByTheme: theme=$theme, songCount=${songs.size}, requestedCount=$songCount")
         
         if (songs.isEmpty()) {
             Timber.w("generatePlaylistByTheme: empty song list")
@@ -125,7 +126,7 @@ class AiRepositoryImpl @Inject constructor(
             return Result.failure(Exception("API Key 未配置"))
         }
         
-        val prompt = buildPlaylistPrompt(theme, songs)
+        val prompt = buildPlaylistPrompt(theme, songs, songCount)
         return callPlaylistApi(apiKey, prompt)
     }
 
@@ -251,7 +252,7 @@ class AiRepositoryImpl @Inject constructor(
         """.trimIndent()
     }
 
-    private fun buildPlaylistPrompt(theme: String, songs: List<Song>): String {
+    private fun buildPlaylistPrompt(theme: String, songs: List<Song>, songCount: Int): String {
         val songList = songs.joinToString("\n") { song ->
             "${song.id}|${song.title}|${song.artist}|${song.album}"
         }
@@ -261,6 +262,7 @@ class AiRepositoryImpl @Inject constructor(
 $songList
 
 请选择最适合该主题的歌曲，返回 JSON 数组格式，只包含歌曲 ID，例如: [1, 2, 3, 4, 5]
+请返回大约 $songCount 首歌曲。
 如果没有合适的歌曲，返回空数组 []
 只返回 JSON 数组，不要有其他文字。
         """.trimIndent()

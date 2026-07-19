@@ -6,6 +6,7 @@ import com.cycling.domain.model.TagUpdate
 import com.cycling.domain.repository.AudioMetadataRepository
 import com.cycling.domain.repository.PlayerRepository
 import com.cycling.domain.repository.SongRepository
+import com.cycling.presentation.R
 import com.cycling.presentation.navigation.Screen
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
@@ -94,7 +95,7 @@ class SongDetailViewModel @AssistedInject constructor(
             val currentSong = _uiState.value.song ?: return@launch
             val newFavoriteState = songRepository.toggleFavorite(currentSong.id)
             _uiState.update { it.copy(isFavorite = newFavoriteState) }
-            val message = if (newFavoriteState) "已添加到喜欢" else "已从喜欢移除"
+            val message = if (newFavoriteState) R.string.player_added_to_favorites else R.string.player_removed_from_favorites
             _uiEffect.emit(SongDetailEffect.ShowCopiedMessage(message))
         }
     }
@@ -115,7 +116,7 @@ class SongDetailViewModel @AssistedInject constructor(
 
     private fun copyPath(path: String) {
         viewModelScope.launch {
-            _uiEffect.emit(SongDetailEffect.ShowCopiedMessage("路径已复制到剪贴板"))
+            _uiEffect.emit(SongDetailEffect.ShowCopiedMessage(R.string.song_detail_vm_path_copied))
         }
     }
 
@@ -228,7 +229,7 @@ class SongDetailViewModel @AssistedInject constructor(
                 )
                 if (!updateSuccess) {
                     _uiState.update { it.copy(isSaving = false) }
-                    _uiEffect.emit(SongDetailEffect.ShowError("更新歌曲信息失败"))
+                    _uiEffect.emit(SongDetailEffect.ShowError(R.string.song_detail_vm_update_failed))
                     return@launch
                 }
             }
@@ -266,12 +267,12 @@ class SongDetailViewModel @AssistedInject constructor(
                                 audioMetadata = updatedMetadata
                             ) 
                         }
-                        _uiEffect.emit(SongDetailEffect.ShowToast("保存成功"))
+                        _uiEffect.emit(SongDetailEffect.ShowToast(R.string.song_detail_vm_save_success))
                     },
                     onFailure = { error ->
                         Timber.e(error, "Failed to update audio tags")
                         _uiState.update { it.copy(isSaving = false) }
-                        _uiEffect.emit(SongDetailEffect.ShowError("保存标签失败"))
+                        _uiEffect.emit(SongDetailEffect.ShowError(R.string.song_detail_vm_save_failed))
                     }
                 )
             } else {

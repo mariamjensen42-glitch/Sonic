@@ -3,6 +3,7 @@ package com.cycling.presentation.albumdetail
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cycling.domain.repository.AlbumRepository
+import com.cycling.domain.repository.PlayerRepository
 import com.cycling.domain.repository.SongRepository
 import com.cycling.presentation.navigation.LibraryDestination
 import dagger.assisted.Assisted
@@ -23,6 +24,7 @@ import timber.log.Timber
 class AlbumDetailViewModel @AssistedInject constructor(
     private val albumRepository: AlbumRepository,
     private val songRepository: SongRepository,
+    private val playerRepository: PlayerRepository,
     @Assisted private val route: LibraryDestination.AlbumDetail
 ) : ViewModel() {
 
@@ -36,6 +38,20 @@ class AlbumDetailViewModel @AssistedInject constructor(
 
     init {
         loadAlbum()
+        observePlayerState()
+    }
+
+    private fun observePlayerState() {
+        viewModelScope.launch {
+            playerRepository.playerState.collect { state ->
+                _uiState.update {
+                    it.copy(
+                        currentSongId = state.currentSong?.id,
+                        isPlaying = state.isPlaying
+                    )
+                }
+            }
+        }
     }
 
     fun handleIntent(intent: AlbumDetailIntent) {

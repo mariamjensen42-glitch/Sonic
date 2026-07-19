@@ -7,6 +7,9 @@ import com.cycling.domain.model.Playlist
 import com.cycling.domain.model.Song
 import com.cycling.domain.repository.PlaylistRepository
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import timber.log.Timber
 import javax.inject.Inject
@@ -19,9 +22,21 @@ class PlaylistRepositoryImpl @Inject constructor(
 
     override fun getAllPlaylists(): Flow<List<Playlist>> {
         Timber.d("getAllPlaylists: called")
-        return playlistDao.getAllPlaylists().map { entities ->
-            Timber.d("getAllPlaylists: found ${entities.size} playlists")
-            entities.map { it.toDomain() }
+        return playlistDao.getAllPlaylists().flatMapLatest { entities ->
+            if (entities.isEmpty()) {
+                flowOf(emptyList())
+            } else {
+                Timber.d("getAllPlaylists: found ${entities.size} playlists")
+                val playlistFlows = entities.map { entity ->
+                    combine(
+                        playlistDao.getPlaylistSongCount(entity.id),
+                        playlistDao.getPlaylistFirstSongAlbumArtFlow(entity.id)
+                    ) { count, albumArt ->
+                        entity.toDomain().copy(numberOfSongs = count, albumArt = albumArt)
+                    }
+                }
+                combine(playlistFlows) { it.toList() }
+            }
         }
     }
 
@@ -72,13 +87,10 @@ class PlaylistRepositoryImpl @Inject constructor(
 
     override suspend fun renamePlaylist(playlistId: Long, newName: String) {
         Timber.d("renamePlaylist: playlistId=$playlistId, newName=$newName")
-        playlistDao.getPlaylistById(playlistId)?.let { playlist ->
-            val updated = playlist.copy(
-                name = newName,
-                dateModified = System.currentTimeMillis() / 1000
-            )
-            playlistDao.insertPlaylist(updated)
-            Timber.d("renamePlaylist: renamed playlistId=$playlistId")
-        } ?: Timber.w("renamePlaylist: playlist not found, playlistId=$playlistId")
+        playlistDao.renamePlaylist(
+            id = playlistId,
+            name = newName,
+            dateModified = System.currentTimeMillis() / 1000
+        )
     }
 }

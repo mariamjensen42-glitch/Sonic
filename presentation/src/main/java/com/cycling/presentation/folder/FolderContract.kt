@@ -1,6 +1,7 @@
 package com.cycling.presentation.folder
 
 import com.cycling.domain.model.FolderItem
+import androidx.annotation.StringRes
 import com.cycling.domain.model.Song
 
 data class FolderUiState(
@@ -21,5 +22,5 @@ sealed interface FolderIntent {
 
 sealed interface FolderEffect {
     data class NavigateToPlayer(val songId: Long, val songs: List<Song>) : FolderEffect
-    data class ShowToast(val message: String) : FolderEffect
+    data class ShowToast(@StringRes val message: Int) : FolderEffect
 }

@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.cycling.presentation.R
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -44,18 +45,13 @@ class MyMusicViewModel @Inject constructor(
 
     fun handleIntent(intent: MyMusicIntent) {
         when (intent) {
-            // Songs
-            is MyMusicIntent.SelectTab -> selectTab(intent.tab)
-            is MyMusicIntent.SongClick -> handleSongClick(intent.song)
-            is MyMusicIntent.PlayAll -> playAll()
-            is MyMusicIntent.ShuffleAll -> shuffleAll()
-            is MyMusicIntent.ToggleFavorite -> toggleFavorite(intent.song)
-            // Playlists
             is MyMusicIntent.FavoriteSongsClick -> handleFavoriteSongsClick()
             is MyMusicIntent.BackToPlaylists -> handleBackToPlaylists()
+            is MyMusicIntent.SongClick -> handleSongClick(intent.song)
+            is MyMusicIntent.ToggleFavorite -> toggleFavorite(intent.song)
             is MyMusicIntent.PlaylistClick -> handlePlaylistClick(intent.playlist)
             is MyMusicIntent.CreatePlaylist -> handleCreatePlaylist(intent.name)
-            is MyMusicIntent.DeletePlaylist -> handleDeletePlaylist(intent.playlistId)
+            is MyMusicIntent.DeletePlaylist -> handleDeletePlaylist(intent.playlist)
             is MyMusicIntent.ShowRenameDialog -> handleShowRenameDialog(intent.playlist)
             is MyMusicIntent.RenamePlaylist -> handleRenamePlaylist(intent.playlistId, intent.newName)
             is MyMusicIntent.DismissRenameDialog -> handleDismissRenameDialog()
@@ -70,25 +66,12 @@ class MyMusicViewModel @Inject constructor(
     }
 
     private fun loadData() {
-        Timber.d("loadData: starting")
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
 
             launch {
                 songQueryUseCase.favorites().collectLatest { songs ->
-                    _uiState.update { it.copy(favoriteSongs = songs, isLoading = false) }
-                }
-            }
-
-            launch {
-                songQueryUseCase.recentlyPlayed().collectLatest { songs ->
-                    _uiState.update { it.copy(recentlyPlayedSongs = songs) }
-                }
-            }
-
-            launch {
-                songQueryUseCase.mostPlayed().collectLatest { songs ->
-                    _uiState.update { it.copy(mostPlayedSongs = songs) }
+                    _uiState.update { it.copy(favoriteSongs = songs) }
                 }
             }
 
@@ -100,61 +83,26 @@ class MyMusicViewModel @Inject constructor(
         }
     }
 
-    private fun selectTab(tab: MyMusicTab) {
-        _uiState.update { it.copy(currentTab = tab) }
-    }
-
-    private fun handleSongClick(song: Song) {
-        viewModelScope.launch {
-            val currentSongs = getCurrentSongs()
-            playerRepository.playSong(song, currentSongs)
-            _uiEffect.emit(MyMusicEffect.NavigateToPlayer(song.id))
-        }
-    }
-
-    private fun playAll() {
-        val songs = getCurrentSongs()
-        if (songs.isNotEmpty()) {
-            viewModelScope.launch {
-                playerRepository.playSong(songs.first(), songs)
-            }
-        }
-    }
-
-    private fun shuffleAll() {
-        val songs = getCurrentSongs().shuffled()
-        if (songs.isNotEmpty()) {
-            viewModelScope.launch {
-                playerRepository.playSong(songs.first(), songs)
-            }
-        }
-    }
-
-    private fun toggleFavorite(song: Song) {
-        viewModelScope.launch {
-            songRepository.toggleFavorite(song.id)
-            _uiEffect.emit(MyMusicEffect.ShowToast("已从喜欢移除"))
-        }
-    }
-
-    private fun getCurrentSongs(): List<Song> {
-        return when (_uiState.value.currentTab) {
-            MyMusicTab.RECENTLY_PLAYED -> _uiState.value.recentlyPlayedSongs
-            MyMusicTab.MOST_PLAYED -> _uiState.value.mostPlayedSongs
-            MyMusicTab.PLAYLISTS -> emptyList()
-        }
-    }
-
-    // ═══════════════════════════════════════════
-    // Playlist logic
-    // ═══════════════════════════════════════════
-
     private fun handleFavoriteSongsClick() {
         _uiState.update { it.copy(showFavoriteSongs = true) }
     }
 
     private fun handleBackToPlaylists() {
         _uiState.update { it.copy(showFavoriteSongs = false) }
+    }
+
+    private fun handleSongClick(song: Song) {
+        viewModelScope.launch {
+            playerRepository.playSong(song, _uiState.value.favoriteSongs)
+            _uiEffect.emit(MyMusicEffect.NavigateToPlayer(song.id))
+        }
+    }
+
+    private fun toggleFavorite(song: Song) {
+        viewModelScope.launch {
+            songRepository.toggleFavorite(song.id)
+            _uiEffect.emit(MyMusicEffect.ShowToast(R.string.mymusic_vm_removed_from_favorites))
+        }
     }
 
     private fun handlePlaylistClick(playlist: Playlist) {
@@ -166,14 +114,14 @@ class MyMusicViewModel @Inject constructor(
     private fun handleCreatePlaylist(name: String) {
         viewModelScope.launch {
             playlistRepository.createPlaylist(name)
-            _uiEffect.emit(MyMusicEffect.ShowToast("播放列表已创建"))
+            _uiEffect.emit(MyMusicEffect.ShowToast(R.string.mymusic_vm_playlist_created))
         }
     }
 
-    private fun handleDeletePlaylist(playlistId: Long) {
+    private fun handleDeletePlaylist(playlist: Playlist) {
         viewModelScope.launch {
-            playlistRepository.deletePlaylist(playlistId)
-            _uiEffect.emit(MyMusicEffect.ShowToast("播放列表已删除"))
+            playlistRepository.deletePlaylist(playlist.id)
+            _uiEffect.emit(MyMusicEffect.ShowToast(R.string.mymusic_vm_playlist_deleted))
         }
     }
 
@@ -185,7 +133,7 @@ class MyMusicViewModel @Inject constructor(
         viewModelScope.launch {
             playlistRepository.renamePlaylist(playlistId, newName)
             _uiState.update { it.copy(showRenameDialog = false, playlistToRename = null) }
-            _uiEffect.emit(MyMusicEffect.ShowToast("播放列表已重命名"))
+            _uiEffect.emit(MyMusicEffect.ShowToast(R.string.mymusic_vm_playlist_renamed))
         }
     }
 
@@ -193,17 +141,10 @@ class MyMusicViewModel @Inject constructor(
         _uiState.update { it.copy(showRenameDialog = false, playlistToRename = null) }
     }
 
+    // ── AI Playlist Creation ──
+
     private fun handleShowAiCreateDialog() {
-        viewModelScope.launch {
-            val hasKey = aiRepository.hasApiKey()
-            if (hasKey) {
-                _uiState.update {
-                    it.copy(showAiCreateDialog = true, hasApiKey = true)
-                }
-            } else {
-                _uiEffect.emit(MyMusicEffect.ShowToast("请先配置 API Key"))
-            }
-        }
+        _uiState.update { it.copy(showAiCreateDialog = true, hasApiKey = true) }
     }
 
     private fun handleDismissAiCreateDialog() {
@@ -211,7 +152,6 @@ class MyMusicViewModel @Inject constructor(
             it.copy(
                 showAiCreateDialog = false,
                 aiCreateMode = AiCreateMode.RANDOM,
-                aiCreateStep = AiCreateStep.SELECT_MODE,
                 selectedSongCount = 10,
                 themeInput = "",
                 isAiGenerating = false,
@@ -223,9 +163,7 @@ class MyMusicViewModel @Inject constructor(
     }
 
     private fun handleSetAiCreateMode(mode: AiCreateMode) {
-        _uiState.update {
-            it.copy(aiCreateMode = mode, aiCreateStep = AiCreateStep.INPUT_DETAILS, aiCreateError = null)
-        }
+        _uiState.update { it.copy(aiCreateMode = mode, aiCreateError = null) }
     }
 
     private fun handleSetSelectedSongCount(count: Int) {
@@ -243,7 +181,7 @@ class MyMusicViewModel @Inject constructor(
             try {
                 val allSongs = songRepository.getAllSongs().first()
                 if (allSongs.isEmpty()) {
-                    _uiState.update { it.copy(isAiGenerating = false, aiCreateError = "没有可用的歌曲") }
+                    _uiState.update { it.copy(isAiGenerating = false, aiCreateError = R.string.mymusic_vm_no_songs_available) }
                     return@launch
                 }
 
@@ -255,45 +193,43 @@ class MyMusicViewModel @Inject constructor(
                             it.copy(
                                 isAiGenerating = false,
                                 aiGeneratedSongs = selectedSongs,
-                                aiGeneratedPlaylistName = "随机歌单",
-                                aiCreateStep = AiCreateStep.PREVIEW
+                                aiGeneratedPlaylistName = ""
                             )
                         }
                     }
                     AiCreateMode.THEME -> {
                         val theme = state.themeInput.trim()
                         if (theme.isBlank()) {
-                            _uiState.update { it.copy(isAiGenerating = false, aiCreateError = "请输入主题") }
+                            _uiState.update { it.copy(isAiGenerating = false, aiCreateError = R.string.mymusic_vm_enter_theme) }
                             return@launch
                         }
 
-                        val result = aiRepository.generatePlaylistByTheme(theme, allSongs)
+                        val result = aiRepository.generatePlaylistByTheme(theme, allSongs, state.selectedSongCount)
                         result.fold(
                             onSuccess = { songIds ->
                                 val selectedSongs = allSongs.filter { it.id in songIds }
                                 if (selectedSongs.isEmpty()) {
-                                    _uiState.update { it.copy(isAiGenerating = false, aiCreateError = "未找到匹配的歌曲") }
+                                    _uiState.update { it.copy(isAiGenerating = false, aiCreateError = R.string.mymusic_vm_no_matching_songs) }
                                 } else {
                                     _uiState.update {
                                         it.copy(
-                                            isAiGenerating = false,
-                                            aiGeneratedSongs = selectedSongs,
-                                            aiGeneratedPlaylistName = "${theme}歌单",
-                                            aiCreateStep = AiCreateStep.PREVIEW
+                                        isAiGenerating = false,
+                                        aiGeneratedSongs = selectedSongs,
+                                        aiGeneratedPlaylistName = "${theme}歌单"
                                         )
                                     }
                                 }
                             },
                             onFailure = { error ->
                                 Timber.e(error, "generatePlaylistByTheme failed")
-                                _uiState.update { it.copy(isAiGenerating = false, aiCreateError = "生成失败: ${error.message}") }
+                                _uiState.update { it.copy(isAiGenerating = false, aiCreateError = R.string.mymusic_vm_generate_failed) }
                             }
                         )
                     }
                 }
             } catch (e: Exception) {
                 Timber.e(e, "handleGenerateAiPlaylist failed")
-                _uiState.update { it.copy(isAiGenerating = false, aiCreateError = "生成失败: ${e.message}") }
+                _uiState.update { it.copy(isAiGenerating = false, aiCreateError = R.string.mymusic_vm_generate_failed) }
             }
         }
     }
@@ -303,7 +239,7 @@ class MyMusicViewModel @Inject constructor(
             val state = _uiState.value
             val songs = state.aiGeneratedSongs
             if (songs.isEmpty()) {
-                _uiState.update { it.copy(aiCreateError = "没有可添加的歌曲") }
+                _uiState.update { it.copy(aiCreateError = R.string.mymusic_vm_no_songs_to_add) }
                 return@launch
             }
 
@@ -314,10 +250,10 @@ class MyMusicViewModel @Inject constructor(
                 val songIds = songs.map { it.id }
                 playlistRepository.addSongsToPlaylist(playlistId, songIds)
                 handleDismissAiCreateDialog()
-                _uiEffect.emit(MyMusicEffect.ShowToast("歌单已创建"))
+                _uiEffect.emit(MyMusicEffect.ShowToast(R.string.mymusic_vm_playlist_created_success))
             } catch (e: Exception) {
                 Timber.e(e, "handleConfirmAiPlaylist failed")
-                _uiState.update { it.copy(aiCreateError = "创建歌单失败: ${e.message}") }
+                _uiState.update { it.copy(aiCreateError = R.string.mymusic_vm_create_failed) }
             }
         }
     }

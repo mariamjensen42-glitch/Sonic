@@ -3,6 +3,7 @@ package com.cycling.presentation.songs
 import com.cycling.domain.model.Playlist
 import com.cycling.domain.model.Song
 import com.cycling.domain.model.SortOrder
+import androidx.annotation.StringRes
 import com.cycling.domain.model.ViewMode
 
 data class SongsUiState(
@@ -11,6 +12,7 @@ data class SongsUiState(
     val viewMode: ViewMode = ViewMode.LIST,
     val sortOrder: SortOrder = SortOrder.TITLE,
     val sortAscending: Boolean = true,
+    val currentSongId: Long? = null,
     val songToAdd: Song? = null,
     val showAddToPlaylistDialog: Boolean = false,
     val playlists: List<Playlist> = emptyList()
@@ -29,5 +31,5 @@ sealed interface SongsIntent {
 
 sealed interface SongsEffect {
     data class NavigateToPlayer(val songId: Long) : SongsEffect
-    data class ShowToast(val message: String) : SongsEffect
+    data class ShowToast(@StringRes val message: Int) : SongsEffect
 }

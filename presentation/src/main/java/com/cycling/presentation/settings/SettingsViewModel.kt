@@ -15,13 +15,12 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.cycling.presentation.R
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -37,7 +36,7 @@ data class SettingsUiState(
     val songsProcessed: Int = 0,
     val totalSongs: Int = 0,
     val scanResult: ScanResult? = null,
-    val scanError: String? = null,
+    val scanErrorResId: Int? = null,
     val hasStoragePermission: Boolean = false,
     val shouldRequestPermission: Boolean = false,
     val excludedFolders: List<ExcludedFolder> = emptyList(),
@@ -73,7 +72,7 @@ sealed interface SettingsIntent {
 }
 
 sealed interface SettingsEffect {
-    data class ShowToast(val message: String) : SettingsEffect
+    data class ShowToast(val messageResId: Int, val messageArg: Int? = null) : SettingsEffect
     data object RequestStoragePermission : SettingsEffect
     data object NavigateBackFromSettings : SettingsEffect
 }
@@ -92,16 +91,14 @@ class SettingsViewModel @Inject constructor(
     private val _uiEffect = MutableSharedFlow<SettingsEffect>()
     val uiEffect: SharedFlow<SettingsEffect> = _uiEffect.asSharedFlow()
 
-    val hasApiKey = kotlinx.coroutines.flow.flow {
-        emit(aiRepository.hasApiKey())
-    }.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        false
-    )
+    private val _hasApiKey = MutableStateFlow(false)
+    val hasApiKey: StateFlow<Boolean> = _hasApiKey.asStateFlow()
 
     init {
         Timber.d("SettingsViewModel: initialized")
+        viewModelScope.launch {
+            _hasApiKey.value = aiRepository.hasApiKey()
+        }
         observeScanProgress()
         loadExcludedFolders()
         loadLibraryStats()
@@ -171,7 +168,7 @@ class SettingsViewModel @Inject constructor(
                 it.copy(
                     hasStoragePermission = false, 
                     shouldRequestPermission = false,
-                    scanError = "需要存储权限才能扫描音乐文件"
+                    scanErrorResId = R.string.settings_vm_permission_needed
                 )
             }
         }
@@ -200,7 +197,7 @@ class SettingsViewModel @Inject constructor(
     private fun startScan() {
         Timber.d("startScan: starting music scan")
         viewModelScope.launch {
-            _uiState.update { it.copy(isScanning = true, scanError = null) }
+            _uiState.update { it.copy(isScanning = true, scanErrorResId = null) }
             
             scanMusicUseCase.scan()
                 .onSuccess { result ->
@@ -212,18 +209,18 @@ class SettingsViewModel @Inject constructor(
                             scanStep = SettingsScanStep.Completed
                         )
                     }
-                    _uiEffect.emit(SettingsEffect.ShowToast("扫描完成: 发现 ${result.songsFound} 首歌曲"))
+                    _uiEffect.emit(SettingsEffect.ShowToast(R.string.settings_vm_scan_complete, result.songsFound))
                 }
                 .onFailure { error ->
                     Timber.e(error, "startScan: scan failed")
-                    _uiState.update { 
+                    _uiState.update {
                         it.copy(
                             isScanning = false,
                             scanStep = SettingsScanStep.Error,
-                            scanError = error.message
+                            scanErrorResId = R.string.settings_vm_scan_failed
                         )
                     }
-                    _uiEffect.emit(SettingsEffect.ShowToast("扫描失败: ${error.message}"))
+                    _uiEffect.emit(SettingsEffect.ShowToast(R.string.settings_vm_scan_failed))
                 }
         }
     }
@@ -239,7 +236,7 @@ class SettingsViewModel @Inject constructor(
                 songsProcessed = 0,
                 totalSongs = 0,
                 scanResult = null,
-                scanError = null
+                scanErrorResId = null
             )
         }
     }
@@ -258,18 +255,18 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             val exists = _uiState.value.excludedFolders.any { it.path == path }
             if (exists) {
-                _uiEffect.emit(SettingsEffect.ShowToast("该文件夹已在排除列表中"))
+                _uiEffect.emit(SettingsEffect.ShowToast(R.string.settings_vm_folder_already_excluded))
                 return@launch
             }
             excludedFolderRepository.addExcludedFolder(ExcludedFolder(path = path))
-            _uiEffect.emit(SettingsEffect.ShowToast("已添加到排除列表"))
+            _uiEffect.emit(SettingsEffect.ShowToast(R.string.settings_vm_folder_excluded))
         }
     }
 
     private fun removeExcludedFolder(path: String) {
         viewModelScope.launch {
             excludedFolderRepository.removeExcludedFolder(path)
-            _uiEffect.emit(SettingsEffect.ShowToast("已从排除列表移除"))
+            _uiEffect.emit(SettingsEffect.ShowToast(R.string.settings_vm_folder_removed))
         }
     }
 
@@ -282,14 +279,15 @@ class SettingsViewModel @Inject constructor(
         val apiKey = _uiState.value.apiKeyInput
         if (apiKey.isBlank()) {
             viewModelScope.launch {
-                _uiEffect.emit(SettingsEffect.ShowToast("请输入 API Key"))
+                _uiEffect.emit(SettingsEffect.ShowToast(R.string.settings_vm_enter_api_key))
             }
             return
         }
         viewModelScope.launch {
             aiRepository.setApiKey(apiKey)
+            _hasApiKey.value = true
             _uiState.update { it.copy(apiKeySaved = true, apiKeyInput = "") }
-            _uiEffect.emit(SettingsEffect.ShowToast("API Key 已保存"))
+            _uiEffect.emit(SettingsEffect.ShowToast(R.string.settings_vm_api_key_saved))
             Timber.d("saveApiKey: API key saved successfully")
         }
     }
@@ -298,8 +296,9 @@ class SettingsViewModel @Inject constructor(
         Timber.d("clearApiKey: clearing API key")
         viewModelScope.launch {
             aiRepository.setApiKey("")
+            _hasApiKey.value = false
             _uiState.update { it.copy(apiKeySaved = true) }
-            _uiEffect.emit(SettingsEffect.ShowToast("API Key 已清除"))
+            _uiEffect.emit(SettingsEffect.ShowToast(R.string.settings_vm_api_key_cleared))
             Timber.d("clearApiKey: API key cleared successfully")
         }
     }

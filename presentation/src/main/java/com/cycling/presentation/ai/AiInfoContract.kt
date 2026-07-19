@@ -1,6 +1,7 @@
 package com.cycling.presentation.ai
 
 import com.cycling.domain.model.AiInfo
+import androidx.annotation.StringRes
 import com.cycling.domain.model.AiInfoType
 
 data class AiInfoUiState(
@@ -19,6 +20,6 @@ sealed interface AiInfoIntent {
 }
 
 sealed interface AiInfoEffect {
-    data class ShowToast(val message: String) : AiInfoEffect
+    data class ShowToast(@StringRes val message: Int) : AiInfoEffect
     data object NavigateToApiKeyConfig : AiInfoEffect
 }

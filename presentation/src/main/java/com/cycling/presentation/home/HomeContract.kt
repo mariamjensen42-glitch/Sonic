@@ -2,6 +2,7 @@ package com.cycling.presentation.home
 
 import com.cycling.domain.model.Album
 import com.cycling.domain.model.Artist
+import androidx.annotation.StringRes
 import com.cycling.domain.model.Song
 
 data class HomeUiState(
@@ -30,7 +31,7 @@ sealed interface HomeIntent {
 }
 
 sealed interface HomeEffect {
-    data class ShowToast(val message: String) : HomeEffect
+    data class ShowToast(@StringRes val message: Int) : HomeEffect
     data class NavigateToAlbumDetail(val albumId: Long) : HomeEffect
     data class NavigateToArtistDetail(val artistId: Long) : HomeEffect
     data class NavigateToPlayer(val songId: Long) : HomeEffect

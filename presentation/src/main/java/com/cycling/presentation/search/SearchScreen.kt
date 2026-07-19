@@ -38,10 +38,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
@@ -56,12 +59,17 @@ fun SearchScreen(
     onNavigateBack: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
     LaunchedEffect(Unit) {
         viewModel.uiEffect.collect { effect ->
             when (effect) {
                 is SearchEffect.NavigateToPlayer -> onNavigateToPlayer(effect.songId)
-                else -> {}
+                is SearchEffect.ShowToast -> {
+                    Toast.makeText(context, context.getString(effect.message), Toast.LENGTH_SHORT).show()
+                }
+                is SearchEffect.NavigateToAlbumDetail -> {}
+                is SearchEffect.NavigateToArtistDetail -> {}
             }
         }
     }
@@ -85,7 +93,7 @@ fun SearchScreen(
                     .padding(16.dp)
             ) {
                 Text(
-                    text = "Search",
+                    text = stringResource(R.string.search_title),
                     color = SpotifyColors.TextPrimary,
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Bold
@@ -111,7 +119,7 @@ fun SearchScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "未找到相关歌曲",
+                        text = stringResource(R.string.search_no_results),
                         color = SpotifyColors.TextSecondary,
                         fontSize = 15.sp
                     )
@@ -202,7 +210,7 @@ fun SearchScreen(
                     painter = if (isLiked) painterResource(id = R.drawable.added)
                     else painterResource(id = R.drawable.ic_add),
                     tint = if (isLiked) Color.White else Color.Gray,
-                    contentDescription = if (isLiked) "取消收藏" else "收藏"
+                    contentDescription = if (isLiked) stringResource(R.string.player_unfavorite_desc) else stringResource(R.string.player_favorite_desc)
                 )
             }
         }
@@ -236,7 +244,7 @@ private fun SearchBar(
         Icon(
             painter = painterResource(id = R.drawable.ic_search_big),
             tint = Color.Black,
-            contentDescription = "搜索"
+            contentDescription = stringResource(R.string.search_icon_desc)
         )
 
         TextField(
@@ -261,7 +269,7 @@ private fun SearchBar(
                 Text(
                     textAlign = TextAlign.Center,
                     fontWeight = FontWeight.Bold,
-                    text = "你想听什么？"
+                    text = stringResource(R.string.search_placeholder)
                 )
             },
             modifier = Modifier.fillMaxWidth()

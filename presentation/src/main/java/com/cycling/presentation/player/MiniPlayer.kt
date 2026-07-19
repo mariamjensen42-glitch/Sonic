@@ -44,6 +44,7 @@ import com.cycling.core.ui.theme.SpotifyColors
 import com.cycling.domain.model.Song
 import com.cycling.presentation.R
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -164,13 +165,13 @@ fun MiniPlayer(
                     painter = if (isLiked) painterResource(id = R.drawable.added)
                     else painterResource(id = R.drawable.ic_add),
                     tint = SpotifyColors.TextPrimary,
-                    contentDescription = if (isLiked) "取消收藏" else "收藏"
+                    contentDescription = if (isLiked) stringResource(R.string.player_unfavorite_desc) else stringResource(R.string.player_favorite_desc)
                 )
 
                 // Play/Pause button
                 Icon(
                     painter = if (isPlaying) painterResource(id = R.drawable.ic_playing) else painterResource(id = R.drawable.play_svgrepo_com),
-                    contentDescription = if (isPlaying) "暂停" else "播放",
+                    contentDescription = if (isPlaying) stringResource(R.string.player_pause_desc) else stringResource(R.string.player_play_desc),
                     tint = SpotifyColors.TextPrimary,
                     modifier = Modifier
                         .size(36.dp)
