@@ -43,7 +43,6 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.cycling.core.ui.components.M3FilledButton
-import com.cycling.core.ui.theme.M3SemanticColors
 import com.cycling.core.ui.theme.M3Motion
 import com.cycling.domain.model.Song
 
@@ -146,7 +145,7 @@ fun SongListItem(
                         imageVector = Icons.Default.MusicNote,
                         contentDescription = null,
                         modifier = Modifier.size(24.dp),
-                        tint = M3SemanticColors.Red
+                        tint = Color(0xFFFF453A)
                     )
                 }
             }

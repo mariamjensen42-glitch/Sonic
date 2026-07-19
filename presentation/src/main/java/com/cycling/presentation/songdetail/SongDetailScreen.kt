@@ -6,6 +6,7 @@ import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -56,11 +57,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.cycling.core.ui.components.M3FilledButton
-import com.cycling.core.ui.theme.M3SemanticColors
 import com.cycling.domain.model.AudioMetadata
 import com.cycling.domain.model.Song
 import com.cycling.presentation.components.formatDuration
@@ -75,7 +74,7 @@ fun SongDetailScreen(
     onNavigateToPlayer: (Long) -> Unit,
     onNavigateToTagEditor: (Long) -> Unit = {},
     onNavigateToApiKeyConfig: () -> Unit = {},
-    viewModel: SongDetailViewModel = hiltViewModel()
+    viewModel: SongDetailViewModel
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -126,7 +125,7 @@ fun SongDetailScreen(
                         }
                     }) {
                         Icon(
-                            imageVector = androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack,
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "返回"
                         )
                     }
@@ -276,7 +275,7 @@ private fun EditModeContent(
                         imageVector = Icons.Default.MusicNote,
                         contentDescription = null,
                         modifier = Modifier.size(80.dp),
-                        tint = M3SemanticColors.Red
+                        tint = Color(0xFFFF453A)
                     )
                 }
             }
@@ -400,7 +399,7 @@ private fun DiscardChangesDialog(
             TextButton(onClick = onDiscard) {
                 Text(
                     text = "放弃",
-                    color = M3SemanticColors.Red
+                    color = Color(0xFFFF453A)
                 )
             }
         },
@@ -444,7 +443,7 @@ private fun SongHeader(song: Song) {
                         imageVector = Icons.Default.MusicNote,
                         contentDescription = null,
                         modifier = Modifier.size(100.dp),
-                        tint = M3SemanticColors.Red
+                        tint = Color(0xFFFF453A)
                     )
                 }
             }
@@ -506,14 +505,14 @@ private fun ActionButtons(
                 .size(48.dp)
                 .clip(RoundedCornerShape(12.dp))
                 .background(
-                    if (isFavorite) M3SemanticColors.Red.copy(alpha = 0.1f)
+                    if (isFavorite) Color(0xFFFF453A).copy(alpha = 0.1f)
                     else MaterialTheme.colorScheme.surfaceVariant
                 )
         ) {
             Icon(
                 imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                 contentDescription = if (isFavorite) "取消收藏" else "收藏",
-                tint = if (isFavorite) M3SemanticColors.Red else MaterialTheme.colorScheme.onSurfaceVariant
+                tint = if (isFavorite) Color(0xFFFF453A) else MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 

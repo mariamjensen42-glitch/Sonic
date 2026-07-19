@@ -2,8 +2,6 @@ package com.cycling.data.di
 
 import android.content.Context
 import androidx.room.Room
-import androidx.room.migration.Migration
-import androidx.sqlite.db.SupportSQLiteDatabase
 import com.cycling.data.local.dao.AiInfoCacheDao
 import com.cycling.data.local.dao.PlaylistDao
 import com.cycling.data.local.dao.SearchHistoryDao

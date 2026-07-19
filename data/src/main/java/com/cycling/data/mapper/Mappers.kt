@@ -2,7 +2,6 @@ package com.cycling.data.mapper
 
 import com.cycling.data.local.entity.PlaylistEntity
 import com.cycling.data.local.entity.SongEntity
-import com.cycling.domain.model.Album
 import com.cycling.domain.model.Artist
 import com.cycling.domain.model.Playlist
 import com.cycling.domain.model.Song
@@ -61,11 +60,4 @@ fun PlaylistEntity.toDomain(): Playlist {
     )
 }
 
-fun Playlist.toEntity(): PlaylistEntity {
-    return PlaylistEntity(
-        id = id,
-        name = name,
-        dateAdded = dateAdded,
-        dateModified = dateModified
-    )
-}
+

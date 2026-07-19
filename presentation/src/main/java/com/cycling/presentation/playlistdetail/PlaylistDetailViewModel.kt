@@ -1,9 +1,12 @@
 package com.cycling.presentation.playlistdetail
 
-import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cycling.domain.repository.PlaylistRepository
+import com.cycling.presentation.navigation.LibraryDestination
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedFactory
+import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,15 +17,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
-import javax.inject.Inject
 
-@HiltViewModel
-class PlaylistDetailViewModel @Inject constructor(
+@HiltViewModel(assistedFactory = PlaylistDetailViewModel.Factory::class)
+class PlaylistDetailViewModel @AssistedInject constructor(
     private val playlistRepository: PlaylistRepository,
-    savedStateHandle: SavedStateHandle
+    @Assisted private val route: LibraryDestination.PlaylistDetail
 ) : ViewModel() {
 
-    private val playlistId: Long = savedStateHandle.get<Long>("playlistId") ?: -1L
+    private val playlistId: Long = route.playlistId
 
     private val _uiState = MutableStateFlow(PlaylistDetailUiState())
     val uiState: StateFlow<PlaylistDetailUiState> = _uiState.asStateFlow()
@@ -71,5 +73,10 @@ class PlaylistDetailViewModel @Inject constructor(
             playlistRepository.removeSongFromPlaylist(playlistId, songId)
             _uiEffect.emit(PlaylistDetailEffect.ShowToast("已从播放列表移除"))
         }
+    }
+
+    @AssistedFactory
+    interface Factory {
+        fun create(route: LibraryDestination.PlaylistDetail): PlaylistDetailViewModel
     }
 }

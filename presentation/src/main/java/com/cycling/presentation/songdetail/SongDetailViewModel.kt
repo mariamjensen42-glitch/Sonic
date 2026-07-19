@@ -1,12 +1,15 @@
 package com.cycling.presentation.songdetail
 
-import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cycling.domain.model.TagUpdate
 import com.cycling.domain.repository.AudioMetadataRepository
 import com.cycling.domain.repository.PlayerRepository
 import com.cycling.domain.repository.SongRepository
+import com.cycling.presentation.navigation.Screen
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedFactory
+import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,17 +20,16 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
-import javax.inject.Inject
 
-@HiltViewModel
-class SongDetailViewModel @Inject constructor(
+@HiltViewModel(assistedFactory = SongDetailViewModel.Factory::class)
+class SongDetailViewModel @AssistedInject constructor(
     private val songRepository: SongRepository,
     private val playerRepository: PlayerRepository,
     private val audioMetadataRepository: AudioMetadataRepository,
-    savedStateHandle: SavedStateHandle
+    @Assisted private val route: Screen.SongDetail
 ) : ViewModel() {
 
-    private val songId: Long = savedStateHandle.get<Long>("songId") ?: -1L
+    private val songId: Long = route.songId
 
     private val _uiState = MutableStateFlow(SongDetailUiState())
     val uiState: StateFlow<SongDetailUiState> = _uiState.asStateFlow()
@@ -286,5 +288,10 @@ class SongDetailViewModel @Inject constructor(
 
     private fun keepEditing() {
         _uiState.update { it.copy(showDiscardDialog = false) }
+    }
+
+    @AssistedFactory
+    interface Factory {
+        fun create(route: Screen.SongDetail): SongDetailViewModel
     }
 }

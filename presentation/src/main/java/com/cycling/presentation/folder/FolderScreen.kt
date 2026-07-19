@@ -1,36 +1,48 @@
 package com.cycling.presentation.folder
 
 import android.widget.Toast
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.cycling.core.ui.components.M3ListItemTwoLine
-import com.cycling.core.ui.components.M3TopAppBar
-import com.cycling.core.ui.theme.M3SemanticColors
-import com.cycling.core.ui.theme.M3Spacing
+import com.cycling.core.ui.components.M3DetailTopAppBar
+import com.cycling.core.ui.theme.SpotifyColors
 import com.cycling.domain.model.FolderItem
 import com.cycling.domain.model.Song
 import com.cycling.presentation.components.SongListItem
@@ -62,7 +74,7 @@ fun FolderScreen(
 
     Scaffold(
         topBar = {
-            M3TopAppBar(
+            M3DetailTopAppBar(
                 title = uiState.title,
                 navigationIcon = Icons.AutoMirrored.Filled.ArrowBack,
                 navigationIconContentDescription = "返回",
@@ -70,9 +82,15 @@ fun FolderScreen(
                     { viewModel.handleIntent(FolderIntent.NavigateBack) }
                 } else {
                     onNavigateBack
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = SpotifyColors.Background,
+                    titleContentColor = SpotifyColors.TextPrimary,
+                    navigationIconContentColor = SpotifyColors.TextPrimary
+                )
             )
-        }
+        },
+        containerColor = SpotifyColors.Background
     ) { paddingValues ->
         Box(
             modifier = Modifier
@@ -84,40 +102,39 @@ fun FolderScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                    CircularProgressIndicator(color = SpotifyColors.Accent)
                 }
             } else if (uiState.folders.isEmpty() && uiState.songs.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    androidx.compose.foundation.layout.Column(
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(
                             imageVector = Icons.Default.Folder,
                             contentDescription = null,
-                            tint = M3SemanticColors.Blue,
-                            modifier = Modifier.height(48.dp)
+                            tint = SpotifyColors.TextTertiary,
+                            modifier = Modifier.size(56.dp)
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             text = "暂无内容",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = SpotifyColors.TextPrimary,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = "此文件夹中没有音乐文件",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = SpotifyColors.TextTertiary,
+                            fontSize = 13.sp
                         )
                     }
                 }
             } else {
                 LazyColumn {
                     item {
-                        Spacer(modifier = Modifier.height(M3Spacing.small))
+                        Spacer(modifier = Modifier.height(8.dp))
                     }
 
                     items(uiState.folders, key = { it.path }) { folder ->
@@ -156,11 +173,50 @@ private fun FolderItem(
     folder: FolderItem,
     onClick: () -> Unit
 ) {
-    M3ListItemTwoLine(
-        headlineText = folder.name,
-        supportingText = "${folder.songCount} 首歌曲",
-        leadingIcon = Icons.Default.Folder,
-        leadingIconBackgroundColor = M3SemanticColors.Blue.copy(alpha = 0.2f),
-        onClick = onClick
-    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(SpotifyColors.GridBackground),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Folder,
+                contentDescription = null,
+                tint = SpotifyColors.TextSecondary,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = folder.name,
+                color = SpotifyColors.TextPrimary,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = "${folder.songCount} 首歌曲",
+                color = SpotifyColors.TextTertiary,
+                fontSize = 12.sp
+            )
+        }
+        Icon(
+            imageVector = Icons.Default.ChevronRight,
+            contentDescription = null,
+            tint = SpotifyColors.TextTertiary,
+            modifier = Modifier.size(20.dp)
+        )
+    }
 }

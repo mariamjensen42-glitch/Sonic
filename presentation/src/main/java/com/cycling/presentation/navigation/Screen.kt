@@ -1,14 +1,18 @@
 package com.cycling.presentation.navigation
 
+import androidx.navigation3.runtime.NavKey
 import kotlinx.serialization.Serializable
 
-sealed interface Screen {
+sealed interface Screen : NavKey {
 
     @Serializable
     data object Home : Screen
 
     @Serializable
     data object Search : Screen
+
+    @Serializable
+    data object Library : Screen
 
     @Serializable
     data class SongDetail(val songId: Long) : Screen
@@ -31,9 +35,6 @@ sealed interface LibraryDestination : Screen {
     data object Artists : LibraryDestination
 
     @Serializable
-    data object Playlists : LibraryDestination
-
-    @Serializable
     data object MyMusic : LibraryDestination
 
     @Serializable
@@ -52,14 +53,4 @@ sealed interface LibraryDestination : Screen {
 sealed interface SettingsDestination : Screen {
     @Serializable
     data object Main : SettingsDestination
-    @Serializable
-    data object Theme : SettingsDestination
-}
-
-sealed interface NavGraph : Screen {
-    @Serializable
-    data object Library : NavGraph
-
-    @Serializable
-    data object Settings : NavGraph
 }

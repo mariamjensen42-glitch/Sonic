@@ -1,6 +1,8 @@
 package com.cycling.presentation.artistdetail
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,44 +16,47 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
-import com.cycling.core.ui.components.M3CircularProgressIndicator
-import com.cycling.core.ui.components.M3FilledButton
-import com.cycling.core.ui.components.M3LargeTopAppBar
-import com.cycling.core.ui.components.M3ListItemWithAvatar
-import com.cycling.core.ui.theme.M3ComponentSize
-import com.cycling.core.ui.theme.M3SemanticColors
-import com.cycling.core.ui.theme.M3Spacing
+import com.cycling.core.ui.theme.ArtColorExtractor
+import com.cycling.core.ui.components.M3DetailTopAppBar
+import com.cycling.core.ui.theme.SpotifyColors
+import com.cycling.presentation.player.PlayerIntent
+import com.cycling.presentation.player.PlayerViewModel
 import com.cycling.domain.model.Song
+
+private val AppBackground = Color(0xFF0B0B0F)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,239 +65,272 @@ fun ArtistDetailScreen(
     onNavigateToPlayer: (Long) -> Unit,
     onNavigateToApiKeyConfig: () -> Unit = {},
     onNavigateToAiInfo: (String, String, String) -> Unit = { _, _, _ -> },
-    viewModel: ArtistDetailViewModel = hiltViewModel(),
+    viewModel: ArtistDetailViewModel,
+    playerViewModel: PlayerViewModel = hiltViewModel(),
     bottomPadding: Dp = 0.dp
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(
-        state = rememberTopAppBarState()
-    )
+    val context = LocalContext.current
 
     LaunchedEffect(Unit) {
         viewModel.uiEffect.collect { effect ->
             when (effect) {
-                is ArtistDetailEffect.NavigateToPlayer -> onNavigateToPlayer(effect.songId)
+                is ArtistDetailEffect.NavigateToPlayer -> {
+                    val song = uiState.songs.find { it.id == effect.songId } ?: return@collect
+                    playerViewModel.handleIntent(PlayerIntent.PlaySong(song, uiState.songs))
+                    onNavigateToPlayer(effect.songId)
+                }
             }
         }
     }
 
-    Scaffold(
-        topBar = {
-            M3LargeTopAppBar(
-                title = "歌手详情",
-                scrollBehavior = scrollBehavior,
-                navigationIcon = Icons.AutoMirrored.Filled.ArrowBack,
-                navigationIconContentDescription = "返回",
-                onNavigationClick = onNavigateBack,
-                actions = {
-                    IconButton(
-                        onClick = {
-                            uiState.artist?.let { artist ->
-                                onNavigateToAiInfo("artist", artist.name, "")
-                            }
-                        }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.AutoAwesome,
-                            contentDescription = "AI 介绍",
-                            tint = M3SemanticColors.Purple
-                        )
-                    }
-                }
+    var dominantColor by remember { mutableStateOf(AppBackground) }
+    LaunchedEffect(uiState.artist?.artistArt) {
+        uiState.artist?.artistArt?.let { url ->
+            val color = ArtColorExtractor.extractColorFromImageUrl(context, url, AppBackground)
+            dominantColor = color
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(dominantColor, Color.Black),
+                    startY = 100f
+                )
             )
-        },
-        containerColor = MaterialTheme.colorScheme.surface
-    ) { paddingValues ->
-        if (uiState.isLoading) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentAlignment = Alignment.Center
-            ) {
-                M3CircularProgressIndicator()
-            }
-        } else {
-            LazyColumn(
+    ) {
+        Scaffold(
+            topBar = {
+                M3DetailTopAppBar(
+                    navigationIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                    navigationIconContentDescription = "返回",
+                    onNavigationClick = onNavigateBack,
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                        titleContentColor = Color.White,
+                        navigationIconContentColor = Color.White
+                    )
+                )
+            },
+            containerColor = Color.Transparent
+        ) { paddingValues ->
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
             ) {
-                item {
-                    ArtistHeader(
-                        artist = uiState.artist,
-                        songCount = uiState.songs.size
-                    )
-                }
-
-                item {
-                    PlayActionButtons(
-                        onPlayAll = {
-                            uiState.songs.firstOrNull()?.let { song ->
-                                viewModel.handleIntent(ArtistDetailIntent.SongClick(song))
-                            }
-                        },
-                        onShuffle = {
-                            uiState.songs.randomOrNull()?.let { song ->
-                                viewModel.handleIntent(ArtistDetailIntent.SongClick(song))
-                            }
-                        }
-                    )
-                }
-
-                itemsIndexed(uiState.songs) { index, song ->
-                    M3SongListItem(
-                        song = song,
-                        onClick = {
-                            viewModel.handleIntent(ArtistDetailIntent.SongClick(song))
-                        }
-                    )
-                }
-
-                item {
-                    Spacer(modifier = Modifier.height(bottomPadding))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PlayActionButtons(
-    onPlayAll: () -> Unit,
-    onShuffle: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = M3Spacing.medium, vertical = M3Spacing.small),
-        horizontalArrangement = Arrangement.Center
-    ) {
-        M3FilledButton(
-            onClick = onPlayAll,
-            icon = Icons.Default.PlayArrow,
-            modifier = Modifier.weight(1f)
-        ) {
-            Text("播放全部")
-        }
-        Spacer(modifier = Modifier.width(M3Spacing.small))
-        M3FilledButton(
-            onClick = onShuffle,
-            icon = Icons.Default.Shuffle,
-            modifier = Modifier.weight(1f)
-        ) {
-            Text("随机播放")
-        }
-    }
-    Spacer(modifier = Modifier.height(M3Spacing.small))
-}
-
-@Composable
-private fun M3SongListItem(
-    song: Song,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    M3ListItemWithAvatar(
-        headlineText = song.title,
-        supportingText = song.album ?: formatDuration(song.duration),
-        onClick = onClick,
-        modifier = modifier,
-        avatarContent = {
-            if (song.albumArt != null) {
-                AsyncImage(
-                    model = song.albumArt,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
+            if (uiState.isLoading) {
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.MusicNote,
-                        contentDescription = null,
-                        modifier = Modifier.size(24.dp),
-                        tint = M3SemanticColors.Red
-                    )
+                    androidx.compose.material3.CircularProgressIndicator(color = Color.White)
                 }
-            }
-        }
-    )
-}
-
-@Composable
-private fun ArtistHeader(
-    artist: com.cycling.domain.model.Artist?,
-    songCount: Int
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(M3Spacing.medium),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Box(
-            modifier = Modifier
-                .size(M3ComponentSize.artistCardSize)
-                .clip(CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            if (artist?.artistArt != null) {
-                AsyncImage(
-                    model = artist.artistArt,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
             } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Person,
-                        contentDescription = null,
-                        modifier = Modifier.size(64.dp),
-                        tint = M3SemanticColors.Blue
-                    )
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    // ── Header Section (460dp, Neptune/Spotify style) ──
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(460.dp),
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Spacer(modifier = Modifier.padding(25.dp))
+
+                            // Artist Image (240dp, rounded circle)
+                            Box(
+                                modifier = Modifier.fillMaxWidth(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(240.dp)
+                                        .clip(RoundedCornerShape(120.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (uiState.artist?.artistArt != null) {
+                                        AsyncImage(
+                                            model = uiState.artist?.artistArt,
+                                            contentDescription = null,
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentScale = ContentScale.Crop
+                                        )
+                                    } else {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .background(Color(0xFF333333)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                painter = painterResource(id = com.cycling.presentation.R.drawable.ic_artists),
+                                                contentDescription = null,
+                                                modifier = Modifier.size(80.dp),
+                                                tint = Color.Gray
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.padding(20.dp))
+
+                            // Artist Name + Play Button Row
+                            Row(
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 25.dp)
+                            ) {
+                                Column(modifier = Modifier.width(200.dp)) {
+                                    Text(
+                                        text = uiState.artist?.name ?: "未知歌手",
+                                        color = Color.White,
+                                        fontSize = 23.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = "为你推荐",
+                                        color = Color.Gray,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+
+                                // Play Button (white circle) — only show when NOT currently playing
+                                if (uiState.songs.isNotEmpty() && !uiState.isPlaying) {
+                                    Box(
+                                        contentAlignment = Alignment.Center,
+                                        modifier = Modifier
+                                            .size(52.dp)
+                                            .clip(RoundedCornerShape(100.dp))
+                                            .background(Color.White)
+                                            .clickable(
+                                                interactionSource = remember { MutableInteractionSource() },
+                                                indication = null
+                                            ) {
+                                                viewModel.handleIntent(ArtistDetailIntent.SongClick(uiState.songs.first()))
+                                            }
+                                    ) {
+                                        Icon(
+                                            modifier = Modifier.size(25.dp),
+                                            tint = Color.Black,
+                                            imageVector = Icons.Default.PlayArrow,
+                                            contentDescription = "播放全部"
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // ── Song List (Neptune/Spotify style: cover + title + artist + add/added icon) ──
+                    itemsIndexed(uiState.songs) { index, song ->
+                        val isCurrentSong = song.id == uiState.currentSongId
+                        val currentPlayingColor = if (isCurrentSong) SpotifyColors.Accent else Color.White
+                        val isLiked = song.id in uiState.likedSongIds
+
+                        Row(
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp, vertical = 8.dp)
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) {
+                                    viewModel.handleIntent(ArtistDetailIntent.SongClick(song))
+                                }
+                        ) {
+                            Row(
+                                horizontalArrangement = Arrangement.Start,
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                // Cover thumbnail
+                                Box(
+                                    modifier = Modifier
+                                        .size(50.dp)
+                                        .padding(end = 10.dp)
+                                        .clip(RoundedCornerShape(6.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (song.albumArt != null) {
+                                        AsyncImage(
+                                            model = song.albumArt,
+                                            contentDescription = null,
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentScale = ContentScale.Crop
+                                        )
+                                    } else {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .background(Color(0xFF333333)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.MusicNote,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(24.dp),
+                                                tint = Color.Gray
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Column {
+                                    Text(
+                                        text = song.title,
+                                        color = currentPlayingColor,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = song.artist,
+                                        color = Color.Gray,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+
+                            // Like icon (Spotify style: add/added)
+                            Icon(
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null
+                                    ) {
+                                        viewModel.handleIntent(ArtistDetailIntent.ToggleFavorite(song.id))
+                                    },
+                                painter = if (isLiked) painterResource(id = com.cycling.presentation.R.drawable.added)
+                                else painterResource(id = com.cycling.presentation.R.drawable.ic_add),
+                                tint = if (isLiked) Color.White else Color.Gray,
+                                contentDescription = if (isLiked) "取消收藏" else "收藏"
+                            )
+                        }
+                    }
+
+                    item {
+                        Spacer(modifier = Modifier.height(bottomPadding + 80.dp))
+                    }
                 }
             }
         }
-
-        Spacer(modifier = Modifier.height(M3Spacing.medium))
-
-        Text(
-            text = artist?.name ?: "未知歌手",
-            style = MaterialTheme.typography.headlineLarge,
-            color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
-
-        Spacer(modifier = Modifier.height(M3Spacing.small))
-
-        val albumCount = artist?.numberOfAlbums ?: 0
-        Text(
-            text = "$albumCount 张专辑 · $songCount 首歌曲",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        Spacer(modifier = Modifier.height(M3Spacing.medium))
     }
-}
+}}
 
-private fun formatDuration(duration: Long): String {
-    val seconds = (duration / 1000).toInt()
-    val minutes = seconds / 60
-    val remainingSeconds = seconds % 60
-    return "$minutes:${remainingSeconds.toString().padStart(2, '0')}"
-}

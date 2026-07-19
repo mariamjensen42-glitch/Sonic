@@ -27,7 +27,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -36,16 +35,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.cycling.core.ui.components.M3LargeTopAppBar
+import com.cycling.core.ui.components.M3DetailTopAppBar
 import com.cycling.core.ui.components.M3MediaCard
 import com.cycling.core.ui.theme.M3Spacing
+import com.cycling.core.ui.theme.SpotifyColors
 import com.cycling.domain.model.Album
 import com.cycling.domain.model.SortOrder
+import com.cycling.presentation.R
+import androidx.compose.ui.res.painterResource
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,9 +58,6 @@ fun AlbumsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val gridState = rememberLazyGridState()
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(
-        state = rememberTopAppBarState()
-    )
     var showSortMenu by remember { mutableStateOf(false) }
     var sortOrder by remember { mutableStateOf(SortOrder.TITLE) }
 
@@ -76,12 +74,10 @@ fun AlbumsScreen(
     }
 
     Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            M3LargeTopAppBar(
+            M3DetailTopAppBar(
                 title = "专辑",
-                scrollBehavior = scrollBehavior,
-                navigationIcon = androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack,
+                navigationIcon = Icons.AutoMirrored.Filled.ArrowBack,
                 navigationIconContentDescription = "返回",
                 onNavigationClick = onNavigateBack,
                 actions = {
@@ -89,7 +85,8 @@ fun AlbumsScreen(
                         IconButton(onClick = { showSortMenu = true }) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.Sort,
-                                contentDescription = "排序"
+                                contentDescription = "排序",
+                                tint = SpotifyColors.TextPrimary
                             )
                         }
                         DropdownMenu(
@@ -107,10 +104,15 @@ fun AlbumsScreen(
                             }
                         }
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = SpotifyColors.Background,
+                    titleContentColor = SpotifyColors.TextPrimary,
+                    navigationIconContentColor = SpotifyColors.TextPrimary
+                )
             )
         },
-        containerColor = MaterialTheme.colorScheme.surface
+        containerColor = SpotifyColors.Background
     ) { paddingValues ->
         Box(modifier = Modifier.padding(paddingValues)) {
             if (uiState.isLoading) {
@@ -127,21 +129,21 @@ fun AlbumsScreen(
                 ) {
                     Spacer(modifier = Modifier.weight(1f))
                     Icon(
-                        imageVector = Icons.Outlined.Album,
+                        painter = painterResource(id = R.drawable.ic_album),
                         contentDescription = null,
                         modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        tint = SpotifyColors.TextTertiary
                     )
                     Spacer(modifier = Modifier.height(M3Spacing.medium))
                     Text(
                         text = "暂无专辑",
                         style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = SpotifyColors.TextPrimary
                     )
                     Text(
                         text = "扫描本地音乐以添加专辑",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = SpotifyColors.TextSecondary
                     )
                     Spacer(modifier = Modifier.weight(1f))
                 }

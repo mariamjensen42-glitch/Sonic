@@ -7,6 +7,7 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
+import android.util.LruCache
 import android.util.Size
 import androidx.annotation.OptIn
 import androidx.media3.common.MediaItem
@@ -18,6 +19,7 @@ import androidx.media3.session.SessionToken
 import com.cycling.domain.model.PlayerState
 import com.cycling.domain.model.RepeatMode
 import com.cycling.domain.model.Song
+import com.cycling.domain.repository.PlayerRepository
 import com.cycling.domain.repository.SongRepository
 import com.google.common.util.concurrent.ListenableFuture
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -29,6 +31,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.guava.await
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.io.ByteArrayOutputStream
@@ -41,9 +44,9 @@ import androidx.core.net.toUri
 class PlayerManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val songRepository: SongRepository
-) {
+) : PlayerRepository {
     private val _playerState = MutableStateFlow(PlayerState())
-    val playerState: StateFlow<PlayerState> = _playerState.asStateFlow()
+    override val playerState: StateFlow<PlayerState> = _playerState.asStateFlow()
 
     private val supervisorJob = SupervisorJob()
     private val scope = CoroutineScope(supervisorJob + Dispatchers.Main)
@@ -53,6 +56,9 @@ class PlayerManager @Inject constructor(
     private var hasCountedPlay: Boolean = false
     private var currentSongId: Long? = null
 
+    private val albumArtCache = LruCache<String, ByteArray>(50)
+    private var progressLoopJob: kotlinx.coroutines.Job? = null
+
     private var mediaController: MediaController? = null
     private var controllerFuture: ListenableFuture<MediaController>? = null
 
@@ -60,6 +66,7 @@ class PlayerManager @Inject constructor(
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             Timber.d("Player state changed: isPlaying=$isPlaying")
             _playerState.update { it.copy(isPlaying = isPlaying) }
+            if (isPlaying) startProgressUpdateLoop() else stopProgressUpdateLoop()
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
@@ -99,13 +106,19 @@ class PlayerManager @Inject constructor(
     }
 
     private fun startProgressUpdateLoop() {
-        scope.launch {
-            while (true) {
+        if (progressLoopJob?.isActive == true) return
+        progressLoopJob = scope.launch {
+            while (isActive) {
                 updatePlaybackPosition()
                 checkPlayProgress()
                 kotlinx.coroutines.delay(1000)
             }
         }
+    }
+
+    private fun stopProgressUpdateLoop() {
+        progressLoopJob?.cancel()
+        progressLoopJob = null
     }
 
     private fun resetPlayCountFlag() {
@@ -164,17 +177,25 @@ class PlayerManager @Inject constructor(
             .setAlbumTitle(song.album)
 
         song.albumArt?.let { artworkUri ->
-            try {
-                val bitmap = loadAlbumArtBitmap(artworkUri, song.path)
-                if (bitmap != null) {
-                    val artworkData = bitmapToByteArray(bitmap)
-                    metadataBuilder.setArtworkData(artworkData, MediaMetadata.PICTURE_TYPE_FRONT_COVER)
-                    Timber.d("createMediaItem: embedded artwork data for ${song.title}, size=${artworkData.size}")
-                } else {
-                    Timber.d("createMediaItem: failed to load bitmap for ${song.title}")
+            val cacheKey = artworkUri
+            val cached = albumArtCache.get(cacheKey)
+            if (cached != null) {
+                metadataBuilder.setArtworkData(cached, MediaMetadata.PICTURE_TYPE_FRONT_COVER)
+                Timber.d("createMediaItem: cached artwork for ${song.title}")
+            } else {
+                try {
+                    val bitmap = loadAlbumArtBitmap(artworkUri, song.path)
+                    if (bitmap != null) {
+                        val artworkData = bitmapToByteArray(bitmap)
+                        albumArtCache.put(cacheKey, artworkData)
+                        metadataBuilder.setArtworkData(artworkData, MediaMetadata.PICTURE_TYPE_FRONT_COVER)
+                        Timber.d("createMediaItem: loaded artwork for ${song.title}, size=${artworkData.size}")
+                    } else {
+                        Timber.d("createMediaItem: failed to load bitmap for ${song.title}")
+                    }
+                } catch (e: Exception) {
+                    Timber.e(e, "createMediaItem: error loading artwork for ${song.title}")
                 }
-            } catch (e: Exception) {
-                Timber.e(e, "createMediaItem: error loading artwork for ${song.title}")
             }
         }
 
@@ -250,7 +271,7 @@ class PlayerManager @Inject constructor(
         return outputStream.toByteArray()
     }
 
-    fun playSong(song: Song, queue: List<Song> = emptyList()) {
+    override fun playSong(song: Song, queue: List<Song>) {
         val player = mediaController ?: return
 
         Timber.d("playSong: ${song.title} by ${song.artist}, queueSize=${queue.size}")
@@ -287,7 +308,7 @@ class PlayerManager @Inject constructor(
         }
     }
 
-    fun playPause() {
+    override fun playPause() {
         val player = mediaController ?: return
         if (player.isPlaying) {
             Timber.d("playPause: pausing playback")
@@ -298,14 +319,14 @@ class PlayerManager @Inject constructor(
         }
     }
 
-    fun seekTo(position: Long) {
+    override fun seekTo(position: Long) {
         val player = mediaController ?: return
         Timber.d("seekTo: position=$position ms")
         player.seekTo(position)
         _playerState.update { it.copy(playbackPosition = position) }
     }
 
-    fun skipToNext() {
+    override fun skipToNext() {
         Timber.d("skipToNext: currentIndex=$currentIndex, queueSize=${playbackQueue.size}")
         skipToNextInternal(wrapAround = _playerState.value.repeatMode == RepeatMode.ALL)
     }
@@ -326,7 +347,7 @@ class PlayerManager @Inject constructor(
         }
     }
 
-    fun skipToPrevious() {
+    override fun skipToPrevious() {
         val player = mediaController ?: return
         if (playbackQueue.isEmpty()) return
 
@@ -379,23 +400,23 @@ class PlayerManager @Inject constructor(
         }
     }
 
-    fun setRepeatMode(repeatMode: RepeatMode) {
+    override fun setRepeatMode(repeatMode: RepeatMode) {
         Timber.d("setRepeatMode: $repeatMode")
         _playerState.update { it.copy(repeatMode = repeatMode) }
     }
 
-    fun setShuffleMode(shuffle: Boolean) {
+    override fun setShuffleMode(shuffle: Boolean) {
         Timber.d("setShuffleMode: $shuffle")
         _playerState.update { it.copy(shuffleMode = shuffle) }
     }
 
-    fun addToQueue(song: Song) {
+    override fun addToQueue(song: Song) {
         Timber.d("addToQueue: ${song.title}")
         playbackQueue.add(song)
         _playerState.update { it.copy(playbackQueue = playbackQueue.toList()) }
     }
 
-    fun playNext(song: Song) {
+    override fun playNext(song: Song) {
         Timber.d("playNext: ${song.title}, currentIndex=$currentIndex")
         
         if (playbackQueue.isEmpty() || currentIndex < 0) {
@@ -409,7 +430,7 @@ class PlayerManager @Inject constructor(
         _playerState.update { it.copy(playbackQueue = playbackQueue.toList()) }
     }
 
-    fun moveQueueItem(fromIndex: Int, toIndex: Int) {
+    override fun moveQueueItem(fromIndex: Int, toIndex: Int) {
         if (fromIndex !in playbackQueue.indices || toIndex !in playbackQueue.indices) return
         if (fromIndex == toIndex) return
         
@@ -438,7 +459,7 @@ class PlayerManager @Inject constructor(
         }
     }
 
-    fun removeFromQueue(index: Int) {
+    override fun removeFromQueue(index: Int) {
         if (index !in playbackQueue.indices) return
 
         val player = mediaController ?: return
@@ -458,7 +479,7 @@ class PlayerManager @Inject constructor(
         _playerState.update { it.copy(playbackQueue = playbackQueue.toList()) }
     }
 
-    fun clearQueue() {
+    override fun clearQueue() {
         val player = mediaController ?: return
         Timber.d("clearQueue: clearing queue with ${playbackQueue.size} items")
         playbackQueue.clear()
@@ -467,7 +488,7 @@ class PlayerManager @Inject constructor(
         _playerState.update { PlayerState() }
     }
 
-    fun getCurrentState(): PlayerState = _playerState.value
+    override fun getCurrentState(): PlayerState = _playerState.value
 
     fun release() {
         mediaController?.removeListener(playerListener)

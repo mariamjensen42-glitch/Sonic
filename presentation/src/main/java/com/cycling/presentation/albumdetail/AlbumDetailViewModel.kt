@@ -1,10 +1,13 @@
 package com.cycling.presentation.albumdetail
 
-import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cycling.domain.repository.AlbumRepository
 import com.cycling.domain.repository.SongRepository
+import com.cycling.presentation.navigation.LibraryDestination
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedFactory
+import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,16 +18,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
-import javax.inject.Inject
 
-@HiltViewModel
-class AlbumDetailViewModel @Inject constructor(
+@HiltViewModel(assistedFactory = AlbumDetailViewModel.Factory::class)
+class AlbumDetailViewModel @AssistedInject constructor(
     private val albumRepository: AlbumRepository,
     private val songRepository: SongRepository,
-    savedStateHandle: SavedStateHandle
+    @Assisted private val route: LibraryDestination.AlbumDetail
 ) : ViewModel() {
 
-    private val albumId: Long = savedStateHandle.get<Long>("albumId") ?: -1L
+    private val albumId: Long = route.albumId
 
     private val _uiState = MutableStateFlow(AlbumDetailUiState())
     val uiState: StateFlow<AlbumDetailUiState> = _uiState.asStateFlow()
@@ -66,5 +68,10 @@ class AlbumDetailViewModel @Inject constructor(
         viewModelScope.launch {
             _uiEffect.emit(AlbumDetailEffect.NavigateToPlayer(song.id))
         }
+    }
+
+    @AssistedFactory
+    interface Factory {
+        fun create(route: LibraryDestination.AlbumDetail): AlbumDetailViewModel
     }
 }

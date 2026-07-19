@@ -1,64 +1,71 @@
 package com.cycling.presentation.home
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
-import androidx.compose.material.icons.filled.Album
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.outlined.Album
-import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.cycling.core.ui.components.M3LargeTopAppBar
-import com.cycling.core.ui.components.M3ListItemWithTrailing
-import com.cycling.core.ui.components.M3TrailingContentType
-import com.cycling.core.ui.components.M3Container
-import com.cycling.core.ui.components.M3ContainerStyle
-import com.cycling.core.ui.theme.M3SemanticColors
-import com.cycling.core.ui.theme.M3Spacing
-import com.cycling.domain.model.PlayerState
-import com.cycling.presentation.player.MiniPlayer
+import coil3.compose.AsyncImage
+import com.cycling.core.ui.components.M3CircularProgressIndicator
+import com.cycling.core.ui.theme.SpotifyColors
+import androidx.compose.ui.res.painterResource
+import com.cycling.presentation.R
+import com.cycling.domain.model.Album
+import com.cycling.domain.model.Artist
+import com.cycling.domain.model.Song
+import java.time.LocalTime
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel(),
     onNavigateToSongs: () -> Unit,
     onNavigateToAlbums: () -> Unit,
     onNavigateToArtists: () -> Unit,
-    onNavigateToPlaylists: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToAlbumDetail: (Long) -> Unit,
     onNavigateToArtistDetail: (Long) -> Unit,
@@ -69,13 +76,7 @@ fun HomeScreen(
     bottomPadding: Dp = 0.dp
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val playerState by viewModel.playerState.collectAsStateWithLifecycle(
-        initialValue = PlayerState()
-    )
     val scrollState = rememberLazyListState()
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(
-        state = rememberTopAppBarState()
-    )
 
     LaunchedEffect(Unit) {
         viewModel.uiEffect.collect { effect ->
@@ -83,7 +84,6 @@ fun HomeScreen(
                 is HomeEffect.NavigateToSongs -> onNavigateToSongs()
                 is HomeEffect.NavigateToAlbums -> onNavigateToAlbums()
                 is HomeEffect.NavigateToArtists -> onNavigateToArtists()
-                is HomeEffect.NavigateToPlaylists -> onNavigateToPlaylists()
                 is HomeEffect.NavigateToSettings -> onNavigateToSettings()
                 is HomeEffect.NavigateToAlbumDetail -> onNavigateToAlbumDetail(effect.albumId)
                 is HomeEffect.NavigateToArtistDetail -> onNavigateToArtistDetail(effect.artistId)
@@ -91,79 +91,274 @@ fun HomeScreen(
                 is HomeEffect.NavigateToMyMusic -> onNavigateToMyMusic()
                 is HomeEffect.NavigateToSearch -> onNavigateToSearch()
                 is HomeEffect.NavigateToFolders -> onNavigateToFolders()
-                is HomeEffect.ShowToast -> {}
+                is HomeEffect.ShowToast -> {} // no-op
             }
         }
     }
 
-    Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        topBar = {
-            M3LargeTopAppBar(
-                title = "音乐",
-                scrollBehavior = scrollBehavior,
-                actions = {
-                    IconButton(onClick = { viewModel.handleIntent(HomeIntent.NavigateToSearch) }) {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = "搜索"
-                        )
-                    }
-                    IconButton(onClick = { viewModel.handleIntent(HomeIntent.NavigateToSettings) }) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = "设置"
-                        )
-                    }
-                }
-            )
-        },
-        containerColor = MaterialTheme.colorScheme.surface
-    ) { paddingValues ->
-        Box(modifier = Modifier.padding(paddingValues)) {
-            if (uiState.isLoading) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(SpotifyColors.Background)
+    ) {
+        if (uiState.isLoading) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                M3CircularProgressIndicator()
+            }
+        } else {
+            Box(modifier = Modifier.weight(1f)) {
+                LazyColumn(
+                    state = scrollState,
+                    modifier = Modifier.fillMaxSize()
                 ) {
-                    com.cycling.core.ui.components.M3CircularProgressIndicator()
-                }
-            } else {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    Box(modifier = Modifier.weight(1f)) {
-                        LazyColumn(
-                            state = scrollState,
-                            verticalArrangement = Arrangement.spacedBy(M3Spacing.small),
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                                vertical = M3Spacing.medium
-                            )
-                        ) {
-                            item {
-                                QuickAccessSection(
-                                    onSongsClick = { viewModel.handleIntent(HomeIntent.NavigateToSongs) },
-                                    onAlbumsClick = { viewModel.handleIntent(HomeIntent.NavigateToAlbums) },
-                                    onArtistsClick = { viewModel.handleIntent(HomeIntent.NavigateToArtists) },
-                                    onPlaylistsClick = { viewModel.handleIntent(HomeIntent.NavigateToPlaylists) },
-                                    onMyMusicClick = { viewModel.handleIntent(HomeIntent.NavigateToMyMusic) },
-                                    onFoldersClick = { viewModel.handleIntent(HomeIntent.NavigateToFolders) }
-                                )
-                            }
+                    // === Greeting ===
+                    item {
+                        GreetingSection(
+                            onSettingsClick = onNavigateToSettings
+                        )
+                    }
 
-                            item {
-                                Spacer(modifier = Modifier.height(bottomPadding))
-                            }
+                    // === Quick Play Grid (Spotify 2-column album grid) ===
+                    if (uiState.topAlbums.isNotEmpty()) {
+                        item {
+                            QuickPlayGrid(
+                                albums = uiState.topAlbums.take(8),
+                                onAlbumClick = { album ->
+                                    viewModel.handleIntent(HomeIntent.AlbumClick(album))
+                                }
+                            )
                         }
                     }
-                    if (playerState.currentSong != null) {
-                        MiniPlayer(
-                            currentSong = playerState.currentSong,
-                            isPlaying = playerState.isPlaying,
-                            playbackPosition = playerState.playbackPosition,
-                            duration = playerState.duration,
-                            onPlayPause = { viewModel.handleIntent(HomeIntent.PlayPause) },
-                            onClick = { viewModel.handleIntent(HomeIntent.MiniPlayerClick) }
-                        )
+
+                    // === Recently Played ===
+                    if (uiState.recentlyPlayed.isNotEmpty()) {
+                        item {
+                            SectionHeader(
+                                title = "最近播放",
+                                onSeeAll = null
+                            )
+                        }
+                        item {
+                            SongRow(
+                                songs = uiState.recentlyPlayed,
+                                onSongClick = { song ->
+                                    viewModel.handleIntent(HomeIntent.SongClick(song))
+                                }
+                            )
+                        }
                     }
+
+                    // === Top Albums ===
+                    if (uiState.topAlbums.isNotEmpty()) {
+                        item {
+                            SectionHeader(
+                                title = "推荐专辑",
+                                onSeeAll = {
+                                    viewModel.handleIntent(HomeIntent.NavigateToAlbums)
+                                }
+                            )
+                        }
+                        item {
+                            AlbumRow(
+                                albums = uiState.topAlbums,
+                                onAlbumClick = { album ->
+                                    viewModel.handleIntent(HomeIntent.AlbumClick(album))
+                                }
+                            )
+                        }
+                    }
+
+                    // === Top Artists ===
+                    if (uiState.topArtists.isNotEmpty()) {
+                        item {
+                            SectionHeader(
+                                title = "推荐歌手",
+                                onSeeAll = {
+                                    viewModel.handleIntent(HomeIntent.NavigateToArtists)
+                                }
+                            )
+                        }
+                        item {
+                            ArtistRow(
+                                artists = uiState.topArtists,
+                                onArtistClick = { artist ->
+                                    viewModel.handleIntent(HomeIntent.ArtistClick(artist))
+                                }
+                            )
+                        }
+                    }
+
+                    // === Favorite Songs ===
+                    if (uiState.favoriteSongs.isNotEmpty()) {
+                        item {
+                            SectionHeader(
+                                title = "收藏歌曲",
+                                onSeeAll = null
+                            )
+                        }
+                        item {
+                            SongRow(
+                                songs = uiState.favoriteSongs,
+                                onSongClick = { song ->
+                                    viewModel.handleIntent(HomeIntent.SongClick(song))
+                                }
+                            )
+                        }
+                    }
+
+                    // === Recently Added ===
+                    if (uiState.recentlyAdded.isNotEmpty()) {
+                        item {
+                            SectionHeader(
+                                title = "最近添加",
+                                onSeeAll = {
+                                    viewModel.handleIntent(HomeIntent.NavigateToSongs)
+                                }
+                            )
+                        }
+                        item {
+                            SongRow(
+                                songs = uiState.recentlyAdded,
+                                onSongClick = { song ->
+                                    viewModel.handleIntent(HomeIntent.SongClick(song))
+                                }
+                            )
+                        }
+                    }
+
+                    // === Most Played ===
+                    if (uiState.mostPlayed.isNotEmpty()) {
+                        item {
+                            SectionHeader(
+                                title = "常播歌曲",
+                                onSeeAll = null
+                            )
+                        }
+                        item {
+                            SongRow(
+                                songs = uiState.mostPlayed,
+                                onSongClick = { song ->
+                                    viewModel.handleIntent(HomeIntent.SongClick(song))
+                                }
+                            )
+                        }
+                    }
+
+                    // === Discover Section (large cards) ===
+                    if (uiState.topAlbums.isNotEmpty()) {
+                        item {
+                            SectionHeader(
+                                title = "发现音乐",
+                                onSeeAll = null
+                            )
+                        }
+                        item {
+                            DiscoverSection(
+                                albums = uiState.topAlbums.takeLast(3),
+                                onAlbumClick = { album ->
+                                    viewModel.handleIntent(HomeIntent.AlbumClick(album))
+                                }
+                            )
+                        }
+                    }
+
+                    item {
+                        Spacer(modifier = Modifier.height(bottomPadding + 80.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ════════════════════════════════════════════════════════════════
+// Greeting Section — Spotify style
+// ════════════════════════════════════════════════════════════════
+
+@Composable
+private fun GreetingSection(
+    name: String = "用户",
+    onSettingsClick: () -> Unit = {}
+) {
+    val currentHour = LocalTime.now().hour
+    val greeting = when {
+        currentHour < 12 -> "上午好"
+        currentHour < 17 -> "下午好"
+        else -> "晚上好"
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
+            .padding(horizontal = 16.dp, vertical = 16.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column {
+            Text(
+                text = greeting,
+                color = SpotifyColors.TextPrimary,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = "今天听点什么好呢？",
+                color = SpotifyColors.TextSecondary,
+                fontSize = 13.sp
+            )
+        }
+        // Settings icon
+        Icon(
+            painter = painterResource(id = R.drawable.ic_settings),
+            contentDescription = "设置",
+            tint = SpotifyColors.TextSecondary,
+            modifier = Modifier
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onSettingsClick
+                )
+                .padding(8.dp)
+                .size(24.dp)
+        )
+    }
+}
+
+// ════════════════════════════════════════════════════════════════
+// Quick Play Grid — Spotify's 2-column album shortcut grid
+// ════════════════════════════════════════════════════════════════
+
+@Composable
+private fun QuickPlayGrid(
+    albums: List<Album>,
+    onAlbumClick: (Album) -> Unit
+) {
+    val gridAlbums = albums.take(8)
+    val chunked = gridAlbums.chunked(2)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp)
+    ) {
+        chunked.forEach { rowAlbums ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                rowAlbums.forEach { album ->
+                    QuickPlayItem(
+                        album = album,
+                        onClick = { onAlbumClick(album) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                if (rowAlbums.size < 2) {
+                    Spacer(modifier = Modifier.weight(1f))
                 }
             }
         }
@@ -171,65 +366,424 @@ fun HomeScreen(
 }
 
 @Composable
-private fun QuickAccessSection(
-    onSongsClick: () -> Unit,
-    onAlbumsClick: () -> Unit,
-    onArtistsClick: () -> Unit,
-    onPlaylistsClick: () -> Unit,
-    onMyMusicClick: () -> Unit,
-    onFoldersClick: () -> Unit
+private fun QuickPlayItem(
+    album: Album,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    M3Container(
-        modifier = Modifier.fillMaxWidth(),
-        style = M3ContainerStyle.Filled
+    Row(
+        modifier = modifier
+            .height(56.dp)
+            .clip(RoundedCornerShape(4.dp))
+            .background(SpotifyColors.GridBackground)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            ),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Start
     ) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(M3Spacing.extraSmall)
+        // Album thumbnail
+        Box(
+            modifier = Modifier
+                .size(56.dp)
         ) {
-            M3ListItemWithTrailing(
-                headlineText = "歌曲",
-                onClick = onSongsClick,
-                leadingIcon = Icons.Outlined.MusicNote,
-                leadingIconBackgroundColor = M3SemanticColors.Red,
-                trailingType = M3TrailingContentType.Chevron
-            )
-            M3ListItemWithTrailing(
-                headlineText = "专辑",
-                onClick = onAlbumsClick,
-                leadingIcon = Icons.Outlined.Album,
-                leadingIconBackgroundColor = M3SemanticColors.Teal,
-                trailingType = M3TrailingContentType.Chevron
-            )
-            M3ListItemWithTrailing(
-                headlineText = "歌手",
-                onClick = onArtistsClick,
-                leadingIcon = Icons.Outlined.Person,
-                leadingIconBackgroundColor = M3SemanticColors.Blue,
-                trailingType = M3TrailingContentType.Chevron
-            )
-            M3ListItemWithTrailing(
-                headlineText = "播放列表",
-                onClick = onPlaylistsClick,
-                leadingIcon = Icons.AutoMirrored.Filled.QueueMusic,
-                leadingIconBackgroundColor = M3SemanticColors.Green,
-                trailingType = M3TrailingContentType.Chevron
-            )
-            M3ListItemWithTrailing(
-                headlineText = "文件夹",
-                onClick = onFoldersClick,
-                leadingIcon = Icons.Default.Folder,
-                leadingIconBackgroundColor = M3SemanticColors.Indigo,
-                trailingType = M3TrailingContentType.Chevron
-            )
-            M3ListItemWithTrailing(
-                headlineText = "我的音乐",
-                supportingText = "喜欢、最近播放、最常播放",
-                onClick = onMyMusicClick,
-                leadingIcon = Icons.Default.Favorite,
-                leadingIconBackgroundColor = M3SemanticColors.Pink,
-                trailingType = M3TrailingContentType.Chevron
+            if (album.albumArt != null) {
+                AsyncImage(
+                    model = album.albumArt,
+                    contentDescription = album.name,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(SpotifyColors.SurfaceVariant),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.MusicNote,
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                        tint = SpotifyColors.TextSecondary
+                    )
+                }
+            }
+        }
+        Text(
+            modifier = Modifier.padding(start = 10.dp, end = 8.dp),
+            text = album.name,
+            color = SpotifyColors.TextPrimary,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+// ════════════════════════════════════════════════════════════════
+// Section Header — Spotify style
+// ════════════════════════════════════════════════════════════════
+
+@Composable
+private fun SectionHeader(
+    title: String,
+    onSeeAll: (() -> Unit)?
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = title,
+            color = SpotifyColors.TextPrimary,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold
+        )
+        if (onSeeAll != null) {
+            Text(
+                text = "查看全部",
+                color = SpotifyColors.TextSecondary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onSeeAll
+                    )
+                    .padding(horizontal = 4.dp)
             )
         }
     }
 }
+
+// ════════════════════════════════════════════════════════════════
+// Album Row (Horizontal Scrolling) — Spotify style
+// ════════════════════════════════════════════════════════════════
+
+@Composable
+private fun AlbumRow(
+    albums: List<Album>,
+    onAlbumClick: (Album) -> Unit
+) {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        items(albums, key = { it.id }) { album ->
+            AlbumCard(
+                album = album,
+                onClick = { onAlbumClick(album) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun AlbumCard(
+    album: Album,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .width(150.dp)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
+    ) {
+        Column {
+            // Album Art — rounded square
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(SpotifyColors.SurfaceVariant),
+                contentAlignment = Alignment.Center
+            ) {
+                if (album.albumArt != null) {
+                    AsyncImage(
+                        model = album.albumArt,
+                        contentDescription = album.name,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_album),
+                        contentDescription = null,
+                        modifier = Modifier.size(40.dp),
+                        tint = SpotifyColors.TextTertiary
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = album.name,
+                color = SpotifyColors.TextPrimary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = album.artist,
+                color = SpotifyColors.TextTertiary,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+// ════════════════════════════════════════════════════════════════
+// Artist Row (Horizontal Scrolling) — Spotify style
+// ════════════════════════════════════════════════════════════════
+
+@Composable
+private fun ArtistRow(
+    artists: List<Artist>,
+    onArtistClick: (Artist) -> Unit
+) {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        items(artists, key = { it.id }) { artist ->
+            ArtistCard(
+                artist = artist,
+                onClick = { onArtistClick(artist) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun ArtistCard(
+    artist: Artist,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .width(140.dp)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Circular artist art
+            Box(
+                modifier = Modifier
+                    .size(120.dp)
+                    .clip(RoundedCornerShape(60.dp))
+                    .background(SpotifyColors.SurfaceVariant),
+                contentAlignment = Alignment.Center
+            ) {
+                if (artist.artistArt != null) {
+                    AsyncImage(
+                        model = artist.artistArt,
+                        contentDescription = artist.name,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_artists),
+                        contentDescription = null,
+                        modifier = Modifier.size(40.dp),
+                        tint = SpotifyColors.TextTertiary
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = artist.name,
+                color = SpotifyColors.TextPrimary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = "歌手",
+                color = SpotifyColors.TextTertiary,
+                fontSize = 12.sp,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+// ════════════════════════════════════════════════════════════════
+// Song Row (Horizontal Scrolling) — Spotify style
+// ════════════════════════════════════════════════════════════════
+
+@Composable
+private fun SongRow(
+    songs: List<Song>,
+    onSongClick: (Song) -> Unit
+) {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        items(songs, key = { it.id }) { song ->
+            SongCard(
+                song = song,
+                onClick = { onSongClick(song) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun SongCard(
+    song: Song,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .width(140.dp)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
+    ) {
+        Column {
+            // Song art — rounded square
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(SpotifyColors.SurfaceVariant),
+                contentAlignment = Alignment.Center
+            ) {
+                if (song.albumArt != null) {
+                    AsyncImage(
+                        model = song.albumArt,
+                        contentDescription = song.title,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Outlined.MusicNote,
+                        contentDescription = null,
+                        modifier = Modifier.size(40.dp),
+                        tint = SpotifyColors.TextTertiary
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = song.title,
+                color = SpotifyColors.TextPrimary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = song.artist,
+                color = SpotifyColors.TextTertiary,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+// ════════════════════════════════════════════════════════════════
+// Discover Section — large cards with gradient overlay
+// ════════════════════════════════════════════════════════════════
+
+@Composable
+private fun DiscoverSection(
+    albums: List<Album>,
+    onAlbumClick: (Album) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        albums.forEach { album ->
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(180.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = { onAlbumClick(album) }
+                    )
+            ) {
+                // Background image
+                if (album.albumArt != null) {
+                    AsyncImage(
+                        model = album.albumArt,
+                        contentDescription = album.name,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(SpotifyColors.SurfaceVariant)
+                    )
+                }
+                // Gradient overlay
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    SpotifyColors.CardGradient.copy(alpha = 0.9f)
+                                ),
+                                startY = 50f
+                            )
+                        )
+                )
+                // Text at bottom
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp),
+                    contentAlignment = Alignment.BottomStart
+                ) {
+                    Text(
+                        text = album.name,
+                        color = SpotifyColors.TextPrimary,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+    }
+}
+
+

@@ -7,7 +7,6 @@ import com.cycling.domain.lyrics.model.karaoke.KaraokeSyllable
 import com.cycling.domain.lyrics.utils.SimpleXmlParser
 import com.cycling.domain.lyrics.utils.XmlElement
 import com.cycling.domain.lyrics.utils.parseAsTime
-import kotlin.collections.get
 
 object TTMLParser : ILyricsParser {
     override fun parse(lines: List<String>): SyncedLyrics {

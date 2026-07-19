@@ -7,13 +7,9 @@ import com.cycling.domain.model.ExcludedFolder
 import com.cycling.domain.model.LibraryStats
 import com.cycling.domain.model.ScanResult
 import com.cycling.domain.model.ScanStep
-import com.cycling.domain.model.ThemeMode
 import com.cycling.domain.repository.AiRepository
 import com.cycling.domain.repository.ExcludedFolderRepository
-import com.cycling.domain.repository.ThemeRepository
 import com.cycling.domain.usecase.GetLibraryStatsUseCase
-import com.cycling.domain.usecase.GetScanProgressUseCase
-import com.cycling.domain.usecase.ResetScanProgressUseCase
 import com.cycling.domain.usecase.ScanMusicUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -74,7 +70,6 @@ sealed interface SettingsIntent {
     data object SaveApiKey : SettingsIntent
     data object ClearApiKey : SettingsIntent
     data object LoadLibraryStats : SettingsIntent
-    data class SetThemeMode(val mode: ThemeMode) : SettingsIntent
 }
 
 sealed interface SettingsEffect {
@@ -85,11 +80,8 @@ sealed interface SettingsEffect {
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
-    private val themeRepository: ThemeRepository,
     private val aiRepository: AiRepository,
     private val scanMusicUseCase: ScanMusicUseCase,
-    private val getScanProgressUseCase: GetScanProgressUseCase,
-    private val resetScanProgressUseCase: ResetScanProgressUseCase,
     private val excludedFolderRepository: ExcludedFolderRepository,
     private val getLibraryStatsUseCase: GetLibraryStatsUseCase
 ) : ViewModel() {
@@ -99,13 +91,6 @@ class SettingsViewModel @Inject constructor(
 
     private val _uiEffect = MutableSharedFlow<SettingsEffect>()
     val uiEffect: SharedFlow<SettingsEffect> = _uiEffect.asSharedFlow()
-
-    val themeMode = themeRepository.themeMode
-        .stateIn(
-            viewModelScope,
-            SharingStarted.WhileSubscribed(5000),
-            ThemeMode.SYSTEM
-        )
 
     val hasApiKey = kotlinx.coroutines.flow.flow {
         emit(aiRepository.hasApiKey())
@@ -137,7 +122,6 @@ class SettingsViewModel @Inject constructor(
             is SettingsIntent.SaveApiKey -> saveApiKey()
             is SettingsIntent.ClearApiKey -> clearApiKey()
             is SettingsIntent.LoadLibraryStats -> loadLibraryStats()
-            is SettingsIntent.SetThemeMode -> setThemeMode(intent.mode)
         }
     }
 
@@ -196,7 +180,7 @@ class SettingsViewModel @Inject constructor(
     private fun observeScanProgress() {
         Timber.d("observeScanProgress: starting to observe scan progress")
         viewModelScope.launch {
-            getScanProgressUseCase().collect { progress ->
+            scanMusicUseCase.progress().collect { progress ->
                 Timber.d("observeScanProgress: progress = ${progress.songsProcessed}/${progress.totalSongs}, step = ${progress.currentStep}")
                 _uiState.update { state ->
                     state.copy(
@@ -218,7 +202,7 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isScanning = true, scanError = null) }
             
-            scanMusicUseCase()
+            scanMusicUseCase.scan()
                 .onSuccess { result ->
                     Timber.d("startScan: scan completed successfully, found ${result.songsFound} songs")
                     _uiState.update { 
@@ -246,7 +230,7 @@ class SettingsViewModel @Inject constructor(
 
     private fun resetScan() {
         Timber.d("resetScan: resetting scan state")
-        resetScanProgressUseCase()
+        scanMusicUseCase.resetProgress()
         _uiState.update { 
             it.copy(
                 isScanning = false,
@@ -338,13 +322,6 @@ class SettingsViewModel @Inject constructor(
                     statsError = e.message
                 )}
             }
-        }
-    }
-
-    private fun setThemeMode(mode: ThemeMode) {
-        Timber.d("setThemeMode: mode=$mode")
-        viewModelScope.launch {
-            themeRepository.setThemeMode(mode)
         }
     }
 

@@ -1,0 +1,2 @@
+[permissions]
+allow = ["task", "Bash(mkdir -p presentation-backup && cp -r presentation/src presentation-backup/ && cp presentation/build.gradle.kts presentation-backup/)", "Edit"]

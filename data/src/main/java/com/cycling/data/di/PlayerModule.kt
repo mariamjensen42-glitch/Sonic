@@ -8,9 +8,7 @@ import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.cycling.data.player.PlayerManager
-import com.cycling.data.repository.PlayerRepositoryImpl
 import com.cycling.domain.repository.PlayerRepository
-import com.cycling.domain.repository.SongRepository
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -26,7 +24,7 @@ abstract class PlayerModule {
     @Binds
     @Singleton
     abstract fun bindPlayerRepository(
-        playerRepositoryImpl: PlayerRepositoryImpl
+        playerManager: PlayerManager
     ): PlayerRepository
 
     companion object {
@@ -43,15 +41,6 @@ abstract class PlayerModule {
                 .setHandleAudioBecomingNoisy(true)
                 .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
                 .build()
-        }
-
-        @Provides
-        @Singleton
-        fun providePlayerManager(
-            @ApplicationContext context: Context,
-            songRepository: SongRepository
-        ): PlayerManager {
-            return PlayerManager(context, songRepository)
         }
     }
 }
