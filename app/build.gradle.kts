@@ -21,10 +21,13 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = file(System.getenv("SONIC_STORE_FILE") ?: "sonic-release.keystore")
-            storePassword = System.getenv("SONIC_STORE_PASSWORD") ?: ""
-            keyAlias = System.getenv("SONIC_KEY_ALIAS") ?: ""
-            keyPassword = System.getenv("SONIC_KEY_PASSWORD") ?: ""
+            val storeFileEnv = System.getenv("SONIC_STORE_FILE")
+            if (storeFileEnv != null) {
+                storeFile = file(storeFileEnv)
+                storePassword = System.getenv("SONIC_STORE_PASSWORD") ?: ""
+                keyAlias = System.getenv("SONIC_KEY_ALIAS") ?: ""
+                keyPassword = System.getenv("SONIC_KEY_PASSWORD") ?: ""
+            }
         }
     }
 
