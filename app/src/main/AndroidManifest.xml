@@ -18,7 +18,7 @@
             </intent-filter>
         </activity>
 
-        <service android:name="com.cycling.data.player.PlayerService" android:exported="true" android:foregroundServiceType="mediaPlayback">
+        <service android:name="com.cycling.data.player.PlayerService" android:exported="true" android:foregroundServiceType="mediaPlayback" tools:ignore="Instantiatable">
             <intent-filter>
                 <action android:name="androidx.media3.session.MediaSessionService" />
             </intent-filter>
