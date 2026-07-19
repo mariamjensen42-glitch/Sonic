@@ -22,17 +22,19 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Decode keystore
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-        run: echo "$KEYSTORE_BASE64" | base64 -d > sonic-release.keystore
+      - name: Generate CI keystore
+        run: |
+          keytool -genkey -v -keystore ci-release.keystore \
+            -alias ci -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass ci123456 -keypass ci123456 \
+            -dname "CN=Sonic CI, OU=CI, O=Sonic, L=Unknown, ST=Unknown, C=CN"
 
       - name: Build release APK
         env:
-          SONIC_STORE_FILE: sonic-release.keystore
-          SONIC_STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
-          SONIC_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          SONIC_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          SONIC_STORE_FILE: ci-release.keystore
+          SONIC_STORE_PASSWORD: ci123456
+          SONIC_KEY_ALIAS: ci
+          SONIC_KEY_PASSWORD: ci123456
         run: ./gradlew :app:assembleRelease
 
       - name: Upload APK
