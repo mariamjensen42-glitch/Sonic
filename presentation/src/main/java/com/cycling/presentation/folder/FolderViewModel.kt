@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.cycling.presentation.R
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -60,7 +61,7 @@ class FolderViewModel @Inject constructor(
             } catch (e: Exception) {
                 Timber.e(e, "loadRootFolders: error")
                 _uiState.update { it.copy(isLoading = false) }
-                _uiEffect.emit(FolderEffect.ShowToast("加载文件夹失败"))
+                _uiEffect.emit(FolderEffect.ShowToast(R.string.folder_vm_load_failed))
             }
         }
     }
@@ -86,7 +87,7 @@ class FolderViewModel @Inject constructor(
             } catch (e: Exception) {
                 Timber.e(e, "navigateToFolder: error")
                 _uiState.update { it.copy(isLoading = false) }
-                _uiEffect.emit(FolderEffect.ShowToast("加载文件夹失败"))
+                _uiEffect.emit(FolderEffect.ShowToast(R.string.folder_vm_load_failed))
             }
         }
     }

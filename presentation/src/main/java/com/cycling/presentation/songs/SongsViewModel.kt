@@ -5,9 +5,11 @@ import androidx.lifecycle.viewModelScope
 import com.cycling.domain.model.Song
 import com.cycling.domain.model.SortOrder
 import com.cycling.domain.model.ViewMode
+import com.cycling.domain.repository.PlayerRepository
 import com.cycling.domain.repository.PlaylistRepository
 import com.cycling.domain.repository.SongRepository
 import com.cycling.domain.repository.SongsPreferencesRepository
+import com.cycling.presentation.R
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,7 +26,8 @@ import javax.inject.Inject
 class SongsViewModel @Inject constructor(
     private val songRepository: SongRepository,
     private val songsPreferencesRepository: SongsPreferencesRepository,
-    private val playlistRepository: PlaylistRepository
+    private val playlistRepository: PlaylistRepository,
+    private val playerRepository: PlayerRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SongsUiState())
@@ -37,6 +40,15 @@ class SongsViewModel @Inject constructor(
         loadPreferences()
         loadSongs()
         loadPlaylists()
+        observePlayerState()
+    }
+
+    private fun observePlayerState() {
+        viewModelScope.launch {
+            playerRepository.playerState.collect { state ->
+                _uiState.update { it.copy(currentSongId = state.currentSong?.id) }
+            }
+        }
     }
 
     fun handleIntent(intent: SongsIntent) {
@@ -119,7 +131,7 @@ class SongsViewModel @Inject constructor(
         val song = _uiState.value.songToAdd ?: return
         viewModelScope.launch {
             playlistRepository.addSongToPlaylist(playlistId, song.id)
-            _uiEffect.emit(SongsEffect.ShowToast("已添加到播放列表"))
+            _uiEffect.emit(SongsEffect.ShowToast(R.string.songs_vm_added_to_playlist))
             dismissAddToPlaylistDialog()
         }
     }
@@ -129,7 +141,7 @@ class SongsViewModel @Inject constructor(
         viewModelScope.launch {
             val playlistId = playlistRepository.createPlaylist(name)
             playlistRepository.addSongToPlaylist(playlistId, song.id)
-            _uiEffect.emit(SongsEffect.ShowToast("已创建播放列表并添加歌曲"))
+            _uiEffect.emit(SongsEffect.ShowToast(R.string.songs_vm_created_and_added))
             dismissAddToPlaylistDialog()
         }
     }

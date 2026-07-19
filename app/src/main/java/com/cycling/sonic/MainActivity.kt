@@ -12,6 +12,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cycling.core.ui.theme.SpotifyTheme
@@ -56,20 +57,21 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private val bottomNavTabs = listOf(
+@Composable
+private fun bottomNavTabs(): List<BottomNavTab> = listOf(
     BottomNavTab(
         screen = Screen.Home,
-        label = "Home",
+        label = stringResource(com.cycling.presentation.R.string.nav_home),
         icon = R.drawable.ic_spotify_home
     ),
     BottomNavTab(
         screen = Screen.Search,
-        label = "Search",
+        label = stringResource(com.cycling.presentation.R.string.nav_search),
         icon = R.drawable.ic_spotify_search
     ),
     BottomNavTab(
         screen = Screen.Library,
-        label = "Library",
+        label = stringResource(com.cycling.presentation.R.string.nav_library),
         icon = R.drawable.ic_spotify_library
     )
 )
@@ -99,7 +101,7 @@ private fun MainScreen(
             onTabSelected = { screen ->
                 navigator.navigate(screen)
             },
-            tabs = bottomNavTabs,
+            tabs = bottomNavTabs(),
             visible = showBottomBar,
             miniPlayerVisible = hasMiniPlayer,
             miniPlayerContent = {

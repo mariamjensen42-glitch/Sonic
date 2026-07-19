@@ -63,8 +63,8 @@ fun SpotifyTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            @Suppress("DEPRECATION")
-            window.statusBarColor = SpotifyColors.Background.toArgb()
+            window.isNavigationBarContrastEnforced = false
+            window.statusBarColor = android.graphics.Color.TRANSPARENT
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
         }
     }

@@ -1,5 +1,6 @@
 package com.cycling.presentation.components
 
+import com.cycling.presentation.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,6 +34,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
@@ -72,7 +74,7 @@ fun PlaylistPickerDialog(
                     .padding(bottom = 24.dp)
             ) {
                 Text(
-                    text = "添加到播放列表",
+                    text = stringResource(R.string.playlist_picker_title),
                     style = MaterialTheme.typography.titleLarge,
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
@@ -83,7 +85,7 @@ fun PlaylistPickerDialog(
                 M3ListItem(
                     headlineContent = {
                         Text(
-                            text = "新建播放列表",
+                            text = stringResource(R.string.playlist_picker_new),
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -172,7 +174,7 @@ private fun PlaylistPickerItem(
         },
         trailingContent = {
             Text(
-                text = "${playlist.numberOfSongs} 首",
+                text = stringResource(R.string.playlist_picker_song_count, playlist.numberOfSongs),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -200,13 +202,13 @@ private fun EmptyPlaylistsContent(
         )
         Spacer(modifier = Modifier.height(12.dp))
         Text(
-            text = "暂无播放列表",
+            text = stringResource(R.string.playlist_picker_empty_title),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurface
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = "点击上方创建新播放列表",
+            text = stringResource(R.string.playlist_picker_empty_subtitle),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -222,12 +224,12 @@ private fun CreatePlaylistInputDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("新建播放列表") },
+        title = { Text(stringResource(R.string.playlist_picker_dialog_title)) },
         text = {
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },
-                placeholder = { Text("输入播放列表名称") },
+                placeholder = { Text(stringResource(R.string.playlist_picker_name_placeholder)) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(
                     capitalization = KeyboardCapitalization.Sentences
@@ -244,12 +246,12 @@ private fun CreatePlaylistInputDialog(
                 },
                 enabled = name.isNotBlank()
             ) {
-                Text("创建")
+                Text(stringResource(R.string.playlist_picker_create))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("取消")
+                Text(stringResource(R.string.playlist_picker_cancel))
             }
         },
         shape = RoundedCornerShape(16.dp)

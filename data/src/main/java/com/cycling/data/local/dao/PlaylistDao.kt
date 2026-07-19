@@ -31,6 +31,9 @@ interface PlaylistDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPlaylist(playlist: PlaylistEntity): Long
 
+    @Query("UPDATE playlists SET name = :name, dateModified = :dateModified WHERE id = :id")
+    suspend fun renamePlaylist(id: Long, name: String, dateModified: Long)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPlaylistSong(playlistSong: PlaylistSongEntity)
 
@@ -59,4 +62,12 @@ interface PlaylistDao {
 
     @Query("SELECT COUNT(*) FROM playlist_songs WHERE playlistId = :playlistId")
     fun getPlaylistSongCount(playlistId: Long): Flow<Int>
+
+    @Query("""
+        SELECT s.albumArt FROM songs s
+        INNER JOIN playlist_songs ps ON s.id = ps.songId
+        WHERE ps.playlistId = :playlistId
+        LIMIT 1
+    """)
+    fun getPlaylistFirstSongAlbumArtFlow(playlistId: Long): Flow<String?>
 }

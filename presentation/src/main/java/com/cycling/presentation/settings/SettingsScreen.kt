@@ -33,6 +33,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Folder
@@ -58,6 +59,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -67,6 +69,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -84,6 +87,7 @@ import com.cycling.core.ui.components.M3TopAppBar
 import com.cycling.core.ui.theme.SpotifyColors
 import com.cycling.presentation.components.PieChart
 import com.cycling.presentation.components.PieChartData
+import com.cycling.presentation.R
 
 private val HRColor = Color(0xFFFFD700)
 private val SQColor = Color(0xFF9C27B0)
@@ -130,7 +134,7 @@ fun SettingsScreen(
             if (path != null) {
                 viewModel.handleIntent(SettingsIntent.AddExcludedFolder(path))
             } else {
-                onShowToast("无法获取文件夹路径")
+                onShowToast(context.getString(R.string.settings_cannot_get_path))
             }
         }
     }
@@ -145,7 +149,14 @@ fun SettingsScreen(
     LaunchedEffect(Unit) {
         viewModel.uiEffect.collect { effect ->
             when (effect) {
-                is SettingsEffect.ShowToast -> onShowToast(effect.message)
+                is SettingsEffect.ShowToast -> {
+                    val msg = if (effect.messageArg != null) {
+                        context.getString(effect.messageResId, effect.messageArg)
+                    } else {
+                        context.getString(effect.messageResId)
+                    }
+                    onShowToast(msg)
+                }
                 is SettingsEffect.RequestStoragePermission -> {
                     permissionLauncher.launch(storagePermissions)
                 }
@@ -158,21 +169,21 @@ fun SettingsScreen(
         topBar = {
             M3TopAppBar(
                 title = when (uiState.currentDestination) {
-                    SettingsDestination.MAIN -> "设置"
-                    SettingsDestination.SCAN -> "扫描本地音乐"
-                    SettingsDestination.EXCLUDE_FOLDERS -> "排除文件夹"
-                    SettingsDestination.API_KEY_CONFIG -> "DeepSeek API 配置"
-                    SettingsDestination.LIBRARY_STATS -> "音乐库统计"
+                    SettingsDestination.MAIN -> stringResource(R.string.settings_title)
+                    SettingsDestination.SCAN -> stringResource(R.string.settings_scan_menu)
+                    SettingsDestination.EXCLUDE_FOLDERS -> stringResource(R.string.settings_exclude_menu)
+                    SettingsDestination.API_KEY_CONFIG -> stringResource(R.string.settings_api_config_menu)
+                    SettingsDestination.LIBRARY_STATS -> stringResource(R.string.settings_library_stats_menu)
                 },
                 navigationIcon = Icons.AutoMirrored.Filled.ArrowBack,
-                navigationIconContentDescription = "返回",
+                navigationIconContentDescription = stringResource(R.string.settings_back_desc),
                 onNavigationClick = { viewModel.handleIntent(SettingsIntent.NavigateBack) },
                 actions = {
                     if (uiState.currentDestination == SettingsDestination.EXCLUDE_FOLDERS) {
                         IconButton(onClick = { folderPickerLauncher.launch(null) }) {
                             Icon(
                                 imageVector = Icons.Default.Add,
-                                contentDescription = "添加文件夹",
+                                contentDescription = stringResource(R.string.settings_add_folder_desc),
                                 tint = SpotifyColors.Accent
                             )
                         }
@@ -397,51 +408,51 @@ private fun MainSettingsContent(
     Column(modifier = modifier.verticalScroll(rememberScrollState())) {
         // ── 账号/应用头部 ──
         SettingsHeader(
-            title = "Sonic",
-            subtitle = "现代化音乐播放器",
+            title = stringResource(R.string.settings_app_name),
+            subtitle = stringResource(R.string.settings_app_subtitle),
             onClick = {}
         )
 
         // ── 音乐库 ──
-        SpotifySectionHeader(title = "音乐库")
+        SpotifySectionHeader(title = stringResource(R.string.settings_section_library))
         SpotifyCard {
             SpotifyListItem(
                 icon = Icons.Default.Refresh,
-                title = "扫描本地音乐",
+                title = stringResource(R.string.settings_scan_local),
                 onClick = onNavigateToScan
             )
             SpotifyDivider()
             SpotifyListItem(
                 icon = Icons.Default.Folder,
-                title = "排除文件夹",
+                title = stringResource(R.string.settings_exclude_folders),
                 onClick = onNavigateToExcludeFolders
             )
             SpotifyDivider()
             SpotifyListItem(
                 icon = Icons.Default.BarChart,
-                title = "音乐库统计",
+                title = stringResource(R.string.settings_library_stats),
                 onClick = onNavigateToLibraryStats
             )
         }
 
         // ── 播放 ──
-        SpotifySectionHeader(title = "播放")
+        SpotifySectionHeader(title = stringResource(R.string.settings_section_playback))
         SpotifyCard {
             SpotifyListItem(
                 icon = Icons.Default.Key,
-                title = "DeepSeek API 配置",
-                subtitle = if (hasApiKey) "已配置" else "未配置",
+                title = stringResource(R.string.settings_deepseek_config),
+                subtitle = if (hasApiKey) stringResource(R.string.settings_api_configured) else stringResource(R.string.settings_api_not_configured),
                 onClick = onNavigateToApiKeyConfig
             )
         }
 
         // ── 关于 ──
-        SpotifySectionHeader(title = "关于")
+        SpotifySectionHeader(title = stringResource(R.string.settings_section_about))
         SpotifyCard {
             SpotifyListItem(
                 icon = Icons.Default.LibraryMusic,
-                title = "版本",
-                subtitle = "1.0.0",
+                title = stringResource(R.string.settings_version_title),
+                subtitle = stringResource(R.string.settings_version_value),
                 onClick = {},
                 showChevron = false
             )
@@ -474,8 +485,8 @@ private fun ScanContent(
             !uiState.hasStoragePermission && uiState.shouldRequestPermission -> {
                 EmptyStateContent(
                     icon = Icons.Default.Error,
-                    title = "需要存储权限",
-                    subtitle = "扫描本地音乐需要访问您的存储空间"
+                    title = stringResource(R.string.settings_permission_title),
+                    subtitle = stringResource(R.string.settings_permission_subtitle)
                 ) {
                     Button(
                         onClick = onRequestPermission,
@@ -483,7 +494,7 @@ private fun ScanContent(
                             containerColor = SpotifyColors.Accent
                         )
                     ) {
-                        Text("授予权限", color = Color.White)
+                        Text(stringResource(R.string.settings_grant_permission), color = Color.White)
                     }
                 }
             }
@@ -499,17 +510,17 @@ private fun ScanContent(
                         containerColor = SpotifyColors.GridBackground
                     )
                 ) {
-                    Text("重新扫描", color = SpotifyColors.TextPrimary)
+                    Text(stringResource(R.string.settings_rescan), color = SpotifyColors.TextPrimary)
                 }
             }
             uiState.isScanning -> {
                 ScanningProgressContent(uiState)
             }
-            uiState.scanError != null -> {
+            uiState.scanErrorResId != null -> {
                 EmptyStateContent(
                     icon = Icons.Default.Error,
-                    title = "扫描失败",
-                    subtitle = uiState.scanError
+                    title = stringResource(R.string.settings_scan_failed),
+                    subtitle = stringResource(uiState.scanErrorResId!!)
                 ) {
                     Button(
                         onClick = onStartScan,
@@ -517,15 +528,15 @@ private fun ScanContent(
                             containerColor = SpotifyColors.Accent
                         )
                     ) {
-                        Text("重试", color = Color.White)
+                        Text(stringResource(R.string.settings_retry), color = Color.White)
                     }
                 }
             }
             else -> {
                 EmptyStateContent(
                     icon = Icons.Default.Refresh,
-                    title = "扫描本地音乐",
-                    subtitle = "扫描您的设备上的音乐文件"
+                    title = stringResource(R.string.settings_scan_empty_title),
+                    subtitle = stringResource(R.string.settings_scan_empty_subtitle)
                 ) {
                     Button(
                         onClick = onStartScan,
@@ -533,7 +544,7 @@ private fun ScanContent(
                             containerColor = SpotifyColors.PlayGreen
                         )
                     ) {
-                        Text("开始扫描", color = Color.White)
+                        Text(stringResource(R.string.settings_start_scan), color = Color.White)
                     }
                 }
             }
@@ -586,16 +597,16 @@ private fun ScanResultContent(result: ScanResult) {
     SpotifyCard {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = "扫描完成",
+                text = stringResource(R.string.settings_scan_complete),
                 color = SpotifyColors.TextPrimary,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(12.dp))
-            ScanStatRow("发现歌曲", "${result.songsFound} 首")
-            ScanStatRow("发现专辑", "${result.albumsFound} 张")
-            ScanStatRow("发现艺术家", "${result.artistsFound} 位")
-            ScanStatRow("耗时", "${result.duration} 毫秒")
+            ScanStatRow(stringResource(R.string.settings_songs_found), stringResource(R.string.settings_songs_count, result.songsFound))
+            ScanStatRow(stringResource(R.string.settings_albums_found), stringResource(R.string.settings_albums_count, result.albumsFound))
+            ScanStatRow(stringResource(R.string.settings_artists_found), stringResource(R.string.settings_artists_count, result.artistsFound))
+            ScanStatRow(stringResource(R.string.settings_time_elapsed), stringResource(R.string.settings_milliseconds, result.duration))
         }
     }
 }
@@ -623,7 +634,7 @@ private fun ScanningProgressContent(uiState: SettingsUiState) {
         SpotifyCard {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "正在扫描...",
+                    text = stringResource(R.string.settings_scanning),
                     color = SpotifyColors.TextPrimary,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold
@@ -640,14 +651,14 @@ private fun ScanningProgressContent(uiState: SettingsUiState) {
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "${uiState.songsProcessed} / ${uiState.totalSongs} 首",
+                    text = stringResource(R.string.settings_scan_progress, uiState.songsProcessed, uiState.totalSongs),
                     color = SpotifyColors.TextSecondary,
                     fontSize = 13.sp
                 )
                 Text(
                     text = when (uiState.scanStep) {
-                        SettingsScanStep.QueryingMediaStore -> "正在查询媒体库..."
-                        SettingsScanStep.SavingToDatabase -> "正在保存到数据库..."
+                        SettingsScanStep.QueryingMediaStore -> stringResource(R.string.settings_scan_querying)
+                        SettingsScanStep.SavingToDatabase -> stringResource(R.string.settings_scan_saving)
                         else -> ""
                     },
                     color = SpotifyColors.TextTertiary,
@@ -684,8 +695,8 @@ private fun ExcludeFoldersContent(
         } else if (folders.isEmpty()) {
             EmptyStateContent(
                 icon = Icons.Default.Folder,
-                title = "暂无排除的文件夹",
-                subtitle = "点击右上角 + 添加要排除的文件夹"
+                title = stringResource(R.string.settings_empty_exclude_title),
+                subtitle = stringResource(R.string.settings_empty_exclude_subtitle)
             )
         } else {
             LazyColumn {
@@ -745,7 +756,7 @@ private fun ExcludedFolderItem(
         ) {
             Icon(
                 imageVector = Icons.Default.Delete,
-                contentDescription = "删除",
+                contentDescription = stringResource(R.string.settings_delete_desc),
                 tint = Color(0xFFFF6B6B),
                 modifier = Modifier.size(20.dp)
             )
@@ -774,8 +785,33 @@ private fun ApiKeyConfigContent(
             .padding(16.dp)
             .imePadding()
     ) {
+        if (hasExistingKey) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(SpotifyColors.Accent.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = null,
+                    tint = SpotifyColors.Accent,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = stringResource(R.string.settings_api_configured),
+                    color = SpotifyColors.Accent,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
         Text(
-            text = "请输入您的 DeepSeek API Key",
+            text = stringResource(R.string.settings_api_key_title),
             color = SpotifyColors.TextPrimary,
             fontSize = 16.sp,
             fontWeight = FontWeight.Medium
@@ -784,29 +820,31 @@ private fun ApiKeyConfigContent(
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = "API Key 用于获取歌曲、艺术家、专辑的 AI 解读信息。您可以在 DeepSeek 官网注册并获取 API Key。",
+            text = stringResource(R.string.settings_api_key_description),
             color = SpotifyColors.TextTertiary,
             fontSize = 13.sp
         )
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        OutlinedTextField(
-            value = apiKeyInput,
-            onValueChange = onApiKeyInputChange,
-            label = { Text("API Key", color = SpotifyColors.TextSecondary) },
-            placeholder = { Text("sk-...", color = SpotifyColors.TextTertiary) },
-            visualTransformation = if (showApiKey) VisualTransformation.None else PasswordVisualTransformation(),
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = SpotifyColors.TextPrimary,
-                unfocusedTextColor = SpotifyColors.TextPrimary,
-                focusedBorderColor = SpotifyColors.Accent,
-                unfocusedBorderColor = SpotifyColors.Divider,
-                cursorColor = SpotifyColors.Accent
+        key(showApiKey) {
+            OutlinedTextField(
+                value = apiKeyInput,
+                onValueChange = onApiKeyInputChange,
+                label = { Text(stringResource(R.string.settings_api_key_label), color = SpotifyColors.TextSecondary) },
+                placeholder = { Text(stringResource(R.string.settings_api_key_placeholder), color = SpotifyColors.TextTertiary) },
+                visualTransformation = if (showApiKey) VisualTransformation.None else PasswordVisualTransformation(),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = SpotifyColors.TextPrimary,
+                    unfocusedTextColor = SpotifyColors.TextPrimary,
+                    focusedBorderColor = SpotifyColors.Accent,
+                    unfocusedBorderColor = SpotifyColors.Divider,
+                    cursorColor = SpotifyColors.Accent
+                )
             )
-        )
+        }
 
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -814,7 +852,7 @@ private fun ApiKeyConfigContent(
             onClick = { showApiKey = !showApiKey }
         ) {
             Text(
-                text = if (showApiKey) "隐藏 API Key" else "显示 API Key",
+                text = if (showApiKey) stringResource(R.string.settings_hide_api_key) else stringResource(R.string.settings_show_api_key),
                 color = SpotifyColors.TextSecondary
             )
         }
@@ -830,7 +868,7 @@ private fun ApiKeyConfigContent(
                 disabledContainerColor = SpotifyColors.SurfaceVariant
             )
         ) {
-            Text("保存", color = Color.White)
+            Text(stringResource(R.string.settings_save), color = Color.White)
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -843,7 +881,7 @@ private fun ApiKeyConfigContent(
                     contentColor = SpotifyColors.TextSecondary
                 )
             ) {
-                Text("清除已保存的 API Key", color = SpotifyColors.TextSecondary)
+                Text(stringResource(R.string.settings_clear_api_key), color = SpotifyColors.TextSecondary)
             }
         }
     }
@@ -881,16 +919,16 @@ private fun LibraryStatsContent(
             } else {
                 EmptyStateContent(
                     icon = Icons.Default.LibraryMusic,
-                    title = "暂无音乐",
-                    subtitle = "请先扫描本地音乐"
+                    title = stringResource(R.string.settings_stats_empty_title),
+                    subtitle = stringResource(R.string.settings_stats_empty_subtitle)
                 )
             }
         }
     } else {
         EmptyStateContent(
             icon = Icons.Default.LibraryMusic,
-            title = "暂无音乐",
-            subtitle = "请先扫描本地音乐"
+            title = stringResource(R.string.settings_stats_empty_title),
+            subtitle = stringResource(R.string.settings_stats_empty_subtitle)
         )
     }
 }
@@ -915,7 +953,7 @@ private fun ChartSection(stats: LibraryStats) {
             .padding(24.dp)
     ) {
         Text(
-            text = "音频质量分布",
+            text = stringResource(R.string.settings_audio_quality_title),
             color = SpotifyColors.TextPrimary,
             fontSize = 16.sp,
             fontWeight = FontWeight.Bold
@@ -931,7 +969,7 @@ private fun ChartSection(stats: LibraryStats) {
         Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = "共 ${stats.totalSongs} 首歌曲",
+            text = stringResource(R.string.settings_stats_total, stats.totalSongs),
             color = SpotifyColors.TextSecondary,
             fontSize = 13.sp
         )
@@ -963,7 +1001,7 @@ private fun StatsDetailSection(stats: LibraryStats) {
         modifier = Modifier.fillMaxWidth()
     ) {
         Text(
-            text = "统计明细",
+            text = stringResource(R.string.settings_stats_detail),
             color = SpotifyColors.TextPrimary,
             fontSize = 16.sp,
             fontWeight = FontWeight.Bold,
@@ -982,23 +1020,23 @@ private fun StatItemRow(item: QualityStatItemUi) {
     val (icon, title, description) = when (item.quality) {
         AudioQuality.HR -> Triple(
             Icons.Default.GraphicEq,
-            "HR (Hi-Res)",
-            "高解析度音频 > 1411 kbps"
+            stringResource(R.string.settings_quality_hr),
+            stringResource(R.string.settings_quality_hr_desc)
         )
         AudioQuality.SQ -> Triple(
             Icons.Default.HighQuality,
-            "SQ (Studio Quality)",
-            "CD质量/无损 = 1411 kbps"
+            stringResource(R.string.settings_quality_sq),
+            stringResource(R.string.settings_quality_sq_desc)
         )
         AudioQuality.HQ -> Triple(
             Icons.Default.BarChart,
-            "HQ (High Quality)",
-            "高质量 320-1410 kbps"
+            stringResource(R.string.settings_quality_hq),
+            stringResource(R.string.settings_quality_hq_desc)
         )
         AudioQuality.OTHERS -> Triple(
             Icons.Default.LibraryMusic,
-            "Others",
-            "其他 < 320 kbps 或未知"
+            stringResource(R.string.settings_quality_others),
+            stringResource(R.string.settings_quality_others_desc)
         )
     }
 
@@ -1043,7 +1081,7 @@ private fun StatItemRow(item: QualityStatItemUi) {
 
         Column(horizontalAlignment = Alignment.End) {
             Text(
-                text = "${item.count} 首",
+                text = stringResource(R.string.settings_quality_count, item.count),
                 color = item.color,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold

@@ -2,12 +2,16 @@ package com.cycling.presentation.playlistdetail
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.cycling.presentation.R
 import com.cycling.domain.repository.PlaylistRepository
+import com.cycling.domain.repository.PlayerRepository
 import com.cycling.presentation.navigation.LibraryDestination
+import com.cycling.core.ui.theme.ArtColorExtractor
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -16,11 +20,13 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 
 @HiltViewModel(assistedFactory = PlaylistDetailViewModel.Factory::class)
 class PlaylistDetailViewModel @AssistedInject constructor(
     private val playlistRepository: PlaylistRepository,
+    private val playerRepository: PlayerRepository,
     @Assisted private val route: LibraryDestination.PlaylistDetail
 ) : ViewModel() {
 
@@ -34,6 +40,15 @@ class PlaylistDetailViewModel @AssistedInject constructor(
 
     init {
         loadPlaylist()
+        observePlayerState()
+    }
+
+    private fun observePlayerState() {
+        viewModelScope.launch {
+            playerRepository.playerState.collect { state ->
+                _uiState.update { it.copy(currentSongId = state.currentSong?.id) }
+            }
+        }
     }
 
     fun handleIntent(intent: PlaylistDetailIntent) {
@@ -57,7 +72,15 @@ class PlaylistDetailViewModel @AssistedInject constructor(
 
             playlistRepository.getSongsInPlaylist(playlistId).collect { songs ->
                 Timber.d("loadPlaylist: loaded ${songs.size} songs")
-                _uiState.update { it.copy(songs = songs, isLoading = false) }
+                // Extract accent color from first song in the background
+                var accentColor = _uiState.value.accentColor
+                val firstSong = songs.firstOrNull()
+                if (firstSong != null) {
+                    accentColor = withContext(Dispatchers.IO) {
+                        ArtColorExtractor.extractColorFromMusicFile(firstSong.path, accentColor)
+                    }
+                }
+                _uiState.update { it.copy(songs = songs, isLoading = false, accentColor = accentColor) }
             }
         }
     }
@@ -71,7 +94,7 @@ class PlaylistDetailViewModel @AssistedInject constructor(
     private fun removeSong(songId: Long) {
         viewModelScope.launch {
             playlistRepository.removeSongFromPlaylist(playlistId, songId)
-            _uiEffect.emit(PlaylistDetailEffect.ShowToast("已从播放列表移除"))
+            _uiEffect.emit(PlaylistDetailEffect.ShowToast(R.string.playlist_detail_removed_toast))
         }
     }
 

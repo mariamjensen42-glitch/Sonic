@@ -5,5 +5,6 @@ data class Playlist(
     val name: String,
     val dateAdded: Long,
     val dateModified: Long,
-    val numberOfSongs: Int
+    val numberOfSongs: Int,
+    val albumArt: String? = null
 )

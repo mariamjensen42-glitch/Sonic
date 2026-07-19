@@ -7,7 +7,9 @@ import kotlinx.coroutines.flow.StateFlow
 data class AlbumDetailUiState(
     val album: Album? = null,
     val songs: List<Song> = emptyList(),
-    val isLoading: Boolean = true
+    val isLoading: Boolean = true,
+    val currentSongId: Long? = null,
+    val isPlaying: Boolean = false
 )
 
 sealed interface AlbumDetailIntent {

@@ -23,7 +23,6 @@ import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -38,10 +37,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -70,7 +69,6 @@ fun AlbumDetailScreen(
     bottomPadding: Dp = 0.dp
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val context = LocalContext.current
 
     LaunchedEffect(Unit) {
         viewModel.uiEffect.collect { effect ->
@@ -85,9 +83,9 @@ fun AlbumDetailScreen(
     }
 
     var dominantColor by remember { mutableStateOf(AppBackground) }
-    LaunchedEffect(uiState.album?.albumArt) {
-        uiState.album?.albumArt?.let { url ->
-            val color = ArtColorExtractor.extractColorFromImageUrl(context, url, AppBackground)
+    LaunchedEffect(uiState.songs.firstOrNull()?.path) {
+        uiState.songs.firstOrNull()?.let { song ->
+            val color = ArtColorExtractor.extractColorFromMusicFile(song.path, AppBackground)
             dominantColor = color
         }
     }
@@ -99,32 +97,11 @@ fun AlbumDetailScreen(
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    colors = listOf(dominantColor, Color.Black),
-                    startY = 100f
+                    colors = listOf(dominantColor, Color.Black)
                 )
             )
     ) {
-        Scaffold(
-            topBar = {
-                M3DetailTopAppBar(
-                    navigationIcon = Icons.AutoMirrored.Filled.ArrowBack,
-                    navigationIconContentDescription = "返回",
-                    onNavigationClick = onNavigateBack,
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color.Transparent,
-                        titleContentColor = Color.White,
-                        navigationIconContentColor = Color.White
-                    )
-                )
-            },
-            containerColor = Color.Transparent
-        ) { paddingValues ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-            ) {
-            if (uiState.isLoading) {
+        if (uiState.isLoading) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -183,7 +160,7 @@ fun AlbumDetailScreen(
                         // Album Name
                         Text(
                             modifier = Modifier.padding(start = 20.dp, top = 5.dp),
-                            text = uiState.album?.name ?: "未知专辑",
+                            text = uiState.album?.name ?: stringResource(R.string.album_detail_unknown),
                             color = Color.White,
                             fontSize = 23.sp,
                             fontWeight = FontWeight.Bold,
@@ -194,7 +171,7 @@ fun AlbumDetailScreen(
                         // Singer
                         Text(
                             modifier = Modifier.padding(start = 20.dp),
-                            text = uiState.album?.artist ?: "未知歌手",
+                            text = uiState.album?.artist ?: stringResource(R.string.album_detail_unknown_artist),
                             color = Color.White,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
@@ -206,7 +183,7 @@ fun AlbumDetailScreen(
                         val songCount = uiState.songs.size
                         Text(
                             modifier = Modifier.padding(start = 20.dp),
-                            text = "专辑 · $songCount 首歌曲",
+                            text = stringResource(R.string.album_detail_info, songCount),
                             color = Color.Gray,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Medium
@@ -260,7 +237,7 @@ fun AlbumDetailScreen(
                                     painter = if (isAlbumLiked) painterResource(id = R.drawable.added)
                                     else painterResource(id = R.drawable.ic_add),
                                     tint = if (isAlbumLiked) AppPalette else Color.White,
-                                    contentDescription = if (isAlbumLiked) "取消收藏" else "收藏"
+                                    contentDescription = if (isAlbumLiked) stringResource(R.string.player_unfavorite_desc) else stringResource(R.string.player_favorite_desc)
                                 )
                             }
 
@@ -283,7 +260,7 @@ fun AlbumDetailScreen(
                                         modifier = Modifier.size(25.dp),
                                         tint = Color.Black,
                                         imageVector = Icons.Default.PlayArrow,
-                                        contentDescription = "播放全部"
+                                        contentDescription = stringResource(R.string.album_detail_play_all_desc)
                                     )
                                 }
                             }
@@ -293,7 +270,7 @@ fun AlbumDetailScreen(
 
                 // ── Song List (Neptune style: title + artist + like icon) ──
                 itemsIndexed(uiState.songs) { index, song ->
-                    val isCurrentSong = song.id == (uiState.songs.firstOrNull()?.id ?: -1L)
+                    val isCurrentSong = song.id == uiState.currentSongId
                     val currentPlayingColor = if (isCurrentSong) AppPalette else Color.White
 
                     Row(
@@ -390,7 +367,17 @@ fun AlbumDetailScreen(
                 }
             }
         }
-    }
-    }
+
+        M3DetailTopAppBar(
+        modifier = Modifier.align(Alignment.TopCenter),
+        navigationIcon = Icons.AutoMirrored.Filled.ArrowBack,
+        navigationIconContentDescription = stringResource(R.string.album_detail_back_desc),
+        onNavigationClick = onNavigateBack,
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = Color.Transparent,
+            titleContentColor = Color.White,
+            navigationIconContentColor = Color.White
+        )
+    )
 }
 }

@@ -53,7 +53,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.cycling.core.ui.components.M3CircularProgressIndicator
 import com.cycling.core.ui.theme.SpotifyColors
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import com.cycling.presentation.R
 import com.cycling.domain.model.Album
 import com.cycling.domain.model.Artist
@@ -77,6 +80,7 @@ fun HomeScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val scrollState = rememberLazyListState()
+    val context = LocalContext.current
 
     LaunchedEffect(Unit) {
         viewModel.uiEffect.collect { effect ->
@@ -91,7 +95,9 @@ fun HomeScreen(
                 is HomeEffect.NavigateToMyMusic -> onNavigateToMyMusic()
                 is HomeEffect.NavigateToSearch -> onNavigateToSearch()
                 is HomeEffect.NavigateToFolders -> onNavigateToFolders()
-                is HomeEffect.ShowToast -> {} // no-op
+                is HomeEffect.ShowToast -> {
+                    Toast.makeText(context, context.getString(effect.message), Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
@@ -137,7 +143,7 @@ fun HomeScreen(
                     if (uiState.recentlyPlayed.isNotEmpty()) {
                         item {
                             SectionHeader(
-                                title = "最近播放",
+                                title = stringResource(R.string.home_recent_plays),
                                 onSeeAll = null
                             )
                         }
@@ -155,7 +161,7 @@ fun HomeScreen(
                     if (uiState.topAlbums.isNotEmpty()) {
                         item {
                             SectionHeader(
-                                title = "推荐专辑",
+                                title = stringResource(R.string.home_recommended_albums),
                                 onSeeAll = {
                                     viewModel.handleIntent(HomeIntent.NavigateToAlbums)
                                 }
@@ -175,7 +181,7 @@ fun HomeScreen(
                     if (uiState.topArtists.isNotEmpty()) {
                         item {
                             SectionHeader(
-                                title = "推荐歌手",
+                                title = stringResource(R.string.home_recommended_artists),
                                 onSeeAll = {
                                     viewModel.handleIntent(HomeIntent.NavigateToArtists)
                                 }
@@ -195,7 +201,7 @@ fun HomeScreen(
                     if (uiState.favoriteSongs.isNotEmpty()) {
                         item {
                             SectionHeader(
-                                title = "收藏歌曲",
+                                title = stringResource(R.string.home_favorite_songs),
                                 onSeeAll = null
                             )
                         }
@@ -213,7 +219,7 @@ fun HomeScreen(
                     if (uiState.recentlyAdded.isNotEmpty()) {
                         item {
                             SectionHeader(
-                                title = "最近添加",
+                                title = stringResource(R.string.home_recently_added),
                                 onSeeAll = {
                                     viewModel.handleIntent(HomeIntent.NavigateToSongs)
                                 }
@@ -233,7 +239,7 @@ fun HomeScreen(
                     if (uiState.mostPlayed.isNotEmpty()) {
                         item {
                             SectionHeader(
-                                title = "常播歌曲",
+                                title = stringResource(R.string.home_most_played),
                                 onSeeAll = null
                             )
                         }
@@ -251,7 +257,7 @@ fun HomeScreen(
                     if (uiState.topAlbums.isNotEmpty()) {
                         item {
                             SectionHeader(
-                                title = "发现音乐",
+                                title = stringResource(R.string.home_discover),
                                 onSeeAll = null
                             )
                         }
@@ -284,11 +290,13 @@ private fun GreetingSection(
     onSettingsClick: () -> Unit = {}
 ) {
     val currentHour = LocalTime.now().hour
-    val greeting = when {
-        currentHour < 12 -> "上午好"
-        currentHour < 17 -> "下午好"
-        else -> "晚上好"
-    }
+    val greeting = stringResource(
+        when {
+            currentHour < 12 -> R.string.home_greeting_morning
+            currentHour < 17 -> R.string.home_greeting_afternoon
+            else -> R.string.home_greeting_evening
+        }
+    )
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -305,7 +313,7 @@ private fun GreetingSection(
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "今天听点什么好呢？",
+                text = stringResource(R.string.home_greeting_subtitle),
                 color = SpotifyColors.TextSecondary,
                 fontSize = 13.sp
             )
@@ -313,7 +321,7 @@ private fun GreetingSection(
         // Settings icon
         Icon(
             painter = painterResource(id = R.drawable.ic_settings),
-            contentDescription = "设置",
+            contentDescription = stringResource(R.string.home_settings_desc),
             tint = SpotifyColors.TextSecondary,
             modifier = Modifier
                 .clickable(
@@ -418,7 +426,7 @@ private fun QuickPlayItem(
             color = SpotifyColors.TextPrimary,
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
-            maxLines = 2,
+            maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
     }
@@ -436,7 +444,7 @@ private fun SectionHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
+            .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -448,7 +456,7 @@ private fun SectionHeader(
         )
         if (onSeeAll != null) {
             Text(
-                text = "查看全部",
+                text = stringResource(R.string.home_view_all),
                 color = SpotifyColors.TextSecondary,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
@@ -615,12 +623,12 @@ private fun ArtistCard(
                 color = SpotifyColors.TextPrimary,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
-                maxLines = 2,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center
             )
             Text(
-                text = "歌手",
+                text = stringResource(R.string.home_artist_label),
                 color = SpotifyColors.TextTertiary,
                 fontSize = 12.sp,
                 maxLines = 1

@@ -1,5 +1,6 @@
 package com.cycling.presentation.components
 
+import com.cycling.presentation.R
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
@@ -38,12 +39,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.cycling.core.ui.components.M3FilledButton
 import com.cycling.core.ui.theme.M3Motion
+import com.cycling.core.ui.theme.SpotifyColors
 import com.cycling.domain.model.Song
 
 @Composable
@@ -63,14 +66,14 @@ fun PlayActionButtons(
             icon = Icons.Default.PlayArrow,
             modifier = Modifier.weight(1f)
         ) {
-            Text("播放全部")
+            Text(stringResource(R.string.components_play_all))
         }
         M3FilledButton(
             onClick = onShuffle,
             icon = Icons.Default.Shuffle,
             modifier = Modifier.weight(1f)
         ) {
-            Text("随机播放")
+            Text(stringResource(R.string.components_shuffle))
         }
     }
     Spacer(modifier = Modifier.height(8.dp))
@@ -84,6 +87,7 @@ fun SongListItem(
     showDivider: Boolean = true,
     showDuration: Boolean = true,
     showMoreButton: Boolean = false,
+    isCurrentSong: Boolean = false,
     moreMenuExpanded: Boolean = false,
     onMoreClick: () -> Unit = {},
     onMoreDismiss: () -> Unit = {},
@@ -159,7 +163,7 @@ fun SongListItem(
             Text(
                 text = song.title,
                 style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = if (isCurrentSong) SpotifyColors.Accent else MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -187,7 +191,7 @@ fun SongListItem(
                 IconButton(onClick = onMoreClick) {
                     Icon(
                         imageVector = Icons.Default.MoreVert,
-                        contentDescription = "更多选项",
+                        contentDescription = stringResource(R.string.components_more_desc),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }

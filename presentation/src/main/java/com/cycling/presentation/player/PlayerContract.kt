@@ -3,6 +3,7 @@ package com.cycling.presentation.player
 import com.cycling.domain.lyrics.model.SyncedLyrics
 import com.cycling.domain.model.PlayerState
 import com.cycling.domain.model.RepeatMode
+import androidx.annotation.StringRes
 import com.cycling.domain.model.Song
 
 enum class PlayerViewMode {
@@ -48,7 +49,7 @@ sealed interface PlayerIntent {
 }
 
 sealed interface PlayerEffect {
-    data class ShowToast(val message: String) : PlayerEffect
+    data class ShowToast(@StringRes val message: Int) : PlayerEffect
 }
 
 fun PlayerState.toUiState(): PlayerUiState {

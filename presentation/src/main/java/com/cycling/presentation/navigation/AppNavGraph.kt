@@ -1,6 +1,12 @@
 package com.cycling.presentation.navigation
 
 import android.widget.Toast
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -12,6 +18,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation3.runtime.EntryProviderScope
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
+import androidx.navigation3.runtime.metadata
 import androidx.navigation3.ui.NavDisplay
 import com.cycling.presentation.ai.AiInfoScreen
 import com.cycling.presentation.albumdetail.AlbumDetailScreen
@@ -26,6 +33,7 @@ import com.cycling.presentation.folder.FolderScreen
 import com.cycling.presentation.folder.FolderViewModel
 import com.cycling.presentation.home.HomeScreen
 import com.cycling.presentation.home.HomeViewModel
+import com.cycling.presentation.lyrics.LyricsScreen
 import com.cycling.presentation.mymusic.MyMusicScreen
 import com.cycling.presentation.mymusic.MyMusicViewModel
 import com.cycling.presentation.player.PlayerScreen
@@ -53,7 +61,7 @@ fun AppNavGraph(
         playerViewModel.uiEffect.collect { effect ->
             when (effect) {
                 is com.cycling.presentation.player.PlayerEffect.ShowToast -> {
-                    Toast.makeText(context, effect.message, Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(effect.message), Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -102,9 +110,44 @@ fun AppNavGraph(
             )
         }
 
-        entry<Screen.Player> { _ ->
+        entry<Screen.Player>(
+            metadata = metadata {
+                // Slide up from bottom when entering (mini player -> full player)
+                put(NavDisplay.TransitionKey) {
+                    slideInVertically(
+                        initialOffsetY = { it },
+                        animationSpec = tween(350)
+                    ) togetherWith ExitTransition.KeepUntilTransitionsFinished
+                }
+                // Slide down to bottom when going back
+                put(NavDisplay.PopTransitionKey) {
+                    EnterTransition.None togetherWith
+                        slideOutVertically(
+                            targetOffsetY = { it },
+                            animationSpec = tween(350)
+                        )
+                }
+                put(NavDisplay.PredictivePopTransitionKey) {
+                    EnterTransition.None togetherWith
+                        slideOutVertically(
+                            targetOffsetY = { it },
+                            animationSpec = tween(350)
+                        )
+                }
+            }
+        ) { _ ->
             val uiState = playerViewModel.uiState.collectAsStateWithLifecycle()
             PlayerScreen(
+                uiState = uiState.value,
+                onIntent = playerViewModel::handleIntent,
+                onNavigateBack = { navigator.goBack() },
+                onNavigateToLyrics = { navigator.navigate(Screen.Lyrics) }
+            )
+        }
+
+        entry<Screen.Lyrics> { _ ->
+            val uiState = playerViewModel.uiState.collectAsStateWithLifecycle()
+            LyricsScreen(
                 uiState = uiState.value,
                 onIntent = playerViewModel::handleIntent,
                 onNavigateBack = { navigator.goBack() }

@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.Sonic" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.Sonic" parent="android:Theme.Material.Light.NoActionBar">
+        <!-- Draw behind status bar -->
+        <item name="android:windowTranslucentStatus">true</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+    </style>
 </resources>

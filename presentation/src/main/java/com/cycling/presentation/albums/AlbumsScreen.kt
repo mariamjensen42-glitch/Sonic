@@ -47,6 +47,7 @@ import com.cycling.domain.model.Album
 import com.cycling.domain.model.SortOrder
 import com.cycling.presentation.R
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -76,16 +77,16 @@ fun AlbumsScreen(
     Scaffold(
         topBar = {
             M3DetailTopAppBar(
-                title = "专辑",
+                title = stringResource(R.string.albums_title),
                 navigationIcon = Icons.AutoMirrored.Filled.ArrowBack,
-                navigationIconContentDescription = "返回",
+                navigationIconContentDescription = stringResource(R.string.albums_back_desc),
                 onNavigationClick = onNavigateBack,
                 actions = {
                     Box {
                         IconButton(onClick = { showSortMenu = true }) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.Sort,
-                                contentDescription = "排序",
+                                contentDescription = stringResource(R.string.albums_sort_desc),
                                 tint = SpotifyColors.TextPrimary
                             )
                         }
@@ -136,12 +137,12 @@ fun AlbumsScreen(
                     )
                     Spacer(modifier = Modifier.height(M3Spacing.medium))
                     Text(
-                        text = "暂无专辑",
+                        text = stringResource(R.string.albums_empty_title),
                         style = MaterialTheme.typography.titleMedium,
                         color = SpotifyColors.TextPrimary
                     )
                     Text(
-                        text = "扫描本地音乐以添加专辑",
+                        text = stringResource(R.string.albums_empty_subtitle),
                         style = MaterialTheme.typography.bodyMedium,
                         color = SpotifyColors.TextSecondary
                     )
@@ -184,10 +185,11 @@ private fun sortAlbums(albums: List<Album>, sortOrder: SortOrder): List<Album> {
     }
 }
 
-private fun getSortOrderName(sortOrder: SortOrder): String {
-    return when (sortOrder) {
-        SortOrder.TITLE -> "按专辑名"
-        SortOrder.ARTIST -> "按艺术家"
-        else -> "按专辑名"
+    @Composable
+    private fun getSortOrderName(sortOrder: SortOrder): String {
+        return when (sortOrder) {
+            SortOrder.TITLE -> stringResource(R.string.albums_sort_name)
+            SortOrder.ARTIST -> stringResource(R.string.albums_sort_artist)
+            else -> stringResource(R.string.albums_sort_name)
+        }
     }
-}

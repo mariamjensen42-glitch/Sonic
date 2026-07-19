@@ -27,8 +27,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -37,17 +35,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cycling.core.ui.components.M3CircularProgressIndicator
 import com.cycling.core.ui.components.M3ExtendedFAB
-import com.cycling.core.ui.components.M3LargeTopAppBar
+import com.cycling.core.ui.components.M3DetailTopAppBar
 import com.cycling.core.ui.theme.M3Spacing
 import com.cycling.domain.model.Song
 import com.cycling.domain.model.SortOrder
+import com.cycling.presentation.R
 import com.cycling.presentation.components.MenuItem
 import com.cycling.presentation.components.PlaylistPickerDialog
 import com.cycling.presentation.components.SongListItem
@@ -69,10 +68,6 @@ fun SongsScreen(
     var showSortMenu by remember { mutableStateOf(false) }
     var expandedSongId by remember { mutableStateOf<Long?>(null) }
     val scrollState = rememberLazyListState()
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(
-        state = rememberTopAppBarState()
-    )
-
     LaunchedEffect(Unit) {
         viewModel.uiEffect.collect { effect ->
             when (effect) {
@@ -87,7 +82,7 @@ fun SongsScreen(
                     onNavigateToPlayer(effect.songId)
                 }
                 is SongsEffect.ShowToast -> {
-                    Toast.makeText(context, effect.message, Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(effect.message), Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -98,20 +93,18 @@ fun SongsScreen(
     }
 
     Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            M3LargeTopAppBar(
-                title = "歌曲",
-                scrollBehavior = scrollBehavior,
+            M3DetailTopAppBar(
+                title = stringResource(R.string.songs_title),
                 navigationIcon = Icons.AutoMirrored.Filled.ArrowBack,
-                navigationIconContentDescription = "返回",
+                navigationIconContentDescription = stringResource(R.string.songs_back_desc),
                 onNavigationClick = onNavigateBack,
                 actions = {
                     Box {
                         IconButton(onClick = { showSortMenu = true }) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.Sort,
-                                contentDescription = "排序"
+                                contentDescription = stringResource(R.string.songs_sort_desc)
                             )
                         }
                         DropdownMenu(
@@ -148,7 +141,7 @@ fun SongsScreen(
                     ) {
                         item {
                             Text(
-                                text = "${sortedSongs.size} 首歌曲",
+                                text = stringResource(R.string.songs_count, sortedSongs.size),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(
@@ -160,6 +153,7 @@ fun SongsScreen(
                         itemsIndexed(sortedSongs, key = { _, song -> song.id }) { index, song ->
                             SongListItem(
                                 song = song,
+                                isCurrentSong = song.id == uiState.currentSongId,
                                 showDivider = index < sortedSongs.size - 1,
                                 subtitle = "${song.artist} · ${formatDuration(song.duration)}",
                                 showDuration = false,
@@ -169,11 +163,11 @@ fun SongsScreen(
                                 onMoreDismiss = { expandedSongId = null },
                                 onClick = { viewModel.handleIntent(SongsIntent.SongClick(song)) },
                                 moreMenuItems = listOf(
-                                    MenuItem(name = "下一首播放", onClick = {
+                                    MenuItem(name = stringResource(R.string.songs_play_next), onClick = {
                                         playerViewModel.handleIntent(PlayerIntent.PlayNext(song))
                                     }),
-                                    MenuItem(name = "查看详情", onClick = { onNavigateToSongDetail(song.id) }),
-                                    MenuItem(name = "添加到播放列表", onClick = {
+                                    MenuItem(name = stringResource(R.string.songs_view_detail), onClick = { onNavigateToSongDetail(song.id) }),
+                                    MenuItem(name = stringResource(R.string.songs_add_to_playlist), onClick = {
                                         viewModel.handleIntent(SongsIntent.ShowAddToPlaylistDialog(song))
                                     })
                                 )
@@ -182,7 +176,7 @@ fun SongsScreen(
                     }
 
                     M3ExtendedFAB(
-                        text = "播放全部",
+                        text = stringResource(R.string.songs_play_all),
                         icon = Icons.Default.PlayArrow,
                         onClick = {
                             if (sortedSongs.isNotEmpty()) {
@@ -237,12 +231,12 @@ private fun EmptySongsState() {
         )
         Spacer(modifier = Modifier.height(M3Spacing.medium))
         Text(
-            text = "暂无歌曲",
+            text = stringResource(R.string.songs_empty_title),
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurface
         )
         Text(
-            text = "扫描本地音乐以添加歌曲",
+            text = stringResource(R.string.songs_empty_subtitle),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -260,12 +254,13 @@ private fun sortSongs(songs: List<Song>, sortOrder: SortOrder, ascending: Boolea
     return if (ascending) sorted else sorted.reversed()
 }
 
+@Composable
 private fun getSortOrderName(sortOrder: SortOrder): String {
     return when (sortOrder) {
-        SortOrder.TITLE -> "按标题"
-        SortOrder.ARTIST -> "按艺术家"
-        SortOrder.ALBUM -> "按专辑"
-        SortOrder.DURATION -> "按时长"
-        SortOrder.DATE_ADDED -> "按添加日期"
+        SortOrder.TITLE -> stringResource(R.string.songs_sort_title)
+        SortOrder.ARTIST -> stringResource(R.string.songs_sort_artist)
+        SortOrder.ALBUM -> stringResource(R.string.songs_sort_album)
+        SortOrder.DURATION -> stringResource(R.string.songs_sort_duration)
+        SortOrder.DATE_ADDED -> stringResource(R.string.songs_sort_date)
     }
 }

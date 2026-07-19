@@ -1,17 +1,8 @@
-import java.util.Properties
-import java.io.FileInputStream
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt.android)
-}
-
-val keyPropertiesFile = rootProject.file("key.properties")
-val keyProperties = Properties()
-if (keyPropertiesFile.exists()) {
-    keyProperties.load(FileInputStream(keyPropertiesFile))
 }
 
 android {
@@ -30,10 +21,10 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = file(keyProperties.getProperty("storeFile") ?: "sonic-release.keystore")
-            storePassword = keyProperties.getProperty("storePassword") ?: ""
-            keyAlias = keyProperties.getProperty("keyAlias") ?: ""
-            keyPassword = keyProperties.getProperty("keyPassword") ?: ""
+            storeFile = file(System.getenv("SONIC_STORE_FILE") ?: "sonic-release.keystore")
+            storePassword = System.getenv("SONIC_STORE_PASSWORD") ?: ""
+            keyAlias = System.getenv("SONIC_KEY_ALIAS") ?: ""
+            keyPassword = System.getenv("SONIC_KEY_PASSWORD") ?: ""
         }
     }
 

@@ -21,6 +21,9 @@ sealed interface Screen : NavKey {
     data object Player : Screen
 
     @Serializable
+    data object Lyrics : Screen
+
+    @Serializable
     data class AiInfo(val type: String, val name: String, val artist: String = "") : Screen
 }
 

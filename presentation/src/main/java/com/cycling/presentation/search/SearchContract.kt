@@ -2,6 +2,7 @@ package com.cycling.presentation.search
 
 import com.cycling.domain.model.Album
 import com.cycling.domain.model.Artist
+import androidx.annotation.StringRes
 import com.cycling.domain.model.Song
 
 data class SearchUiState(
@@ -36,5 +37,5 @@ sealed interface SearchEffect {
     data class NavigateToPlayer(val songId: Long) : SearchEffect
     data class NavigateToAlbumDetail(val albumId: Long) : SearchEffect
     data class NavigateToArtistDetail(val artistId: Long) : SearchEffect
-    data class ShowToast(val message: String) : SearchEffect
+    data class ShowToast(@StringRes val message: Int) : SearchEffect
 }

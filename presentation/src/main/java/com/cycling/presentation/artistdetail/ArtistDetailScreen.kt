@@ -24,7 +24,6 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -40,7 +39,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -52,6 +51,7 @@ import coil3.compose.AsyncImage
 import com.cycling.core.ui.theme.ArtColorExtractor
 import com.cycling.core.ui.components.M3DetailTopAppBar
 import com.cycling.core.ui.theme.SpotifyColors
+import com.cycling.presentation.R
 import com.cycling.presentation.player.PlayerIntent
 import com.cycling.presentation.player.PlayerViewModel
 import com.cycling.domain.model.Song
@@ -70,7 +70,6 @@ fun ArtistDetailScreen(
     bottomPadding: Dp = 0.dp
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val context = LocalContext.current
 
     LaunchedEffect(Unit) {
         viewModel.uiEffect.collect { effect ->
@@ -85,9 +84,9 @@ fun ArtistDetailScreen(
     }
 
     var dominantColor by remember { mutableStateOf(AppBackground) }
-    LaunchedEffect(uiState.artist?.artistArt) {
-        uiState.artist?.artistArt?.let { url ->
-            val color = ArtColorExtractor.extractColorFromImageUrl(context, url, AppBackground)
+    LaunchedEffect(uiState.songs.firstOrNull()?.path) {
+        uiState.songs.firstOrNull()?.let { song ->
+            val color = ArtColorExtractor.extractColorFromMusicFile(song.path, AppBackground)
             dominantColor = color
         }
     }
@@ -97,40 +96,19 @@ fun ArtistDetailScreen(
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    colors = listOf(dominantColor, Color.Black),
-                    startY = 100f
+                    colors = listOf(dominantColor, Color.Black)
                 )
             )
     ) {
-        Scaffold(
-            topBar = {
-                M3DetailTopAppBar(
-                    navigationIcon = Icons.AutoMirrored.Filled.ArrowBack,
-                    navigationIconContentDescription = "返回",
-                    onNavigationClick = onNavigateBack,
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color.Transparent,
-                        titleContentColor = Color.White,
-                        navigationIconContentColor = Color.White
-                    )
-                )
-            },
-            containerColor = Color.Transparent
-        ) { paddingValues ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
+        if (uiState.isLoading) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
             ) {
-            if (uiState.isLoading) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    androidx.compose.material3.CircularProgressIndicator(color = Color.White)
-                }
-            } else {
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                androidx.compose.material3.CircularProgressIndicator(color = Color.White)
+            }
+        } else {
+            LazyColumn(modifier = Modifier.fillMaxSize()) {
                     // ── Header Section (460dp, Neptune/Spotify style) ──
                     item {
                         Column(
@@ -189,7 +167,7 @@ fun ArtistDetailScreen(
                             ) {
                                 Column(modifier = Modifier.width(200.dp)) {
                                     Text(
-                                        text = uiState.artist?.name ?: "未知歌手",
+                                        text = uiState.artist?.name ?: stringResource(R.string.artist_detail_unknown),
                                         color = Color.White,
                                         fontSize = 23.sp,
                                         fontWeight = FontWeight.Bold,
@@ -197,7 +175,7 @@ fun ArtistDetailScreen(
                                         overflow = TextOverflow.Ellipsis
                                     )
                                     Text(
-                                        text = "为你推荐",
+                                        text = stringResource(R.string.artist_detail_subtitle),
                                         color = Color.Gray,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Medium
@@ -223,7 +201,7 @@ fun ArtistDetailScreen(
                                             modifier = Modifier.size(25.dp),
                                             tint = Color.Black,
                                             imageVector = Icons.Default.PlayArrow,
-                                            contentDescription = "播放全部"
+                                            contentDescription = stringResource(R.string.artist_detail_play_all_desc)
                                         )
                                     }
                                 }
@@ -320,7 +298,7 @@ fun ArtistDetailScreen(
                                 painter = if (isLiked) painterResource(id = com.cycling.presentation.R.drawable.added)
                                 else painterResource(id = com.cycling.presentation.R.drawable.ic_add),
                                 tint = if (isLiked) Color.White else Color.Gray,
-                                contentDescription = if (isLiked) "取消收藏" else "收藏"
+                                contentDescription = if (isLiked) stringResource(R.string.player_unfavorite_desc) else stringResource(R.string.player_favorite_desc)
                             )
                         }
                     }
@@ -330,7 +308,17 @@ fun ArtistDetailScreen(
                     }
                 }
             }
-        }
-    }
+
+        M3DetailTopAppBar(
+        modifier = Modifier.align(Alignment.TopCenter),
+        navigationIcon = Icons.AutoMirrored.Filled.ArrowBack,
+        navigationIconContentDescription = stringResource(R.string.artist_detail_back_desc),
+        onNavigationClick = onNavigateBack,
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = Color.Transparent,
+            titleContentColor = Color.White,
+            navigationIconContentColor = Color.White
+        )
+    )
 }}
 
