@@ -156,12 +156,22 @@ fun MyMusicScreen(
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (uiState.currentTab == MyMusicTab.PLAYLISTS && !uiState.showFavoriteSongs) {
-                    IconButton(onClick = { viewModel.handleIntent(MyMusicIntent.ShowAiCreateDialog) }) {
-                        Icon(Icons.Default.AutoAwesome, "AI 创建歌单", tint = Color(0xFFBB86FC), modifier = Modifier.size(28.dp))
-                    }
-                    IconButton(onClick = { showCreateDialog = true }) {
-                        Icon(Icons.Default.Add, "创建播放列表", tint = SpotifyColors.TextSecondary, modifier = Modifier.size(28.dp))
-                    }
+                    Icon(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clickable { viewModel.handleIntent(MyMusicIntent.ShowAiCreateDialog) },
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = "AI 创建歌单",
+                        tint = Color(0xFFBB86FC)
+                    )
+                    Icon(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clickable { showCreateDialog = true },
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "创建播放列表",
+                        tint = SpotifyColors.TextSecondary
+                    )
                 } else if (uiState.currentTab != MyMusicTab.PLAYLISTS) {
                     val currentSongs = when (uiState.currentTab) {
                         MyMusicTab.RECENTLY_PLAYED -> uiState.recentlyPlayedSongs
