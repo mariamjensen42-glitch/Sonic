@@ -1,50 +1,62 @@
 package com.cycling.presentation.albumdetail
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Album
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
-import com.cycling.core.ui.components.M3LargeTopAppBar
-import com.cycling.core.ui.theme.M3SemanticColors
-import com.cycling.core.ui.theme.M3Shapes
-import com.cycling.core.ui.theme.M3Spacing
-import com.cycling.presentation.components.PlayActionButtons
-import com.cycling.presentation.components.SongListItem
-import com.cycling.presentation.components.formatDuration
+import com.cycling.core.ui.theme.ArtColorExtractor
+import com.cycling.core.ui.components.M3DetailTopAppBar
+import com.cycling.presentation.R
+import com.cycling.presentation.player.PlayerIntent
+import com.cycling.presentation.player.PlayerViewModel
+import com.cycling.domain.model.Song
+
+private val AppBackground = Color(0xFF0B0B0F)
+private val AppPalette = Color(0xFF618DFF)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,171 +65,332 @@ fun AlbumDetailScreen(
     onNavigateToPlayer: (Long) -> Unit,
     onNavigateToApiKeyConfig: () -> Unit = {},
     onNavigateToAiInfo: (String, String, String) -> Unit = { _, _, _ -> },
-    viewModel: AlbumDetailViewModel = hiltViewModel(),
+    viewModel: AlbumDetailViewModel,
+    playerViewModel: PlayerViewModel = hiltViewModel(),
     bottomPadding: Dp = 0.dp
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val context = LocalContext.current
 
     LaunchedEffect(Unit) {
         viewModel.uiEffect.collect { effect ->
             when (effect) {
-                is AlbumDetailEffect.NavigateToPlayer -> onNavigateToPlayer(effect.songId)
+                is AlbumDetailEffect.NavigateToPlayer -> {
+                    val song = uiState.songs.find { it.id == effect.songId } ?: return@collect
+                    playerViewModel.handleIntent(PlayerIntent.PlaySong(song, uiState.songs))
+                    onNavigateToPlayer(effect.songId)
+                }
             }
         }
     }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.surface,
-        topBar = {
-            M3LargeTopAppBar(
-                title = "专辑详情",
-                scrollBehavior = scrollBehavior,
-                navigationIcon = Icons.AutoMirrored.Filled.ArrowBack,
-                navigationIconContentDescription = "返回",
-                onNavigationClick = onNavigateBack,
-                actions = {
-                    IconButton(
-                        onClick = {
-                            uiState.album?.let { album ->
-                                onNavigateToAiInfo("album", album.name, album.artist)
+    var dominantColor by remember { mutableStateOf(AppBackground) }
+    LaunchedEffect(uiState.album?.albumArt) {
+        uiState.album?.albumArt?.let { url ->
+            val color = ArtColorExtractor.extractColorFromImageUrl(context, url, AppBackground)
+            dominantColor = color
+        }
+    }
+
+    var isAlbumLiked by remember { mutableStateOf(false) }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(dominantColor, Color.Black),
+                    startY = 100f
+                )
+            )
+    ) {
+        Scaffold(
+            topBar = {
+                M3DetailTopAppBar(
+                    navigationIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                    navigationIconContentDescription = "返回",
+                    onNavigationClick = onNavigateBack,
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                        titleContentColor = Color.White,
+                        navigationIconContentColor = Color.White
+                    )
+                )
+            },
+            containerColor = Color.Transparent
+        ) { paddingValues ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+            ) {
+            if (uiState.isLoading) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                androidx.compose.material3.CircularProgressIndicator(color = Color.White)
+            }
+        } else {
+            LazyColumn(modifier = Modifier.fillMaxSize()) {
+                // ── Header Section (460dp, Neptune style) ──
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(460.dp),
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Spacer(modifier = Modifier.padding(25.dp))
+
+                        // Cover Art (230dp, centered)
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(230.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (uiState.album?.albumArt != null) {
+                                    AsyncImage(
+                                        model = uiState.album?.albumArt,
+                                        contentDescription = null,
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                } else {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(Color(0xFF333333)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            painter = painterResource(id = R.drawable.ic_album),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(80.dp),
+                                            tint = Color.Gray
+                                        )
+                                    }
+                                }
                             }
                         }
+
+                        Spacer(modifier = Modifier.padding(5.dp))
+
+                        // Album Name
+                        Text(
+                            modifier = Modifier.padding(start = 20.dp, top = 5.dp),
+                            text = uiState.album?.name ?: "未知专辑",
+                            color = Color.White,
+                            fontSize = 23.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+
+                        // Singer
+                        Text(
+                            modifier = Modifier.padding(start = 20.dp),
+                            text = uiState.album?.artist ?: "未知歌手",
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+
+                        // Album info
+                        val songCount = uiState.songs.size
+                        Text(
+                            modifier = Modifier.padding(start = 20.dp),
+                            text = "专辑 · $songCount 首歌曲",
+                            color = Color.Gray,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+
+                        // Play Button Row (Neptune style: small cover + like + play)
+                        Row(
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(52.dp)
+                                .padding(horizontal = 20.dp)
+                        ) {
+                            Row(
+                                horizontalArrangement = Arrangement.Start,
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.width(75.dp)
+                            ) {
+                                // Small cover thumbnail
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .height(60.dp)
+                                        .padding(top = 5.dp)
+                                        .clip(RoundedCornerShape(5.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (uiState.album?.albumArt != null) {
+                                        AsyncImage(
+                                            model = uiState.album?.albumArt,
+                                            contentDescription = null,
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentScale = ContentScale.Crop
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.width(8.dp))
+
+                                // Like / Album like button
+                                Icon(
+                                    modifier = Modifier
+                                        .size(23.dp)
+                                        .clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null
+                                        ) {
+                                            isAlbumLiked = !isAlbumLiked
+                                        },
+                                    painter = if (isAlbumLiked) painterResource(id = R.drawable.added)
+                                    else painterResource(id = R.drawable.ic_add),
+                                    tint = if (isAlbumLiked) AppPalette else Color.White,
+                                    contentDescription = if (isAlbumLiked) "取消收藏" else "收藏"
+                                )
+                            }
+
+                            // Play All Button (white circle, Neptune style)
+                            if (uiState.songs.isNotEmpty()) {
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier
+                                        .size(52.dp)
+                                        .clip(RoundedCornerShape(100.dp))
+                                        .background(Color.White)
+                                        .clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null
+                                        ) {
+                                            viewModel.handleIntent(AlbumDetailIntent.SongClick(uiState.songs.first()))
+                                        }
+                                ) {
+                                    Icon(
+                                        modifier = Modifier.size(25.dp),
+                                        tint = Color.Black,
+                                        imageVector = Icons.Default.PlayArrow,
+                                        contentDescription = "播放全部"
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── Song List (Neptune style: title + artist + like icon) ──
+                itemsIndexed(uiState.songs) { index, song ->
+                    val isCurrentSong = song.id == (uiState.songs.firstOrNull()?.id ?: -1L)
+                    val currentPlayingColor = if (isCurrentSong) AppPalette else Color.White
+
+                    Row(
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 8.dp)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                viewModel.handleIntent(AlbumDetailIntent.SongClick(song))
+                            }
                     ) {
+                        Row(
+                            horizontalArrangement = Arrangement.Start,
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            // Song cover thumbnail (50dp, Neptune style)
+                            Box(
+                                modifier = Modifier
+                                    .size(50.dp)
+                                    .padding(end = 10.dp)
+                                    .clip(RoundedCornerShape(6.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (song.albumArt != null) {
+                                    AsyncImage(
+                                        model = song.albumArt,
+                                        contentDescription = null,
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                } else {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(Color(0xFF333333)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            painter = painterResource(id = R.drawable.ic_album),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(24.dp),
+                                            tint = Color.Gray
+                                        )
+                                    }
+                                }
+                            }
+
+                            Column {
+                                Text(
+                                    text = song.title,
+                                    color = currentPlayingColor,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = song.artist,
+                                    color = Color.Gray,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+
+                        // Like icon (Neptune style: add/added)
+                        var isLiked by remember { mutableStateOf(false) }
                         Icon(
-                            imageVector = Icons.Default.AutoAwesome,
-                            contentDescription = "AI 介绍",
-                            tint = M3SemanticColors.Purple
+                            modifier = Modifier
+                                .size(20.dp)
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) {
+                                    isLiked = !isLiked
+                                },
+                            painter = if (isLiked) painterResource(id = R.drawable.added)
+                            else painterResource(id = R.drawable.ic_add),
+                            tint = if (isLiked) Color.White else Color.Gray,
+                            contentDescription = if (isLiked) "取消收藏" else "收藏"
                         )
                     }
                 }
-            )
-        }
-    ) { paddingValues ->
-        if (uiState.isLoading) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .nestedScroll(scrollBehavior.nestedScrollConnection)
-                    .padding(paddingValues)
-            ) {
-                item {
-                    AlbumHeader(
-                        album = uiState.album,
-                        songCount = uiState.songs.size
-                    )
-                }
 
                 item {
-                    PlayActionButtons(
-                        onPlayAll = {
-                            uiState.songs.firstOrNull()?.let { song ->
-                                viewModel.handleIntent(AlbumDetailIntent.SongClick(song))
-                            }
-                        },
-                        onShuffle = {
-                            uiState.songs.randomOrNull()?.let { song ->
-                                viewModel.handleIntent(AlbumDetailIntent.SongClick(song))
-                            }
-                        }
-                    )
-                }
-
-                itemsIndexed(uiState.songs) { index, song ->
-                    SongListItem(
-                        song = song,
-                        showDivider = index < uiState.songs.size - 1,
-                        subtitle = formatDuration(song.duration),
-                        showDuration = false
-                    )
-                }
-
-                item {
-                    Spacer(modifier = Modifier.height(bottomPadding))
+                    Spacer(modifier = Modifier.height(bottomPadding + 80.dp))
                 }
             }
         }
+    }
     }
 }
-
-@Composable
-private fun AlbumHeader(
-    album: com.cycling.domain.model.Album?,
-    songCount: Int
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(M3Spacing.medium),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Box(
-            modifier = Modifier
-                .size(200.dp)
-                .clip(M3Shapes.cornerLarge),
-            contentAlignment = Alignment.Center
-        ) {
-            if (album?.albumArt != null) {
-                AsyncImage(
-                    model = album.albumArt,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Album,
-                        contentDescription = null,
-                        modifier = Modifier.size(80.dp),
-                        tint = M3SemanticColors.Teal
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(M3Spacing.medium))
-
-        Text(
-            text = album?.name ?: "未知专辑",
-            style = MaterialTheme.typography.headlineLarge,
-            color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
-
-        Spacer(modifier = Modifier.height(M3Spacing.extraSmall))
-
-        Text(
-            text = album?.artist ?: "未知歌手",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        Spacer(modifier = Modifier.height(M3Spacing.small))
-
-        val year = album?.firstYear ?: 0
-        val yearText = if (year > 0) "$year · " else ""
-        Text(
-            text = "$yearText$songCount 首歌曲",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        Spacer(modifier = Modifier.height(M3Spacing.medium))
-    }
 }

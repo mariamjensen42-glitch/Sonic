@@ -1,8 +1,10 @@
 package com.cycling.presentation.songs
 
 import android.widget.Toast
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -40,6 +42,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.cycling.core.ui.components.M3CircularProgressIndicator
 import com.cycling.core.ui.components.M3ExtendedFAB
 import com.cycling.core.ui.components.M3LargeTopAppBar
 import com.cycling.core.ui.theme.M3Spacing
@@ -100,7 +103,7 @@ fun SongsScreen(
             M3LargeTopAppBar(
                 title = "歌曲",
                 scrollBehavior = scrollBehavior,
-                navigationIcon = androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack,
+                navigationIcon = Icons.AutoMirrored.Filled.ArrowBack,
                 navigationIconContentDescription = "返回",
                 onNavigationClick = onNavigateBack,
                 actions = {
@@ -133,42 +136,15 @@ fun SongsScreen(
     ) { paddingValues ->
         Box(modifier = Modifier.padding(paddingValues)) {
             if (uiState.isLoading) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    com.cycling.core.ui.components.M3CircularProgressIndicator()
-                }
+                LoadingState()
             } else if (sortedSongs.isEmpty()) {
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Spacer(modifier = Modifier.weight(1f))
-                    Icon(
-                        imageVector = Icons.Default.MusicNote,
-                        contentDescription = null,
-                        modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(M3Spacing.medium))
-                    Text(
-                        text = "暂无歌曲",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = "扫描本地音乐以添加歌曲",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.weight(1f))
-                }
+                EmptySongsState()
             } else {
                 Box(modifier = Modifier.fillMaxSize()) {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        state = scrollState
+                        state = scrollState,
+                        contentPadding = PaddingValues(bottom = M3Spacing.extraExtraLarge)
                     ) {
                         item {
                             Text(
@@ -193,36 +169,14 @@ fun SongsScreen(
                                 onMoreDismiss = { expandedSongId = null },
                                 onClick = { viewModel.handleIntent(SongsIntent.SongClick(song)) },
                                 moreMenuItems = listOf(
-                                    MenuItem(
-                                        name = "下一首播放",
-                                        onClick = {
-                                            playerViewModel.handleIntent(
-                                                PlayerIntent.PlayNext(song)
-                                            )
-                                        }
-                                    ),
-                                    MenuItem(
-                                        name = "查看详情",
-                                        onClick = {
-                                            onNavigateToSongDetail(song.id)
-                                        }
-                                    ),
-                                    MenuItem(
-                                        name = "添加到播放列表",
-                                        onClick = {
-                                            viewModel.handleIntent(
-                                                SongsIntent.ShowAddToPlaylistDialog(song)
-                                            )
-                                        }
-                                    )
+                                    MenuItem(name = "下一首播放", onClick = {
+                                        playerViewModel.handleIntent(PlayerIntent.PlayNext(song))
+                                    }),
+                                    MenuItem(name = "查看详情", onClick = { onNavigateToSongDetail(song.id) }),
+                                    MenuItem(name = "添加到播放列表", onClick = {
+                                        viewModel.handleIntent(SongsIntent.ShowAddToPlaylistDialog(song))
+                                    })
                                 )
-                            )
-                        }
-                        item {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(M3Spacing.extraExtraLarge)
                             )
                         }
                     }
@@ -254,10 +208,45 @@ fun SongsScreen(
         onPlaylistSelected = { playlistId ->
             viewModel.handleIntent(SongsIntent.AddToPlaylist(playlistId))
         },
-        onCreateNewPlaylist = { name ->
-            viewModel.handleIntent(SongsIntent.CreatePlaylistAndAddSong(name))
-        }
+        onCreateNewPlaylist = { viewModel.handleIntent(SongsIntent.CreatePlaylistAndAddSong(it)) }
     )
+}
+
+@Composable
+private fun LoadingState() {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        M3CircularProgressIndicator()
+    }
+}
+
+@Composable
+private fun EmptySongsState() {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = Icons.Default.MusicNote,
+            contentDescription = null,
+            modifier = Modifier.size(64.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(M3Spacing.medium))
+        Text(
+            text = "暂无歌曲",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Text(
+            text = "扫描本地音乐以添加歌曲",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
 }
 
 private fun sortSongs(songs: List<Song>, sortOrder: SortOrder, ascending: Boolean): List<Song> {

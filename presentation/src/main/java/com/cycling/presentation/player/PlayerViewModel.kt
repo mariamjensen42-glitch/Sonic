@@ -31,6 +31,8 @@ class PlayerViewModel @Inject constructor(
     private val _uiEffect = MutableSharedFlow<PlayerEffect>()
     val uiEffect: SharedFlow<PlayerEffect> = _uiEffect.asSharedFlow()
 
+    private var lastLyricsSongPath: String? = null
+
     init {
         observePlayerState()
     }
@@ -39,19 +41,15 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             playerRepository.playerState.collect { state ->
                 val currentSong = state.currentSong
-                _uiState.update { 
+                _uiState.update {
                     state.toUiState().copy(
                         isFavorite = currentSong?.isFavorite ?: false
                     )
                 }
-                
-                if (currentSong != null) {
-                    val currentLyricsSongPath = _uiState.value.lyrics?.let { 
-                        _uiState.value.currentSong?.path 
-                    }
-                    if (currentLyricsSongPath != currentSong.path) {
-                        loadLyrics(currentSong.path)
-                    }
+
+                if (currentSong != null && currentSong.path != lastLyricsSongPath) {
+                    lastLyricsSongPath = currentSong.path
+                    loadLyrics(currentSong.path)
                 }
             }
         }

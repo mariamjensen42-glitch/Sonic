@@ -23,13 +23,10 @@ sealed interface HomeIntent {
     data object NavigateToSongs : HomeIntent
     data object NavigateToAlbums : HomeIntent
     data object NavigateToArtists : HomeIntent
-    data object NavigateToPlaylists : HomeIntent
     data object NavigateToSettings : HomeIntent
     data object NavigateToMyMusic : HomeIntent
     data object NavigateToSearch : HomeIntent
     data object NavigateToFolders : HomeIntent
-    data object PlayPause : HomeIntent
-    data object MiniPlayerClick : HomeIntent
 }
 
 sealed interface HomeEffect {
@@ -40,7 +37,6 @@ sealed interface HomeEffect {
     data object NavigateToSongs : HomeEffect
     data object NavigateToAlbums : HomeEffect
     data object NavigateToArtists : HomeEffect
-    data object NavigateToPlaylists : HomeEffect
     data object NavigateToSettings : HomeEffect
     data object NavigateToMyMusic : HomeEffect
     data object NavigateToSearch : HomeEffect

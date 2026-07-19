@@ -6,7 +6,6 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt.android)
-    kotlin("android")
 }
 
 val keyPropertiesFile = rootProject.file("key.properties")
@@ -65,33 +64,24 @@ dependencies {
     implementation(project(":presentation"))
     implementation(project(":domain"))
     implementation(project(":data"))
-    implementation(project(":core"))
     
     implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
-
     implementation(libs.androidx.hilt.android)
     ksp(libs.androidx.hilt.compiler)
-    implementation(libs.androidx.hilt.navigation.compose)
     
-    implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
 
-    //room
-    implementation(libs.androidx.room.runtime)
-    ksp(libs.androidx.room.compiler)
-    implementation(libs.androidx.room.ktx)
+    // Navigation 3
+    implementation(libs.androidx.navigation3.ui)
+    implementation(libs.androidx.navigation3.runtime)
 
-    //media3
-    implementation(libs.androidx.media3.exoplayer)
-    implementation(libs.androidx.media3.ui)
-    implementation(libs.androidx.media3.session)
+    implementation(libs.androidx.hilt.navigation.compose)
 
     //timber
     implementation(libs.timber)

@@ -4,10 +4,8 @@ import com.cycling.domain.model.Album
 import com.cycling.domain.model.Artist
 import com.cycling.domain.model.Song
 import com.cycling.domain.model.SearchResult
-import com.cycling.domain.usecase.ClearSearchHistoryUseCase
-import com.cycling.domain.usecase.GetSearchHistoryUseCase
+import com.cycling.domain.usecase.SearchHistoryUseCase
 import com.cycling.domain.usecase.GetSearchSuggestionsUseCase
-import com.cycling.domain.usecase.SaveSearchHistoryUseCase
 import com.cycling.domain.usecase.SearchAllUseCase
 import com.cycling.presentation.util.TestDispatcherRule
 import io.mockk.coEvery
@@ -31,9 +29,7 @@ class SearchViewModelTest {
     val dispatcherRule = TestDispatcherRule()
 
     private lateinit var searchAllUseCase: SearchAllUseCase
-    private lateinit var getSearchHistoryUseCase: GetSearchHistoryUseCase
-    private lateinit var saveSearchHistoryUseCase: SaveSearchHistoryUseCase
-    private lateinit var clearSearchHistoryUseCase: ClearSearchHistoryUseCase
+    private lateinit var searchHistoryUseCase: SearchHistoryUseCase
     private lateinit var getSearchSuggestionsUseCase: GetSearchSuggestionsUseCase
     private lateinit var viewModel: SearchViewModel
 
@@ -102,29 +98,24 @@ class SearchViewModelTest {
 
     @Before
     fun setup() {
-        searchAllUseCase = mockk()
-        getSearchHistoryUseCase = mockk()
-        saveSearchHistoryUseCase = mockk()
-        clearSearchHistoryUseCase = mockk()
+        searchHistoryUseCase = mockk()
         getSearchSuggestionsUseCase = mockk()
 
-        every { getSearchHistoryUseCase() } returns flowOf(emptyList())
+        every { searchHistoryUseCase.getAll() } returns flowOf(emptyList())
         every { searchAllUseCase(any()) } returns flowOf(SearchResult())
         every { getSearchSuggestionsUseCase(any()) } returns flowOf(emptyList())
-        coEvery { saveSearchHistoryUseCase(any()) } returns Unit
-        coEvery { clearSearchHistoryUseCase() } returns Unit
+        coEvery { searchHistoryUseCase.save(any()) } returns Unit
+        coEvery { searchHistoryUseCase.clear() } returns Unit
     }
 
     @Test
     fun `init loads search history`() = runTest {
         val history = listOf("query1", "query2")
-        every { getSearchHistoryUseCase() } returns flowOf(history)
+        every { searchHistoryUseCase.getAll() } returns flowOf(history)
 
         viewModel = SearchViewModel(
             searchAllUseCase,
-            getSearchHistoryUseCase,
-            saveSearchHistoryUseCase,
-            clearSearchHistoryUseCase,
+            searchHistoryUseCase,
             getSearchSuggestionsUseCase
         )
         advanceUntilIdle()
@@ -140,9 +131,7 @@ class SearchViewModelTest {
 
         viewModel = SearchViewModel(
             searchAllUseCase,
-            getSearchHistoryUseCase,
-            saveSearchHistoryUseCase,
-            clearSearchHistoryUseCase,
+            searchHistoryUseCase,
             getSearchSuggestionsUseCase
         )
         advanceUntilIdle()
@@ -166,9 +155,7 @@ class SearchViewModelTest {
 
         viewModel = SearchViewModel(
             searchAllUseCase,
-            getSearchHistoryUseCase,
-            saveSearchHistoryUseCase,
-            clearSearchHistoryUseCase,
+            searchHistoryUseCase,
             getSearchSuggestionsUseCase
         )
         advanceUntilIdle()
@@ -176,7 +163,7 @@ class SearchViewModelTest {
         viewModel.handleIntent(SearchIntent.SearchSubmitted(query))
         advanceUntilIdle()
 
-        coVerify { saveSearchHistoryUseCase(query) }
+        coVerify { searchHistoryUseCase.save(query) }
         assertEquals(searchResult.songs, viewModel.uiState.value.songs)
         assertEquals(searchResult.albums, viewModel.uiState.value.albums)
         assertEquals(searchResult.artists, viewModel.uiState.value.artists)
@@ -186,9 +173,7 @@ class SearchViewModelTest {
     fun `SearchSubmitted with blank query does nothing`() = runTest {
         viewModel = SearchViewModel(
             searchAllUseCase,
-            getSearchHistoryUseCase,
-            saveSearchHistoryUseCase,
-            clearSearchHistoryUseCase,
+            searchHistoryUseCase,
             getSearchSuggestionsUseCase
         )
         advanceUntilIdle()
@@ -196,7 +181,7 @@ class SearchViewModelTest {
         viewModel.handleIntent(SearchIntent.SearchSubmitted(""))
         advanceUntilIdle()
 
-        coVerify(exactly = 0) { saveSearchHistoryUseCase(any()) }
+        coVerify(exactly = 0) { searchHistoryUseCase.save(any()) }
     }
 
     @Test
@@ -207,9 +192,7 @@ class SearchViewModelTest {
 
         viewModel = SearchViewModel(
             searchAllUseCase,
-            getSearchHistoryUseCase,
-            saveSearchHistoryUseCase,
-            clearSearchHistoryUseCase,
+            searchHistoryUseCase,
             getSearchSuggestionsUseCase
         )
         advanceUntilIdle()
@@ -225,9 +208,7 @@ class SearchViewModelTest {
     fun `ClearHistory clears search history`() = runTest {
         viewModel = SearchViewModel(
             searchAllUseCase,
-            getSearchHistoryUseCase,
-            saveSearchHistoryUseCase,
-            clearSearchHistoryUseCase,
+            searchHistoryUseCase,
             getSearchSuggestionsUseCase
         )
         advanceUntilIdle()
@@ -235,16 +216,14 @@ class SearchViewModelTest {
         viewModel.handleIntent(SearchIntent.ClearHistory)
         advanceUntilIdle()
 
-        coVerify { clearSearchHistoryUseCase() }
+        coVerify { searchHistoryUseCase.clear() }
     }
 
     @Test
     fun `TabSelected updates selected tab`() = runTest {
         viewModel = SearchViewModel(
             searchAllUseCase,
-            getSearchHistoryUseCase,
-            saveSearchHistoryUseCase,
-            clearSearchHistoryUseCase,
+            searchHistoryUseCase,
             getSearchSuggestionsUseCase
         )
         advanceUntilIdle()
@@ -259,9 +238,7 @@ class SearchViewModelTest {
     fun `ClearSearch resets state`() = runTest {
         viewModel = SearchViewModel(
             searchAllUseCase,
-            getSearchHistoryUseCase,
-            saveSearchHistoryUseCase,
-            clearSearchHistoryUseCase,
+            searchHistoryUseCase,
             getSearchSuggestionsUseCase
         )
         advanceUntilIdle()
@@ -282,9 +259,7 @@ class SearchViewModelTest {
         val song = createSong(id = 123L)
         viewModel = SearchViewModel(
             searchAllUseCase,
-            getSearchHistoryUseCase,
-            saveSearchHistoryUseCase,
-            clearSearchHistoryUseCase,
+            searchHistoryUseCase,
             getSearchSuggestionsUseCase
         )
         advanceUntilIdle()
@@ -292,7 +267,7 @@ class SearchViewModelTest {
         viewModel.handleIntent(SearchIntent.SongClicked(song))
         advanceUntilIdle()
 
-        coVerify { saveSearchHistoryUseCase(any()) }
+        coVerify { searchHistoryUseCase.save(any()) }
     }
 
     @Test
@@ -300,9 +275,7 @@ class SearchViewModelTest {
         val album = createAlbum(id = 456L)
         viewModel = SearchViewModel(
             searchAllUseCase,
-            getSearchHistoryUseCase,
-            saveSearchHistoryUseCase,
-            clearSearchHistoryUseCase,
+            searchHistoryUseCase,
             getSearchSuggestionsUseCase
         )
         advanceUntilIdle()
@@ -310,7 +283,7 @@ class SearchViewModelTest {
         viewModel.handleIntent(SearchIntent.AlbumClicked(album))
         advanceUntilIdle()
 
-        coVerify { saveSearchHistoryUseCase(any()) }
+        coVerify { searchHistoryUseCase.save(any()) }
     }
 
     @Test
@@ -318,9 +291,7 @@ class SearchViewModelTest {
         val artist = createArtist(id = 789L)
         viewModel = SearchViewModel(
             searchAllUseCase,
-            getSearchHistoryUseCase,
-            saveSearchHistoryUseCase,
-            clearSearchHistoryUseCase,
+            searchHistoryUseCase,
             getSearchSuggestionsUseCase
         )
         advanceUntilIdle()
@@ -328,6 +299,6 @@ class SearchViewModelTest {
         viewModel.handleIntent(SearchIntent.ArtistClicked(artist))
         advanceUntilIdle()
 
-        coVerify { saveSearchHistoryUseCase(any()) }
+        coVerify { searchHistoryUseCase.save(any()) }
     }
 }

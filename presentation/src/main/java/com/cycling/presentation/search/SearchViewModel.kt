@@ -2,13 +2,13 @@ package com.cycling.presentation.search
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.cycling.domain.usecase.ClearSearchHistoryUseCase
-import com.cycling.domain.usecase.GetSearchHistoryUseCase
+import com.cycling.domain.usecase.SearchHistoryUseCase
 import com.cycling.domain.usecase.GetSearchSuggestionsUseCase
-import com.cycling.domain.usecase.SaveSearchHistoryUseCase
 import com.cycling.domain.usecase.SearchAllUseCase
+import com.cycling.domain.repository.PlayerRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -28,10 +28,9 @@ import javax.inject.Inject
 @HiltViewModel
 class SearchViewModel @Inject constructor(
     private val searchAllUseCase: SearchAllUseCase,
-    private val getSearchHistoryUseCase: GetSearchHistoryUseCase,
-    private val saveSearchHistoryUseCase: SaveSearchHistoryUseCase,
-    private val clearSearchHistoryUseCase: ClearSearchHistoryUseCase,
-    private val getSearchSuggestionsUseCase: GetSearchSuggestionsUseCase
+    private val searchHistoryUseCase: SearchHistoryUseCase,
+    private val getSearchSuggestionsUseCase: GetSearchSuggestionsUseCase,
+    private val playerRepository: PlayerRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SearchUiState())
@@ -41,6 +40,7 @@ class SearchViewModel @Inject constructor(
     val uiEffect: SharedFlow<SearchEffect> = _uiEffect.asSharedFlow()
 
     private val searchQuery = MutableStateFlow("")
+    private var suggestionsJob: Job? = null
 
     init {
         loadSearchHistory()
@@ -48,7 +48,7 @@ class SearchViewModel @Inject constructor(
     }
 
     private fun loadSearchHistory() {
-        getSearchHistoryUseCase()
+        searchHistoryUseCase.getAll()
             .onEach { history ->
                 _uiState.update { it.copy(searchHistory = history) }
             }
@@ -90,7 +90,8 @@ class SearchViewModel @Inject constructor(
         searchQuery.value = query
         
         if (query.isNotBlank()) {
-            getSearchSuggestionsUseCase(query)
+            suggestionsJob?.cancel()
+            suggestionsJob = getSearchSuggestionsUseCase(query)
                 .onEach { suggestions ->
                     _uiState.update { it.copy(suggestions = suggestions) }
                 }
@@ -103,7 +104,7 @@ class SearchViewModel @Inject constructor(
     private fun handleSearchSubmitted(query: String) {
         if (query.isNotBlank()) {
             viewModelScope.launch {
-                saveSearchHistoryUseCase(query)
+                searchHistoryUseCase.save(query)
             }
             performSearch(query)
         }
@@ -117,7 +118,7 @@ class SearchViewModel @Inject constructor(
 
     private fun handleClearHistory() {
         viewModelScope.launch {
-            clearSearchHistoryUseCase()
+            searchHistoryUseCase.clear()
         }
     }
 
@@ -127,21 +128,22 @@ class SearchViewModel @Inject constructor(
 
     private fun handleSongClick(song: com.cycling.domain.model.Song) {
         viewModelScope.launch {
-            saveSearchHistoryUseCase(_uiState.value.searchQuery)
+            playerRepository.playSong(song)
+            searchHistoryUseCase.save(_uiState.value.searchQuery)
             _uiEffect.emit(SearchEffect.NavigateToPlayer(song.id))
         }
     }
 
     private fun handleAlbumClick(album: com.cycling.domain.model.Album) {
         viewModelScope.launch {
-            saveSearchHistoryUseCase(_uiState.value.searchQuery)
+            searchHistoryUseCase.save(_uiState.value.searchQuery)
             _uiEffect.emit(SearchEffect.NavigateToAlbumDetail(album.id))
         }
     }
 
     private fun handleArtistClick(artist: com.cycling.domain.model.Artist) {
         viewModelScope.launch {
-            saveSearchHistoryUseCase(_uiState.value.searchQuery)
+            searchHistoryUseCase.save(_uiState.value.searchQuery)
             _uiEffect.emit(SearchEffect.NavigateToArtistDetail(artist.id))
         }
     }

@@ -1,6 +1,8 @@
 package com.cycling.presentation.playlistdetail
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,11 +29,9 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -41,36 +41,31 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
-import com.cycling.core.ui.components.M3CircularProgressIndicator
-import com.cycling.core.ui.components.M3FilledButton
-import com.cycling.core.ui.components.M3LargeTopAppBar
-import com.cycling.core.ui.components.M3ListItemWithAvatar
-import com.cycling.core.ui.theme.M3ComponentSize
-import com.cycling.core.ui.theme.M3SemanticColors
-import com.cycling.core.ui.theme.M3Shapes
-import com.cycling.core.ui.theme.M3Spacing
+import com.cycling.core.ui.components.M3DetailTopAppBar
+import com.cycling.core.ui.theme.SpotifyColors
 import com.cycling.domain.model.Song
+
+private val SpotifyGreen = Color(0xFF1DB954)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlaylistDetailScreen(
     onNavigateBack: () -> Unit,
     onNavigateToPlayer: (Long) -> Unit,
-    viewModel: PlaylistDetailViewModel = hiltViewModel(),
+    viewModel: PlaylistDetailViewModel,
     bottomPadding: Dp = 0.dp
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(
-        state = rememberTopAppBarState()
-    )
 
     LaunchedEffect(Unit) {
         viewModel.uiEffect.collect { effect ->
@@ -83,15 +78,19 @@ fun PlaylistDetailScreen(
 
     Scaffold(
         topBar = {
-            M3LargeTopAppBar(
+            M3DetailTopAppBar(
                 title = "播放列表详情",
-                scrollBehavior = scrollBehavior,
                 navigationIcon = Icons.AutoMirrored.Filled.ArrowBack,
                 navigationIconContentDescription = "返回",
-                onNavigationClick = onNavigateBack
+                onNavigationClick = onNavigateBack,
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = SpotifyColors.Background,
+                    titleContentColor = SpotifyColors.TextPrimary,
+                    navigationIconContentColor = SpotifyColors.TextPrimary
+                )
             )
         },
-        containerColor = MaterialTheme.colorScheme.surface
+        containerColor = SpotifyColors.Background
     ) { paddingValues ->
         if (uiState.isLoading) {
             Box(
@@ -100,23 +99,22 @@ fun PlaylistDetailScreen(
                     .padding(paddingValues),
                 contentAlignment = Alignment.Center
             ) {
-                M3CircularProgressIndicator()
+                androidx.compose.material3.CircularProgressIndicator(color = SpotifyColors.Accent)
             }
         } else {
             LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = paddingValues
             ) {
                 item {
                     PlaylistHeader(
-                        playlist = uiState.playlist,
+                        name = uiState.playlist?.name ?: "未知播放列表",
                         songCount = uiState.songs.size
                     )
                 }
 
                 item {
-                    PlayActionButtons(
+                    PlayActionRow(
                         onPlayAll = {
                             uiState.songs.firstOrNull()?.let { song ->
                                 viewModel.handleIntent(PlaylistDetailIntent.SongClick(song))
@@ -135,26 +133,22 @@ fun PlaylistDetailScreen(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(M3Spacing.extraLarge),
+                                .padding(32.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = "播放列表为空",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = SpotifyColors.TextTertiary,
+                                fontSize = 14.sp
                             )
                         }
                     }
                 } else {
                     itemsIndexed(uiState.songs) { index, song ->
-                        M3SongListItemWithMenu(
+                        SongItem(
                             song = song,
-                            onSongClick = { song ->
-                                viewModel.handleIntent(PlaylistDetailIntent.SongClick(song))
-                            },
-                            onRemoveSong = { songId ->
-                                viewModel.handleIntent(PlaylistDetailIntent.RemoveSong(songId))
-                            }
+                            onSongClick = { viewModel.handleIntent(PlaylistDetailIntent.SongClick(it)) },
+                            onRemoveSong = { viewModel.handleIntent(PlaylistDetailIntent.RemoveSong(it)) }
                         )
                     }
                 }
@@ -167,105 +161,177 @@ fun PlaylistDetailScreen(
     }
 }
 
-@Composable
-private fun PlayActionButtons(
-    onPlayAll: () -> Unit,
-    onShuffle: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = M3Spacing.medium, vertical = M3Spacing.small),
-        horizontalArrangement = Arrangement.spacedBy(M3Spacing.small)
-    ) {
-        M3FilledButton(
-            onClick = onPlayAll,
-            icon = Icons.Default.PlayArrow,
-            modifier = Modifier.weight(1f)
-        ) {
-            Text("播放全部")
-        }
-        M3FilledButton(
-            onClick = onShuffle,
-            icon = Icons.Default.Shuffle,
-            modifier = Modifier.weight(1f)
-        ) {
-            Text("随机播放")
-        }
-    }
-    Spacer(modifier = Modifier.height(M3Spacing.small))
-}
+// ════════════════════════════════════════════════════════════════
+// Header — Spotify style
+// ════════════════════════════════════════════════════════════════
 
 @Composable
 private fun PlaylistHeader(
-    playlist: com.cycling.domain.model.Playlist?,
+    name: String,
     songCount: Int
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(M3Spacing.medium),
+            .padding(horizontal = 16.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        // Cover
         Box(
             modifier = Modifier
-                .size(M3ComponentSize.mediaCardWidth)
-                .clip(M3Shapes.cornerLarge),
+                .size(200.dp)
+                .clip(RoundedCornerShape(8.dp)),
             contentAlignment = Alignment.Center
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                    .background(SpotifyColors.GridBackground),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.QueueMusic,
                     contentDescription = null,
-                    modifier = Modifier.size(80.dp),
-                    tint = M3SemanticColors.Teal
+                    modifier = Modifier.size(72.dp),
+                    tint = SpotifyColors.TextSecondary
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(M3Spacing.medium))
+        Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = playlist?.name ?: "未知播放列表",
-            style = MaterialTheme.typography.headlineLarge,
-            color = MaterialTheme.colorScheme.onBackground,
+            text = name,
+            color = SpotifyColors.TextPrimary,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
 
-        Spacer(modifier = Modifier.height(M3Spacing.small))
+        Spacer(modifier = Modifier.height(4.dp))
 
         Text(
             text = "$songCount 首歌曲",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = SpotifyColors.TextTertiary,
+            fontSize = 13.sp
         )
 
-        Spacer(modifier = Modifier.height(M3Spacing.medium))
+        Spacer(modifier = Modifier.height(8.dp))
     }
 }
 
+// ════════════════════════════════════════════════════════════════
+// Play Action Row — Spotify style (green play + shuffle)
+// ════════════════════════════════════════════════════════════════
+
 @Composable
-private fun M3SongListItemWithMenu(
+private fun PlayActionRow(
+    onPlayAll: () -> Unit,
+    onShuffle: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // Play All — green filled
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(44.dp)
+                .clip(RoundedCornerShape(22.dp))
+                .background(SpotifyGreen)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onPlayAll
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.PlayArrow,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "播放全部",
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+
+        // Shuffle — outlined style
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(44.dp)
+                .clip(RoundedCornerShape(22.dp))
+                .background(SpotifyColors.GridBackground)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onShuffle
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Shuffle,
+                    contentDescription = null,
+                    tint = SpotifyColors.TextPrimary,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "随机播放",
+                    color = SpotifyColors.TextPrimary,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+    }
+    Spacer(modifier = Modifier.height(4.dp))
+}
+
+// ════════════════════════════════════════════════════════════════
+// Song Item — Spotify style
+// ════════════════════════════════════════════════════════════════
+
+@Composable
+private fun SongItem(
     song: Song,
     onSongClick: (Song) -> Unit,
-    onRemoveSong: (Long) -> Unit,
-    modifier: Modifier = Modifier
+    onRemoveSong: (Long) -> Unit
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
-    Box(modifier = modifier) {
-        M3ListItemWithAvatar(
-            headlineText = song.title,
-            supportingText = formatDuration(song.duration),
-            onClick = { onSongClick(song) },
-            avatarContent = {
+    Box {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = { onSongClick(song) }
+                )
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Cover
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(4.dp)),
+                contentAlignment = Alignment.Center
+            ) {
                 if (song.albumArt != null) {
                     AsyncImage(
                         model = song.albumArt,
@@ -277,45 +343,56 @@ private fun M3SongListItemWithMenu(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                            .background(SpotifyColors.GridBackground),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.MusicNote,
                             contentDescription = null,
-                            modifier = Modifier.size(24.dp),
-                            tint = M3SemanticColors.Red
+                            modifier = Modifier.size(22.dp),
+                            tint = SpotifyColors.TextTertiary
                         )
                     }
                 }
-            },
-            trailingContent = {
-                IconButton(onClick = { menuExpanded = true }) {
-                    Icon(
-                        imageVector = Icons.Default.MoreVert,
-                        contentDescription = "更多选项",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
             }
-        )
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            // Info
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = song.title,
+                    color = SpotifyColors.TextPrimary,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = formatDuration(song.duration),
+                    color = SpotifyColors.TextTertiary,
+                    fontSize = 12.sp
+                )
+            }
+
+            // More button
+            IconButton(onClick = { menuExpanded = true }) {
+                Icon(
+                    imageVector = Icons.Default.MoreVert,
+                    contentDescription = "更多选项",
+                    tint = SpotifyColors.TextSecondary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
 
         DropdownMenu(
             expanded = menuExpanded,
             onDismissRequest = { menuExpanded = false },
-            modifier = Modifier
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.surface),
-            offset = DpOffset(x = (-8).dp, y = 8.dp)
+            containerColor = SpotifyColors.Surface
         ) {
             DropdownMenuItem(
-                text = {
-                    Text(
-                        text = "从播放列表移除",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                },
+                text = { Text("从播放列表移除", color = Color(0xFFFF6B6B)) },
                 onClick = {
                     onRemoveSong(song.id)
                     menuExpanded = false

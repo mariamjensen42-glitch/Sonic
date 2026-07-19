@@ -123,18 +123,13 @@ class SongRepositoryImpl @Inject constructor(
             }
         }
         
-        val totalSongs = songDao.getSongCount()
-        val hrCount = songDao.getHrCount()
-        val sqCount = songDao.getSqCount()
-        val hqCount = songDao.getHqCount()
-        val othersCount = songDao.getOthersCount()
-        
+        val stats = songDao.getLibraryStats()
         LibraryStats(
-            totalSongs = totalSongs,
-            hrCount = hrCount,
-            sqCount = sqCount,
-            hqCount = hqCount,
-            othersCount = othersCount
+            totalSongs = stats.totalSongs,
+            hrCount = stats.hrCount,
+            sqCount = stats.sqCount,
+            hqCount = stats.hqCount,
+            othersCount = stats.othersCount
         )
     }
 

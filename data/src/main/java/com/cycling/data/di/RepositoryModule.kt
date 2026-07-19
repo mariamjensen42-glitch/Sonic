@@ -12,7 +12,6 @@ import com.cycling.data.repository.ScanProgressRepositoryImpl
 import com.cycling.data.repository.SearchHistoryRepositoryImpl
 import com.cycling.data.repository.SongRepositoryImpl
 import com.cycling.data.repository.SongsPreferencesRepositoryImpl
-import com.cycling.data.repository.ThemeRepositoryImpl
 import com.cycling.domain.repository.AiRepository
 import com.cycling.domain.repository.AlbumRepository
 import com.cycling.domain.repository.ArtistRepository
@@ -25,7 +24,6 @@ import com.cycling.domain.repository.ScanProgressRepository
 import com.cycling.domain.repository.SearchHistoryRepository
 import com.cycling.domain.repository.SongRepository
 import com.cycling.domain.repository.SongsPreferencesRepository
-import com.cycling.domain.repository.ThemeRepository
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -71,12 +69,6 @@ abstract class RepositoryModule {
     abstract fun bindScanProgressRepository(
         scanProgressRepositoryImpl: ScanProgressRepositoryImpl
     ): ScanProgressRepository
-
-    @Binds
-    @Singleton
-    abstract fun bindThemeRepository(
-        themeRepositoryImpl: ThemeRepositoryImpl
-    ): ThemeRepository
 
     @Binds
     @Singleton

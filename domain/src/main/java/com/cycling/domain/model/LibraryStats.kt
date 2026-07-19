@@ -19,9 +19,3 @@ enum class AudioQuality {
     HQ,
     OTHERS
 }
-
-data class QualityStatItem(
-    val quality: AudioQuality,
-    val count: Int,
-    val percentage: Float
-)

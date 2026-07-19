@@ -63,18 +63,6 @@ interface SongDao {
     @Query("UPDATE songs SET lastPlayedAt = :lastPlayedAt WHERE id = :songId")
     suspend fun updateLastPlayedAt(songId: Long, lastPlayedAt: Long)
 
-    @Query("SELECT COUNT(*) FROM songs WHERE bitrate > 1411")
-    suspend fun getHrCount(): Int
-
-    @Query("SELECT COUNT(*) FROM songs WHERE bitrate = 1411")
-    suspend fun getSqCount(): Int
-
-    @Query("SELECT COUNT(*) FROM songs WHERE bitrate >= 320 AND bitrate < 1411")
-    suspend fun getHqCount(): Int
-
-    @Query("SELECT COUNT(*) FROM songs WHERE bitrate < 320 OR bitrate = 0")
-    suspend fun getOthersCount(): Int
-
     @Query("SELECT * FROM songs WHERE bitrate = 0")
     suspend fun getSongsWithoutBitrate(): List<SongEntity>
 

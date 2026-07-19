@@ -23,21 +23,22 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cycling.core.ui.components.M3ArtistCard
-import com.cycling.core.ui.components.M3LargeTopAppBar
+import com.cycling.core.ui.components.M3DetailTopAppBar
 import com.cycling.core.ui.theme.M3ComponentSize
 import com.cycling.core.ui.theme.M3Spacing
+import com.cycling.core.ui.theme.SpotifyColors
+import androidx.compose.ui.res.painterResource
+import com.cycling.presentation.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,9 +50,6 @@ fun ArtistsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val gridState = rememberLazyGridState()
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(
-        state = rememberTopAppBarState()
-    )
 
     LaunchedEffect(Unit) {
         viewModel.uiEffect.collect { effect ->
@@ -62,17 +60,20 @@ fun ArtistsScreen(
     }
 
     Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            M3LargeTopAppBar(
+            M3DetailTopAppBar(
                 title = "歌手",
-                scrollBehavior = scrollBehavior,
                 navigationIcon = Icons.AutoMirrored.Filled.ArrowBack,
                 navigationIconContentDescription = "返回",
-                onNavigationClick = onNavigateBack
+                onNavigationClick = onNavigateBack,
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = SpotifyColors.Background,
+                    titleContentColor = SpotifyColors.TextPrimary,
+                    navigationIconContentColor = SpotifyColors.TextPrimary
+                )
             )
         },
-        containerColor = MaterialTheme.colorScheme.surface
+        containerColor = SpotifyColors.Background
     ) { paddingValues ->
         Box(modifier = Modifier.padding(paddingValues)) {
             if (uiState.isLoading) {
@@ -89,21 +90,21 @@ fun ArtistsScreen(
                 ) {
                     Spacer(modifier = Modifier.weight(1f))
                     Icon(
-                        imageVector = Icons.Outlined.Person,
+                        painter = painterResource(id = R.drawable.ic_artists),
                         contentDescription = null,
                         modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        tint = SpotifyColors.TextTertiary
                     )
                     Spacer(modifier = Modifier.height(M3Spacing.medium))
                     Text(
                         text = "暂无歌手",
                         style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = SpotifyColors.TextPrimary
                     )
                     Text(
                         text = "您的音乐库中没有歌手信息",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = SpotifyColors.TextSecondary
                     )
                     Spacer(modifier = Modifier.weight(1f))
                 }

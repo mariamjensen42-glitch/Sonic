@@ -5,10 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.cycling.domain.repository.PlayerRepository
 import com.cycling.domain.usecase.GetAllAlbumsUseCase
 import com.cycling.domain.usecase.GetAllArtistsUseCase
-import com.cycling.domain.usecase.GetAllSongsUseCase
-import com.cycling.domain.usecase.GetFavoriteSongsUseCase
-import com.cycling.domain.usecase.GetMostPlayedSongsUseCase
-import com.cycling.domain.usecase.GetRecentlyPlayedSongsUseCase
+import com.cycling.domain.usecase.SongQueryUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,12 +21,9 @@ import javax.inject.Inject
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
-    private val getAllSongsUseCase: GetAllSongsUseCase,
+    private val songQueryUseCase: SongQueryUseCase,
     private val getAllAlbumsUseCase: GetAllAlbumsUseCase,
     private val getAllArtistsUseCase: GetAllArtistsUseCase,
-    private val getFavoriteSongsUseCase: GetFavoriteSongsUseCase,
-    private val getMostPlayedSongsUseCase: GetMostPlayedSongsUseCase,
-    private val getRecentlyPlayedSongsUseCase: GetRecentlyPlayedSongsUseCase,
     private val playerRepository: PlayerRepository
 ) : ViewModel() {
 
@@ -82,10 +76,6 @@ class HomeViewModel @Inject constructor(
                 Timber.d("handleIntent: NavigateToArtists")
                 navigateTo(HomeEffect.NavigateToArtists)
             }
-            is HomeIntent.NavigateToPlaylists -> {
-                Timber.d("handleIntent: NavigateToPlaylists")
-                navigateTo(HomeEffect.NavigateToPlaylists)
-            }
             is HomeIntent.NavigateToSettings -> {
                 Timber.d("handleIntent: NavigateToSettings")
                 navigateTo(HomeEffect.NavigateToSettings)
@@ -101,22 +91,6 @@ class HomeViewModel @Inject constructor(
             is HomeIntent.NavigateToFolders -> {
                 Timber.d("handleIntent: NavigateToFolders")
                 navigateTo(HomeEffect.NavigateToFolders)
-            }
-            is HomeIntent.PlayPause -> {
-                Timber.d("handleIntent: PlayPause")
-                playerRepository.playPause()
-            }
-            is HomeIntent.MiniPlayerClick -> {
-                Timber.d("handleIntent: MiniPlayerClick")
-                handleMiniPlayerClick()
-            }
-        }
-    }
-    
-    private fun handleMiniPlayerClick() {
-        viewModelScope.launch {
-            playerRepository.getCurrentState().currentSong?.let { song ->
-                _uiEffect.emit(HomeEffect.NavigateToPlayer(song.id))
             }
         }
     }
@@ -134,7 +108,7 @@ class HomeViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true, error = null) }
             
             launch {
-                getAllSongsUseCase().collectLatest { songs ->
+                songQueryUseCase.all().collectLatest { songs ->
                     Timber.d("loadData: loaded ${songs.size} songs")
                     _uiState.update { state ->
                         state.copy(
@@ -169,7 +143,7 @@ class HomeViewModel @Inject constructor(
             }
 
             launch {
-                getFavoriteSongsUseCase().collectLatest { favorites ->
+                songQueryUseCase.favorites().collectLatest { favorites ->
                     Timber.d("loadData: loaded ${favorites.size} favorites")
                     _uiState.update { state ->
                         state.copy(favoriteSongs = favorites.take(10))
@@ -180,7 +154,7 @@ class HomeViewModel @Inject constructor(
             }
 
             launch {
-                getMostPlayedSongsUseCase().collectLatest { mostPlayed ->
+                songQueryUseCase.mostPlayed().collectLatest { mostPlayed ->
                     Timber.d("loadData: loaded ${mostPlayed.size} mostPlayed")
                     _uiState.update { state ->
                         state.copy(mostPlayed = mostPlayed.take(10))
@@ -191,7 +165,7 @@ class HomeViewModel @Inject constructor(
             }
 
             launch {
-                getRecentlyPlayedSongsUseCase().collectLatest { recentlyPlayed ->
+                songQueryUseCase.recentlyPlayed().collectLatest { recentlyPlayed ->
                     Timber.d("loadData: loaded ${recentlyPlayed.size} recentlyPlayed")
                     _uiState.update { state ->
                         state.copy(recentlyPlayed = recentlyPlayed.take(10))
@@ -211,6 +185,7 @@ class HomeViewModel @Inject constructor(
 
     private fun handleSongClick(song: com.cycling.domain.model.Song) {
         viewModelScope.launch {
+            playerRepository.playSong(song)
             _uiEffect.emit(HomeEffect.NavigateToPlayer(song.id))
         }
     }
