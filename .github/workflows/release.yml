@@ -24,7 +24,7 @@ jobs:
 
       - name: Generate CI keystore
         run: |
-          keytool -genkey -v -keystore ci-release.keystore \
+          keytool -genkey -v -keystore app/ci-release.keystore \
             -alias ci -keyalg RSA -keysize 2048 -validity 10000 \
             -storepass ci123456 -keypass ci123456 \
             -dname "CN=Sonic CI, OU=CI, O=Sonic, L=Unknown, ST=Unknown, C=CN"
