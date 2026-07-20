@@ -224,6 +224,7 @@ class PlayerViewModel @Inject constructor(
         val currentSong = _uiState.value.currentSong ?: return
         viewModelScope.launch {
             val newFavoriteStatus = songRepository.toggleFavorite(currentSong.id)
+            playerRepository.setSongFavorite(currentSong.id, newFavoriteStatus)
             _uiState.update { it.copy(isFavorite = newFavoriteStatus) }
             val message = if (newFavoriteStatus) R.string.player_added_to_favorites else R.string.player_removed_from_favorites
             _uiEffect.emit(PlayerEffect.ShowToast(message))

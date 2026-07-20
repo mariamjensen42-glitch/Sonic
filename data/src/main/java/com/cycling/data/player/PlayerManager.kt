@@ -559,6 +559,16 @@ class PlayerManager @Inject constructor(
 
     override fun getCurrentState(): PlayerState = _playerState.value
 
+    override fun setSongFavorite(songId: Long, isFavorite: Boolean) {
+        playbackQueue.indexOfFirst { it.id == songId }.takeIf { it >= 0 }?.let { index ->
+            playbackQueue[index] = playbackQueue[index].copy(isFavorite = isFavorite)
+        }
+        val current = _playerState.value.currentSong
+        if (current?.id == songId) {
+            _playerState.update { it.copy(currentSong = current.copy(isFavorite = isFavorite)) }
+        }
+    }
+
     fun release() {
         mediaController?.removeListener(playerListener)
         controllerFuture?.let {
