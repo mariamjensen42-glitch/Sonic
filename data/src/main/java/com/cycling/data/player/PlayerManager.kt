@@ -33,6 +33,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.io.ByteArrayOutputStream
 import javax.inject.Inject
@@ -170,7 +171,7 @@ class PlayerManager @Inject constructor(
         }
     }
 
-    private fun createMediaItem(song: Song): MediaItem {
+    private suspend fun createMediaItem(song: Song): MediaItem {
         val metadataBuilder = MediaMetadata.Builder()
             .setTitle(song.title)
             .setArtist(song.artist)
@@ -181,20 +182,22 @@ class PlayerManager @Inject constructor(
             val cached = albumArtCache.get(cacheKey)
             if (cached != null) {
                 metadataBuilder.setArtworkData(cached, MediaMetadata.PICTURE_TYPE_FRONT_COVER)
-                Timber.d("createMediaItem: cached artwork for ${song.title}")
             } else {
-                try {
-                    val bitmap = loadAlbumArtBitmap(artworkUri, song.path)
-                    if (bitmap != null) {
-                        val artworkData = bitmapToByteArray(bitmap)
-                        albumArtCache.put(cacheKey, artworkData)
-                        metadataBuilder.setArtworkData(artworkData, MediaMetadata.PICTURE_TYPE_FRONT_COVER)
-                        Timber.d("createMediaItem: loaded artwork for ${song.title}, size=${artworkData.size}")
-                    } else {
-                        Timber.d("createMediaItem: failed to load bitmap for ${song.title}")
+                val artworkData = withContext(Dispatchers.IO) {
+                    try {
+                        val bitmap = loadAlbumArtBitmap(artworkUri, song.path)
+                        if (bitmap != null) {
+                            val data = bitmapToByteArray(bitmap)
+                            albumArtCache.put(cacheKey, data)
+                            data
+                        } else null
+                    } catch (e: Exception) {
+                        Timber.e(e, "createMediaItem: error loading artwork for ${song.title}")
+                        null
                     }
-                } catch (e: Exception) {
-                    Timber.e(e, "createMediaItem: error loading artwork for ${song.title}")
+                }
+                if (artworkData != null) {
+                    metadataBuilder.setArtworkData(artworkData, MediaMetadata.PICTURE_TYPE_FRONT_COVER)
                 }
             }
         }
@@ -272,39 +275,39 @@ class PlayerManager @Inject constructor(
     }
 
     override fun playSong(song: Song, queue: List<Song>) {
-        val player = mediaController ?: return
+        scope.launch {
+            val player = mediaController ?: return@launch
 
-        Timber.d("playSong: ${song.title} by ${song.artist}, queueSize=${queue.size}")
-
-        if (queue.isNotEmpty()) {
-            playbackQueue = queue.toMutableList()
-            currentIndex = queue.indexOf(song)
-        } else {
-            if (!playbackQueue.contains(song)) {
-                playbackQueue.add(song)
+            if (queue.isNotEmpty()) {
+                playbackQueue = queue.toMutableList()
+                currentIndex = queue.indexOf(song)
+            } else {
+                if (!playbackQueue.contains(song)) {
+                    playbackQueue.add(song)
+                }
+                currentIndex = playbackQueue.indexOf(song)
             }
-            currentIndex = playbackQueue.indexOf(song)
-        }
 
-        val mediaItem = createMediaItem(song)
-        player.setMediaItem(mediaItem)
-        player.prepare()
-        player.playWhenReady = true
+            val mediaItem = createMediaItem(song)
+            player.setMediaItem(mediaItem)
+            player.prepare()
+            player.playWhenReady = true
 
-        currentSongId = song.id
-        hasCountedPlay = false
+            currentSongId = song.id
+            hasCountedPlay = false
 
-        scope.launch(Dispatchers.IO) {
-            songRepository.updateLastPlayedAt(song.id)
-        }
+            launch(Dispatchers.IO) {
+                songRepository.updateLastPlayedAt(song.id)
+            }
 
-        _playerState.update {
-            it.copy(
-                currentSong = song,
-                playbackQueue = playbackQueue.toList(),
-                queueIndex = currentIndex,
-                isPlaying = true
-            )
+            _playerState.update {
+                it.copy(
+                    currentSong = song,
+                    playbackQueue = playbackQueue.toList(),
+                    queueIndex = currentIndex,
+                    isPlaying = true
+                )
+            }
         }
     }
 
@@ -373,30 +376,32 @@ class PlayerManager @Inject constructor(
     }
 
     private fun playSongAtIndex(index: Int) {
-        val player = mediaController ?: return
-        if (index !in playbackQueue.indices) return
+        scope.launch {
+            val player = mediaController ?: return@launch
+            if (index !in playbackQueue.indices) return@launch
 
-        currentIndex = index
-        val song = playbackQueue[index]
+            currentIndex = index
+            val song = playbackQueue[index]
 
-        val mediaItem = createMediaItem(song)
-        player.setMediaItem(mediaItem)
-        player.prepare()
-        player.playWhenReady = true
+            val mediaItem = createMediaItem(song)
+            player.setMediaItem(mediaItem)
+            player.prepare()
+            player.playWhenReady = true
 
-        currentSongId = song.id
-        hasCountedPlay = false
+            currentSongId = song.id
+            hasCountedPlay = false
 
-        scope.launch(Dispatchers.IO) {
-            songRepository.updateLastPlayedAt(song.id)
-        }
+            launch(Dispatchers.IO) {
+                songRepository.updateLastPlayedAt(song.id)
+            }
 
-        _playerState.update {
-            it.copy(
-                currentSong = song,
-                queueIndex = index,
-                isPlaying = true
-            )
+            _playerState.update {
+                it.copy(
+                    currentSong = song,
+                    queueIndex = index,
+                    isPlaying = true
+                )
+            }
         }
     }
 
