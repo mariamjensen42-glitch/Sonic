@@ -31,6 +31,8 @@ interface PlayerRepository {
     fun removeFromQueue(index: Int)
     
     fun clearQueue()
-    
+
+    fun setSongFavorite(songId: Long, isFavorite: Boolean)
+
     fun getCurrentState(): PlayerState
 }
