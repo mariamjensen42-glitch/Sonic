@@ -16,6 +16,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import com.cycling.data.store.PlaybackStateStore
 import com.cycling.domain.model.PlayerState
 import com.cycling.domain.model.RepeatMode
 import com.cycling.domain.model.Song
@@ -44,7 +45,8 @@ import androidx.core.net.toUri
 @OptIn(UnstableApi::class)
 class PlayerManager @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val songRepository: SongRepository
+    private val songRepository: SongRepository,
+    private val playbackStateStore: PlaybackStateStore
 ) : PlayerRepository {
     private val _playerState = MutableStateFlow(PlayerState())
     override val playerState: StateFlow<PlayerState> = _playerState.asStateFlow()
@@ -98,6 +100,7 @@ class PlayerManager @Inject constructor(
             mediaController?.addListener(playerListener)
 
             startProgressUpdateLoop()
+            restorePlaybackState()
             Timber.d("Connected to PlayerService successfully")
             true
         } catch (e: Exception) {
@@ -106,12 +109,66 @@ class PlayerManager @Inject constructor(
         }
     }
 
+    private suspend fun restorePlaybackState() {
+        val savedState = playbackStateStore.getSavedState() ?: return
+        Timber.d("restorePlaybackState: restoring queue of ${savedState.queueSongIds.size} songs, index=${savedState.currentIndex}")
+
+        val songs = savedState.queueSongIds.mapNotNull { id ->
+            songRepository.getSongById(id)
+        }
+        if (songs.isEmpty()) {
+            Timber.d("restorePlaybackState: no songs found, clearing saved state")
+            playbackStateStore.clear()
+            return
+        }
+
+        val validIndex = savedState.currentIndex.coerceIn(0, songs.size - 1)
+        playbackQueue = songs.toMutableList()
+        currentIndex = validIndex
+        _playerState.update {
+            it.copy(
+                repeatMode = savedState.repeatMode,
+                shuffleMode = savedState.shuffleMode
+            )
+        }
+
+        val song = songs[validIndex]
+        val player = mediaController ?: return
+        val mediaItem = createMediaItem(song)
+        player.setMediaItem(mediaItem)
+        player.prepare()
+        if (savedState.playbackPosition > 0) {
+            player.seekTo(savedState.playbackPosition)
+        }
+        if (savedState.wasPlaying) {
+            player.playWhenReady = true
+        }
+
+        currentSongId = song.id
+        _playerState.update {
+            it.copy(
+                currentSong = song,
+                playbackQueue = playbackQueue.toList(),
+                queueIndex = validIndex,
+                playbackPosition = savedState.playbackPosition,
+                isPlaying = savedState.wasPlaying
+            )
+        }
+        Timber.d("restorePlaybackState: restored song='${song.title}' position=${savedState.playbackPosition} playing=${savedState.wasPlaying}")
+    }
+
     private fun startProgressUpdateLoop() {
         if (progressLoopJob?.isActive == true) return
         progressLoopJob = scope.launch {
+            var lastSavedPosition = -1L
             while (isActive) {
                 updatePlaybackPosition()
                 checkPlayProgress()
+                val pos = mediaController?.currentPosition ?: 0L
+                if (pos > 0 && kotlin.math.abs(pos - lastSavedPosition) >= 5000) {
+                    launch { playbackStateStore.savePlaybackPosition(pos) }
+                    lastSavedPosition = pos
+                }
                 kotlinx.coroutines.delay(1000)
             }
         }
@@ -308,6 +365,8 @@ class PlayerManager @Inject constructor(
                     isPlaying = true
                 )
             }
+
+            launch { playbackStateStore.saveQueue(playbackQueue.map { it.id }, currentIndex) }
         }
     }
 
@@ -319,6 +378,9 @@ class PlayerManager @Inject constructor(
         } else {
             Timber.d("playPause: resuming playback")
             player.play()
+        }
+        scope.launch {
+            playbackStateStore.saveWasPlaying(player.isPlaying)
         }
     }
 
@@ -393,23 +455,28 @@ class PlayerManager @Inject constructor(
                     isPlaying = true
                 )
             }
+
+            launch { playbackStateStore.saveQueue(playbackQueue.map { it.id }, currentIndex) }
         }
     }
 
     override fun setRepeatMode(repeatMode: RepeatMode) {
         Timber.d("setRepeatMode: $repeatMode")
         _playerState.update { it.copy(repeatMode = repeatMode) }
+        scope.launch { playbackStateStore.saveRepeatMode(repeatMode) }
     }
 
     override fun setShuffleMode(shuffle: Boolean) {
         Timber.d("setShuffleMode: $shuffle")
         _playerState.update { it.copy(shuffleMode = shuffle) }
+        scope.launch { playbackStateStore.saveShuffleMode(shuffle) }
     }
 
     override fun addToQueue(song: Song) {
         Timber.d("addToQueue: ${song.title}")
         playbackQueue.add(song)
         _playerState.update { it.copy(playbackQueue = playbackQueue.toList()) }
+        scope.launch { playbackStateStore.saveQueue(playbackQueue.map { it.id }, currentIndex) }
     }
 
     override fun playNext(song: Song) {
@@ -424,6 +491,7 @@ class PlayerManager @Inject constructor(
         playbackQueue.add(insertIndex, song)
         
         _playerState.update { it.copy(playbackQueue = playbackQueue.toList()) }
+        scope.launch { playbackStateStore.saveQueue(playbackQueue.map { it.id }, currentIndex) }
     }
 
     override fun moveQueueItem(fromIndex: Int, toIndex: Int) {
@@ -453,6 +521,7 @@ class PlayerManager @Inject constructor(
                 queueIndex = currentIndex
             )
         }
+        scope.launch { playbackStateStore.saveQueue(playbackQueue.map { it.id }, currentIndex) }
     }
 
     override fun removeFromQueue(index: Int) {
@@ -470,9 +539,12 @@ class PlayerManager @Inject constructor(
                 Timber.d("removeFromQueue: queue is now empty, stopping playback")
                 player.stop()
                 _playerState.update { PlayerState() }
+                scope.launch { playbackStateStore.clear() }
+                return
             }
         }
         _playerState.update { it.copy(playbackQueue = playbackQueue.toList()) }
+        scope.launch { playbackStateStore.saveQueue(playbackQueue.map { it.id }, currentIndex) }
     }
 
     override fun clearQueue() {
@@ -482,6 +554,7 @@ class PlayerManager @Inject constructor(
         currentIndex = -1
         player.stop()
         _playerState.update { PlayerState() }
+        scope.launch { playbackStateStore.clear() }
     }
 
     override fun getCurrentState(): PlayerState = _playerState.value
