@@ -351,16 +351,7 @@ class PlayerManager @Inject constructor(
     }
 
     override fun skipToPrevious() {
-        val player = mediaController ?: return
         if (playbackQueue.isEmpty()) return
-
-        Timber.d("skipToPrevious: currentIndex=$currentIndex, position=${player.currentPosition}")
-
-        if (player.currentPosition > 3000) {
-            Timber.d("skipToPrevious: seeking to beginning (position > 3000ms)")
-            player.seekTo(0)
-            return
-        }
 
         val prevIndex = if (_playerState.value.shuffleMode) {
             playbackQueue.indices.random()
