@@ -49,7 +49,7 @@ class PlayerViewModel @Inject constructor(
                         lyrics = if (songChanged) null else prev.lyrics,
                         isLoadingLyrics = if (songChanged) false else prev.isLoadingLyrics,
                         hasLyrics = if (songChanged) false else prev.hasLyrics,
-                        isFavorite = currentSong?.isFavorite ?: false
+                        isFavorite = if (currentSong?.id != null && currentSong.id == prev.currentSong?.id) prev.isFavorite else currentSong?.isFavorite ?: false
                     )
                 }
 
