@@ -28,4 +28,10 @@ See: `.planning/PROJECT.md` (updated 2026-07-23)
 - LyricsLineItem: scale/alpha animations, blur effect, combinedClickable
 - SyncedLineText: translation support, Column layout
 - String.kt: added isDevanagari()
-- Next: Phase 3 — Tests Migration
+- Quick task: Home screen fixes — QuickPlayItem thumbnails, GreetingSection subtitle, DiscoverSection album art, stringResource migration
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 0723-home | Fix Home screen — thumbnails, subtitle, discover bg | 2026-07-23 | baffac9 | [quick/20260723-home-screen-fixes/](./quick/20260723-home-screen-fixes/) |
