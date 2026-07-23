@@ -35,24 +35,20 @@
 **Mode:** mvp
 
 **Requirements:**
-- MIGR-03a — PieChart
-- MIGR-03b — PlaylistPickerDialog
-- MIGR-03c — SongComponents
+- MIGR-03a ✓ — PieChart (already ported)
+- MIGR-03b ✓ — PlaylistPickerDialog (already ported)
+- MIGR-03c ✓ — SongComponents (already ported)
 - MIGR-04a — Karaoke lyrics components
 - MIGR-04b — Basic lyrics components
 
 **Success Criteria:**
-1. PieChart renders correctly in library stats view
-2. PlaylistPickerDialog opens, shows playlists, allows adding songs
-3. SongComponents render song items with consistent styling
-4. Karaoke lyrics display with syllable-level highlighting during playback
-5. Basic lyrics components render synced lines correctly
-6. All components compile on both Android and Desktop targets
+1. Karaoke lyrics display with syllable-level highlighting during playback
+2. Basic lyrics components render synced lines correctly
+3. All components compile on both Android and Desktop targets
 
 **Plans:**
-1. Port shared components (PieChart, PlaylistPickerDialog, SongComponents)
-2. Port karaoke lyrics components (BreathIndicator, LineText, LyricsLayout)
-3. Port basic lyrics components (LayoutContainer, LineItem, SyncedLineText)
+1. Backfill karaoke lyrics components (KaraokeLineText, KaraokeBreathingDots, KaraokeLyricsView, LyricsLayoutCalculator)
+2. Backfill basic lyrics components (LyricsLineItem, SyncedLineText)
 
 ---
 

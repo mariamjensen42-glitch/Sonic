@@ -11,7 +11,7 @@
 | Phase | Name | Status | Plans |
 |-------|------|--------|-------|
 | 1 | Screens Migration | ✓ Complete | 1/1 |
-| 2 | Components Migration | ○ Pending | 0/3 |
+| 2 | Components Migration | ◆ Planned | 0/2 |
 | 3 | Tests Migration | ○ Pending | 0/3 |
 
 ## Project Reference
@@ -23,7 +23,6 @@ See: `.planning/PROJECT.md` (updated 2026-07-23)
 
 ## Last Session
 
-- Phase 1 executed: AlbumDetailScreen + PlaylistDetailScreen ported from backup
-- Both screens wired in AppNavGraph (replaced TODO stubs)
-- Adaptations: Koin DI, CMP resources, no Android-specific APIs
-- Next: Phase 2 — Components Migration
+- Phase 2 planned: backfill 6 lyrics UI components from backup stubs
+- Shared components (PieChart, PlaylistPickerDialog, SongComponents) confirmed already ported
+- Next: `/gsd-execute-phase 2`
