@@ -37,13 +37,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil3.compose.AsyncImage
+import com.cycling.sonic.core.ui.components.M3ArtworkImage
 import com.cycling.sonic.core.ui.components.M3DetailTopAppBar
 import com.cycling.sonic.presentation.components.PlaylistPickerDialog
 import com.cycling.sonic.presentation.components.SongMoreMenu
@@ -111,26 +110,12 @@ fun AlbumDetailScreen(
 
                         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                             Box(modifier = Modifier.size(230.dp), contentAlignment = Alignment.Center) {
-                                if (uiState.album?.albumArt != null) {
-                                    AsyncImage(
-                                        model = uiState.album?.albumArt,
-                                        contentDescription = null,
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentScale = ContentScale.Crop
-                                    )
-                                } else {
-                                    Box(
-                                        modifier = Modifier.fillMaxSize().background(Color(0xFF333333)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            painter = painterResource(Res.drawable.ic_album),
-                                            contentDescription = null,
-                                            modifier = Modifier.size(80.dp),
-                                            tint = Color.Gray
-                                        )
-                                    }
-                                }
+                                M3ArtworkImage(
+                                    artworkUrl = uiState.album?.albumArt,
+                                    contentDescription = null,
+                                    modifier = Modifier.fillMaxSize(),
+                                    fallback = { Icon(painter = painterResource(Res.drawable.ic_album), contentDescription = null, modifier = Modifier.size(80.dp), tint = Color.Gray) }
+                                )
                             }
                         }
 
@@ -178,14 +163,7 @@ fun AlbumDetailScreen(
                                     modifier = Modifier.size(32.dp).clip(RoundedCornerShape(5.dp)),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    if (uiState.album?.albumArt != null) {
-                                        AsyncImage(
-                                            model = uiState.album?.albumArt,
-                                            contentDescription = null,
-                                            modifier = Modifier.fillMaxSize(),
-                                            contentScale = ContentScale.Crop
-                                        )
-                                    }
+                                    M3ArtworkImage(artworkUrl = uiState.album?.albumArt, contentDescription = null, modifier = Modifier.fillMaxSize())
                                 }
 
                                 Spacer(modifier = Modifier.width(8.dp))
@@ -244,26 +222,12 @@ fun AlbumDetailScreen(
                                 modifier = Modifier.size(50.dp).padding(end = 10.dp).clip(RoundedCornerShape(6.dp)),
                                 contentAlignment = Alignment.Center
                             ) {
-                                if (song.albumArt != null) {
-                                    AsyncImage(
-                                        model = song.albumArt,
-                                        contentDescription = null,
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentScale = ContentScale.Crop
-                                    )
-                                } else {
-                                    Box(
-                                        modifier = Modifier.fillMaxSize().background(Color(0xFF333333)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            painter = painterResource(Res.drawable.ic_album),
-                                            contentDescription = null,
-                                            modifier = Modifier.size(24.dp),
-                                            tint = Color.Gray
-                                        )
-                                    }
-                                }
+                                M3ArtworkImage(
+                                    artworkUrl = song.albumArt,
+                                    contentDescription = null,
+                                    modifier = Modifier.fillMaxSize(),
+                                    fallback = { Icon(painter = painterResource(Res.drawable.ic_album), contentDescription = null, modifier = Modifier.size(24.dp), tint = Color.Gray) }
+                                )
                             }
 
                             Column {

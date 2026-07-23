@@ -49,8 +49,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.ContentScale
-import coil3.compose.AsyncImage
+import com.cycling.sonic.core.ui.components.M3ArtworkImage
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -133,28 +132,12 @@ fun PlayerScreen(
                 .clip(RoundedCornerShape(10.dp)),
             contentAlignment = Alignment.Center
         ) {
-            if (currentSong?.albumArt != null) {
-                AsyncImage(
-                    model = currentSong.albumArt,
-                    contentDescription = currentSong.title,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.3f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.MusicNote,
-                        contentDescription = null,
-                        modifier = Modifier.size(80.dp),
-                        tint = Color.White.copy(alpha = 0.6f)
-                    )
-                }
-            }
+            M3ArtworkImage(
+                artworkUrl = currentSong?.albumArt,
+                contentDescription = currentSong?.title,
+                modifier = Modifier.fillMaxSize(),
+                fallback = { Icon(imageVector = Icons.Default.MusicNote, contentDescription = null, modifier = Modifier.size(80.dp), tint = Color.White.copy(alpha = 0.6f)) }
+            )
         }
 
         // Info + Controls

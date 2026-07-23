@@ -43,7 +43,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil3.compose.AsyncImage
 import com.cycling.sonic.core.ui.components.M3ArtworkImage
 import com.cycling.sonic.core.ui.components.M3CircularProgressIndicator
 import com.cycling.sonic.core.ui.theme.SpotifyColors
@@ -362,13 +361,12 @@ private fun QuickPlayItem(
         horizontalArrangement = Arrangement.Start
     ) {
         Box(modifier = Modifier.size(56.dp)) {
-            if (album.albumArt != null) {
-                AsyncImage(model = album.albumArt, contentDescription = album.name, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-            } else {
-                Box(modifier = Modifier.fillMaxSize().background(SpotifyColors.SurfaceVariant), contentAlignment = Alignment.Center) {
-                    Icon(imageVector = Icons.Outlined.MusicNote, contentDescription = null, modifier = Modifier.size(24.dp), tint = SpotifyColors.TextSecondary)
-                }
-            }
+            M3ArtworkImage(
+                artworkUrl = album.albumArt,
+                contentDescription = album.name,
+                modifier = Modifier.fillMaxSize(),
+                fallback = { Icon(imageVector = Icons.Outlined.MusicNote, contentDescription = null, modifier = Modifier.size(24.dp), tint = SpotifyColors.TextSecondary) }
+            )
         }
         Text(
             modifier = Modifier.padding(start = 10.dp, end = 8.dp),
@@ -656,15 +654,12 @@ private fun DiscoverSection(
                         onClick = { onAlbumClick(album) }
                     )
             ) {
-                if (album.albumArt != null) {
-                    AsyncImage(model = album.albumArt, contentDescription = album.name, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(SpotifyColors.SurfaceVariant)
-                    )
-                }
+                M3ArtworkImage(
+                    artworkUrl = album.albumArt,
+                    contentDescription = album.name,
+                    modifier = Modifier.fillMaxSize(),
+                    fallback = { Box(modifier = Modifier.fillMaxSize().background(SpotifyColors.SurfaceVariant)) }
+                )
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
