@@ -6,7 +6,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.painter.Painter
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import coil3.compose.AsyncImage
 
@@ -23,6 +22,8 @@ fun M3ArtworkImage(
     if (artworkUrl != null) {
         AsyncImage(
             model = artworkUrl,
+            placeholder = placeholder,
+            error = error,
             contentDescription = contentDescription,
             modifier = modifier,
             contentScale = contentScale,
