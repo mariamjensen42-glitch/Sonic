@@ -301,20 +301,28 @@ fun PlayerScreen(
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Spacer(modifier = Modifier.width(M3Spacing.small))
-                            Box(
+                            M3ArtworkImage(
+                                artworkUrl = song.albumArt,
+                                contentDescription = null,
                                 modifier = Modifier
                                     .size(40.dp)
-                                    .clip(M3Shapes.cornerSmall)
-                                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.MusicNote,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
+                                    .clip(M3Shapes.cornerSmall),
+                                fallback = {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.MusicNote,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(20.dp),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            )
                             Spacer(modifier = Modifier.width(M3Spacing.small))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
