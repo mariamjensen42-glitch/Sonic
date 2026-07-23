@@ -23,9 +23,9 @@
 6. Screens compile and render on both Android and Desktop targets
 
 **Plans:**
-1. Port AlbumDetailContract + AlbumDetailViewModel + AlbumDetailScreen
-2. Port PlaylistDetailContract + PlaylistDetailViewModel + PlaylistDetailScreen
-3. Wire both screens in AppNavGraph (replace TODO stubs)
+1. [ ] 01-01-PLAN.md — Create AlbumDetailScreen.kt + PlaylistDetailScreen.kt, wire both in AppNavGraph
+
+> Note: AlbumDetailContract.kt, AlbumDetailViewModel.kt, PlaylistDetailContract.kt, and PlaylistDetailViewModel.kt were already ported prior to this phase. The plan creates the missing Screen composables and wires navigation.
 
 ---
 
@@ -87,8 +87,8 @@
 
 | Phase | Name | Requirements | Plans |
 |-------|------|-------------|-------|
-| 1 | Screens Migration | MIGR-01, MIGR-02, MIGR-08 | 3 |
+| 1 | Screens Migration | MIGR-01, MIGR-02, MIGR-08 | 1 |
 | 2 | Components Migration | MIGR-03a, MIGR-03b, MIGR-03c, MIGR-04a, MIGR-04b | 3 |
 | 3 | Tests Migration | MIGR-05, MIGR-06, MIGR-07 | 3 |
 
-**Total: 3 phases, 11 requirements, 9 plans**
+**Total: 3 phases, 11 requirements, 7 plans**
