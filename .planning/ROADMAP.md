@@ -10,11 +10,13 @@
 **Mode:** mvp
 
 **Requirements:**
+
 - MIGR-01 — Port AlbumDetailScreen
 - MIGR-02 — Port PlaylistDetailScreen
 - MIGR-08 — Wire entries in AppNavGraph
 
 **Success Criteria:**
+
 1. User can navigate to AlbumDetailScreen from album list and see album info
 2. User can navigate to PlaylistDetailScreen from playlist list and see playlist songs
 3. Album detail shows album art, title, artist, song list with play actions
@@ -23,6 +25,7 @@
 6. Screens compile and render on both Android and Desktop targets
 
 **Plans:**
+
 1. [ ] 01-01-PLAN.md — Create AlbumDetailScreen.kt + PlaylistDetailScreen.kt, wire both in AppNavGraph
 
 > Note: AlbumDetailContract.kt, AlbumDetailViewModel.kt, PlaylistDetailContract.kt, and PlaylistDetailViewModel.kt were already ported prior to this phase. The plan creates the missing Screen composables and wires navigation.
@@ -35,6 +38,7 @@
 **Mode:** mvp
 
 **Requirements:**
+
 - MIGR-03a ✓ — PieChart (already ported)
 - MIGR-03b ✓ — PlaylistPickerDialog (already ported)
 - MIGR-03c ✓ — SongComponents (already ported)
@@ -42,11 +46,13 @@
 - MIGR-04b — Basic lyrics components
 
 **Success Criteria:**
+
 1. Karaoke lyrics display with syllable-level highlighting during playback
 2. Basic lyrics components render synced lines correctly
 3. All components compile on both Android and Desktop targets
 
 **Plans:**
+
 1. Backfill karaoke lyrics components (KaraokeLineText, KaraokeBreathingDots, KaraokeLyricsView, LyricsLayoutCalculator)
 2. Backfill basic lyrics components (LyricsLineItem, SyncedLineText)
 
@@ -58,11 +64,13 @@
 **Mode:** mvp
 
 **Requirements:**
+
 - MIGR-05 — TestDispatcherRule, SongFixture
 - MIGR-06 — ViewModel tests (SearchViewModelTest, SongsViewModelTest)
 - MIGR-07 — Domain tests (LrcParserTest, TimeUtilsTest, use case tests)
 
 **Success Criteria:**
+
 1. TestDispatcherRule compiles and correctly sets Main dispatcher for tests
 2. SongFixture creates test Song instances with default values
 3. LrcParserTest passes: LRC parsing works for standard formats
@@ -73,9 +81,23 @@
 8. `./gradlew test` succeeds with all migrated tests passing
 
 **Plans:**
+
 1. Port test infrastructure (TestDispatcherRule, SongFixture)
 2. Port domain tests (LrcParserTest, TimeUtilsTest, use case tests)
 3. Port ViewModel tests (SearchViewModelTest, SongsViewModelTest)
+
+### Phase 4: Scaffold+TopBar 统一布局组件
+
+**Goal:** Create reusable M3Scaffold layout wrapper and migrate all standard Scaffold screens to use it
+**Requirements**: PH4-01, PH4-02, PH4-03, PH4-04
+**Depends on:** Phase 3
+**Plans:** 3 plans
+
+Plans:
+
+- [ ] 04-01-PLAN.md — Create M3Scaffold.kt + migrate AlbumsScreen, ArtistsScreen (tracer)
+- [ ] 04-02-PLAN.md — Migrate SongsScreen, SettingsScreen (Pattern A remaining)
+- [ ] 04-03-PLAN.md — Migrate FolderScreen, AiInfoScreen (Pattern C)
 
 ---
 
@@ -86,5 +108,6 @@
 | 1 | Screens Migration | MIGR-01, MIGR-02, MIGR-08 | 1 |
 | 2 | Components Migration | MIGR-03a, MIGR-03b, MIGR-03c, MIGR-04a, MIGR-04b | 3 |
 | 3 | Tests Migration | MIGR-05, MIGR-06, MIGR-07 | 3 |
+| 4 | Scaffold+TopBar 统一布局组件 | PH4-01, PH4-02, PH4-03, PH4-04 | 3 |
 
-**Total: 3 phases, 11 requirements, 7 plans**
+**Total: 4 phases, 15 requirements, 10 plans**
