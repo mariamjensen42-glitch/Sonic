@@ -10,7 +10,7 @@
 
 | Phase | Name | Status | Plans |
 |-------|------|--------|-------|
-| 1 | Screens Migration | ○ Pending | 0/3 |
+| 1 | Screens Migration | ◆ Planned | 1/1 |
 | 2 | Components Migration | ○ Pending | 0/3 |
 | 3 | Tests Migration | ○ Pending | 0/3 |
 
@@ -23,7 +23,6 @@ See: `.planning/PROJECT.md` (updated 2026-07-23)
 
 ## Last Session
 
-- Project initialized with GSD workflow
-- Codebase mapped (`.planning/codebase/`)
-- Backup migration scope defined: 3 phases, 11 requirements
-- Next: `/gsd-plan-phase 1`
+- Phase 1 planned: 1 plan (screens migration)
+- Planner discovered Contract + ViewModel already ported; only Screen composables missing
+- Next: `/gsd-execute-phase 1`
