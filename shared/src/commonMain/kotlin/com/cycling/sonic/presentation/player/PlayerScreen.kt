@@ -22,10 +22,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DragHandle
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.DragHandle
+import androidx.compose.material.icons.outlined.MusicNote
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.sp
 import com.cycling.sonic.core.ui.theme.M3Shapes
 import com.cycling.sonic.core.ui.theme.M3Spacing
 import com.cycling.sonic.core.ui.theme.SpotifyColors
+import com.cycling.sonic.core.ui.theme.rememberDominantColor
 import com.cycling.sonic.domain.model.RepeatMode
 import com.cycling.sonic.domain.model.Song
 import org.jetbrains.compose.resources.painterResource
@@ -93,8 +94,12 @@ fun PlayerScreen(
     onNavigateToLyrics: () -> Unit = {},
     modifier: Modifier = Modifier,
     accentColor: Color = MaterialTheme.colorScheme.primary,
-    gradientStartColor: Color = accentColor
 ) {
+    val dominantColor = rememberDominantColor(
+        uiState.currentSong?.albumArt,
+        filePath = uiState.currentSong?.path,
+        SpotifyColors.Background
+    )
     val effectiveAccent = accentColor
     val showQueue = uiState.showQueue
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -110,7 +115,7 @@ fun PlayerScreen(
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    colors = listOf(gradientStartColor, Color.Black),
+                    colors = listOf(dominantColor, Color.Black),
                     startY = 100f
                 )
             )
@@ -136,7 +141,7 @@ fun PlayerScreen(
                 artworkUrl = currentSong?.albumArt,
                 contentDescription = currentSong?.title,
                 modifier = Modifier.fillMaxSize(),
-                fallback = { Icon(imageVector = Icons.Default.MusicNote, contentDescription = null, modifier = Modifier.size(80.dp), tint = Color.White.copy(alpha = 0.6f)) }
+                fallback = { Icon(imageVector = Icons.Outlined.MusicNote, contentDescription = null, modifier = Modifier.size(80.dp), tint = Color.White.copy(alpha = 0.6f)) }
             )
         }
 
@@ -249,7 +254,7 @@ fun PlayerScreen(
                                 )
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Delete,
+                                    imageVector = Icons.Outlined.Delete,
                                     contentDescription = null,
                                     modifier = Modifier.size(18.dp)
                                 )
@@ -295,7 +300,7 @@ fun PlayerScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                imageVector = Icons.Default.DragHandle,
+                                imageVector = Icons.Outlined.DragHandle,
                                 contentDescription = "拖动排序",
                                 modifier = Modifier.size(24.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
@@ -315,7 +320,7 @@ fun PlayerScreen(
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
-                                            imageVector = Icons.Default.MusicNote,
+                                            imageVector = Icons.Outlined.MusicNote,
                                             contentDescription = null,
                                             modifier = Modifier.size(20.dp),
                                             tint = MaterialTheme.colorScheme.onSurfaceVariant
@@ -343,7 +348,7 @@ fun PlayerScreen(
                             }
                             if (isCurrentSong) {
                                 Icon(
-                                    imageVector = Icons.Default.PlayArrow,
+                                    imageVector = Icons.Outlined.PlayArrow,
                                     contentDescription = null,
                                     modifier = Modifier.size(20.dp),
                                     tint = effectiveAccent
@@ -644,3 +649,4 @@ private fun AlbumArtPlaceholder() {
             )
     )
 }
+

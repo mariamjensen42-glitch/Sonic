@@ -18,8 +18,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -29,9 +29,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import com.cycling.sonic.core.ui.theme.rememberDominantColor
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -75,7 +75,11 @@ fun AlbumDetailScreen(
     bottomPadding: Dp = 0.dp
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    var dominantColor by remember { mutableStateOf(AppBackground) }
+    val dominantColor = rememberDominantColor(
+        uiState.album?.albumArt,
+        filePath = uiState.songs.firstOrNull()?.path,
+        AppBackground
+    )
     var menuIndex by remember { mutableIntStateOf(-1) }
 
     LaunchedEffect(Unit) {
@@ -160,7 +164,7 @@ fun AlbumDetailScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Box(
-                                    modifier = Modifier.size(32.dp).clip(RoundedCornerShape(5.dp)),
+                                    modifier = Modifier.size(32.dp).clip(RoundedCornerShape(4.dp)),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     M3ArtworkImage(artworkUrl = uiState.album?.albumArt, contentDescription = null, modifier = Modifier.fillMaxSize())
@@ -190,7 +194,7 @@ fun AlbumDetailScreen(
                                     Icon(
                                         modifier = Modifier.size(25.dp),
                                         tint = Color.Black,
-                                        imageVector = Icons.Default.PlayArrow,
+                                        imageVector = Icons.Outlined.PlayArrow,
                                         contentDescription = stringResource(Res.string.album_detail_play_all_desc)
                                     )
                                 }
@@ -219,7 +223,7 @@ fun AlbumDetailScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Box(
-                                modifier = Modifier.size(50.dp).padding(end = 10.dp).clip(RoundedCornerShape(6.dp)),
+                                modifier = Modifier.size(50.dp).padding(end = 10.dp).clip(RoundedCornerShape(4.dp)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 M3ArtworkImage(
@@ -286,7 +290,7 @@ fun AlbumDetailScreen(
 
         M3DetailTopAppBar(
             modifier = Modifier.align(Alignment.TopCenter),
-            navigationIcon = Icons.AutoMirrored.Filled.ArrowBack,
+            navigationIcon = Icons.AutoMirrored.Outlined.ArrowBack,
             navigationIconContentDescription = stringResource(Res.string.album_detail_back_desc),
             onNavigationClick = onNavigateBack,
             colors = TopAppBarDefaults.topAppBarColors(
@@ -297,3 +301,5 @@ fun AlbumDetailScreen(
         )
     }
 }
+
+

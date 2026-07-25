@@ -18,10 +18,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.QueueMusic
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.QueueMusic
+import androidx.compose.material.icons.outlined.MusicNote
+import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -32,7 +33,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -46,9 +46,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.cycling.sonic.core.ui.LocalM3ToastState
 import com.cycling.sonic.core.ui.components.M3ArtworkImage
 import com.cycling.sonic.core.ui.components.M3DetailTopAppBar
 import com.cycling.sonic.core.ui.theme.SpotifyColors
+import com.cycling.sonic.core.ui.theme.rememberDominantColor
 import com.cycling.sonic.presentation.components.PlaylistPickerDialog
 import com.cycling.sonic.presentation.components.SongMoreMenu
 import com.cycling.sonic.presentation.player.PlayerIntent
@@ -75,14 +77,20 @@ fun PlaylistDetailScreen(
     bottomPadding: Dp = 0.dp
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    var dominantColor by remember { mutableStateOf(AppBackground) }
+    val dominantColor = rememberDominantColor(
+        uiState.songs.firstOrNull()?.albumArt,
+        filePath = uiState.songs.firstOrNull()?.path,
+        AppBackground
+    )
     var menuIndex by remember { mutableIntStateOf(-1) }
+
+    val toastState = LocalM3ToastState.current
 
     LaunchedEffect(Unit) {
         viewModel.uiEffect.collect { effect ->
             when (effect) {
                 is PlaylistDetailEffect.NavigateToPlayer -> onNavigateToPlayer(effect.songId)
-                is PlaylistDetailEffect.ShowToast -> { }
+                is PlaylistDetailEffect.ShowToast -> toastState?.show(effect.message)
             }
         }
     }
@@ -111,7 +119,13 @@ fun PlaylistDetailScreen(
                                     artworkUrl = art,
                                     contentDescription = null,
                                     modifier = Modifier.fillMaxSize(),
-                                    fallback = { Icon(imageVector = Icons.AutoMirrored.Filled.QueueMusic, contentDescription = null, modifier = Modifier.size(80.dp), tint = Color.Gray) }
+                                    fallback = {
+                                        if (uiState.playlist?.isSystem == true) {
+                                            Icon(imageVector = Icons.Outlined.Favorite, contentDescription = null, modifier = Modifier.size(80.dp), tint = SpotifyColors.Accent)
+                                        } else {
+                                            Icon(imageVector = Icons.AutoMirrored.Outlined.QueueMusic, contentDescription = null, modifier = Modifier.size(80.dp), tint = Color.Gray)
+                                        }
+                                    }
                                 )
                             }
                         }
@@ -147,7 +161,7 @@ fun PlaylistDetailScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Box(
-                                    modifier = Modifier.size(32.dp).clip(RoundedCornerShape(5.dp)),
+                                    modifier = Modifier.size(32.dp).clip(RoundedCornerShape(4.dp)),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     val thumbnailArt = uiState.songs.firstOrNull()?.albumArt
@@ -169,7 +183,7 @@ fun PlaylistDetailScreen(
                                     Icon(
                                         modifier = Modifier.size(25.dp),
                                         tint = Color.Black,
-                                        imageVector = Icons.Default.PlayArrow,
+                                        imageVector = Icons.Outlined.PlayArrow,
                                         contentDescription = stringResource(Res.string.playlist_detail_play_all)
                                     )
                                 }
@@ -212,14 +226,14 @@ fun PlaylistDetailScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Box(
-                                modifier = Modifier.size(50.dp).padding(end = 10.dp).clip(RoundedCornerShape(6.dp)),
+                                modifier = Modifier.size(50.dp).padding(end = 10.dp).clip(RoundedCornerShape(4.dp)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 M3ArtworkImage(
                                     artworkUrl = song.albumArt,
                                     contentDescription = null,
                                     modifier = Modifier.fillMaxSize(),
-                                    fallback = { Icon(imageVector = Icons.Default.MusicNote, contentDescription = null, modifier = Modifier.size(24.dp), tint = Color.Gray) }
+                                    fallback = { Icon(imageVector = Icons.Outlined.MusicNote, contentDescription = null, modifier = Modifier.size(24.dp), tint = Color.Gray) }
                                 )
                             }
 
@@ -253,7 +267,11 @@ fun PlaylistDetailScreen(
                             tint = Color.Gray,
                             extraItems = {
                                 DropdownMenuItem(
-                                    text = { Text(stringResource(Res.string.playlist_detail_remove), color = Color(0xFFFF6B6B)) },
+                                    text = {
+                                        val removeText = if (uiState.playlist?.isSystem == true) "取消喜欢"
+                                        else stringResource(Res.string.playlist_detail_remove)
+                                        Text(removeText, color = Color(0xFFFF6B6B))
+                                    },
                                     onClick = {
                                         viewModel.handleIntent(PlaylistDetailIntent.RemoveSong(song.id))
                                         menuIndex = -1
@@ -278,7 +296,7 @@ fun PlaylistDetailScreen(
 
         M3DetailTopAppBar(
             modifier = Modifier.align(Alignment.TopCenter),
-            navigationIcon = Icons.AutoMirrored.Filled.ArrowBack,
+            navigationIcon = Icons.AutoMirrored.Outlined.ArrowBack,
             navigationIconContentDescription = stringResource(Res.string.playlist_detail_back_desc),
             onNavigationClick = onNavigateBack,
             colors = TopAppBarDefaults.topAppBarColors(
@@ -289,3 +307,5 @@ fun PlaylistDetailScreen(
         )
     }
 }
+
+
