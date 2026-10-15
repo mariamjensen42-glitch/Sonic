@@ -1,0 +1,79 @@
+package com.cycling.data.repository
+
+import com.cycling.domain.model.LyricsProvider
+import com.cycling.domain.model.ThemeMode
+import com.cycling.domain.repository.SettingsRepository.Companion.DEFAULT_LYRICS_PROVIDER_ORDER
+import com.cycling.domain.repository.SettingsRepository.Companion.DEFAULT_PLAYBACK_SPEED
+import com.cycling.domain.repository.SettingsRepository.Companion.MAX_PLAYBACK_SPEED
+import com.cycling.domain.repository.SettingsRepository.Companion.MIN_PLAYBACK_SPEED
+import org.junit.Assert.assertEquals
+import org.junit.Test
+
+class SettingsConversionsTest {
+
+    @Test
+    fun `enum parsing falls back when the stored name is unknown or missing`() {
+        assertEquals(ThemeMode.SYSTEM, SettingsConversions.parseEnum(null, ThemeMode.SYSTEM))
+        assertEquals(ThemeMode.SYSTEM, SettingsConversions.parseEnum("", ThemeMode.SYSTEM))
+        assertEquals(ThemeMode.SYSTEM, SettingsConversions.parseEnum("SEPIA", ThemeMode.SYSTEM))
+        assertEquals(ThemeMode.DARK, SettingsConversions.parseEnum("DARK", ThemeMode.SYSTEM))
+    }
+
+    @Test
+    fun `playback speed clamps to the supported range`() {
+        assertEquals(MIN_PLAYBACK_SPEED, SettingsConversions.parsePlaybackSpeed("0.1"))
+        assertEquals(MAX_PLAYBACK_SPEED, SettingsConversions.parsePlaybackSpeed("5.0"))
+        assertEquals(1.5f, SettingsConversions.parsePlaybackSpeed("1.5"))
+    }
+
+    @Test
+    fun `playback speed falls back on garbage`() {
+        assertEquals(DEFAULT_PLAYBACK_SPEED, SettingsConversions.parsePlaybackSpeed(null))
+        assertEquals(DEFAULT_PLAYBACK_SPEED, SettingsConversions.parsePlaybackSpeed("fast"))
+        assertEquals(DEFAULT_PLAYBACK_SPEED, SettingsConversions.parsePlaybackSpeed(""))
+    }
+
+    @Test
+    fun `band levels round-trip through their string encoding`() {
+        val levels = listOf(-300, 0, 450, 1200)
+        assertEquals(levels, SettingsConversions.parseBandLevels(SettingsConversions.encodeBandLevels(levels)))
+    }
+
+    @Test
+    fun `band level parsing tolerates missing or malformed entries`() {
+        assertEquals(emptyList<Int>(), SettingsConversions.parseBandLevels(null))
+        assertEquals(emptyList<Int>(), SettingsConversions.parseBandLevels(""))
+        assertEquals(listOf(100, 200), SettingsConversions.parseBandLevels(" 100 ,,oops, 200 "))
+    }
+
+    @Test
+    fun `lyrics provider order keeps the stored order`() {
+        assertEquals(
+            listOf(LyricsProvider.LRCLIB, LyricsProvider.NETEASE),
+            SettingsConversions.parseLyricsProviders("LRCLIB,NETEASE")
+        )
+    }
+
+    @Test
+    fun `lyrics provider parsing drops unknown names and never returns empty`() {
+        assertEquals(listOf(LyricsProvider.LRCLIB), SettingsConversions.parseLyricsProviders("SPOTIFY,LRCLIB"))
+        // An empty result would silently disable online lyrics, so the default takes over.
+        assertEquals(DEFAULT_LYRICS_PROVIDER_ORDER, SettingsConversions.parseLyricsProviders(null))
+        assertEquals(DEFAULT_LYRICS_PROVIDER_ORDER, SettingsConversions.parseLyricsProviders("NOPE"))
+    }
+
+    @Test
+    fun `encoding an empty provider list writes the default rather than nothing`() {
+        assertEquals(
+            DEFAULT_LYRICS_PROVIDER_ORDER.joinToString(",") { it.name },
+            SettingsConversions.encodeLyricsProviders(emptyList())
+        )
+    }
+
+    @Test
+    fun `effect strength is clamped to the 0-1000 scale the framework uses`() {
+        assertEquals(0, SettingsConversions.clampEffectStrength(-50))
+        assertEquals(1000, SettingsConversions.clampEffectStrength(5_000))
+        assertEquals(700, SettingsConversions.clampEffectStrength(700))
+    }
+}
