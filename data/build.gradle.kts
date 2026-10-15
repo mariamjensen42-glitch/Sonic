@@ -29,6 +29,12 @@ android {
     }
 }
 
+// Exported Room schemas are checked in: the 1→2 migration is the first upgrade path that has to
+// preserve user data, so the generated JSON is the reference the migration SQL is verified against.
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 dependencies {
     implementation(project(":domain"))
     
@@ -50,7 +56,6 @@ dependencies {
     implementation(libs.androidx.media3.datasource)
 
     implementation(libs.okhttp)
-    implementation(libs.okhttp.logging)
     implementation(libs.kotlinx.serialization.json)
 
     implementation(libs.mp3agic)

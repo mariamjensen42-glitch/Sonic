@@ -1,9 +1,11 @@
 package com.cycling.presentation.songs
 
+import com.cycling.domain.model.PlayerState
 import com.cycling.domain.model.Playlist
 import com.cycling.domain.model.Song
 import com.cycling.domain.model.SortOrder
 import com.cycling.domain.model.ViewMode
+import com.cycling.domain.repository.PlayerRepository
 import com.cycling.domain.repository.PlaylistRepository
 import com.cycling.domain.repository.SongRepository
 import com.cycling.domain.repository.SongsPreferencesRepository
@@ -14,7 +16,9 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -32,6 +36,7 @@ class SongsViewModelTest {
     private lateinit var songRepository: SongRepository
     private lateinit var songsPreferencesRepository: SongsPreferencesRepository
     private lateinit var playlistRepository: PlaylistRepository
+    private lateinit var playerRepository: PlayerRepository
     private lateinit var viewModel: SongsViewModel
 
     private fun createSong(
@@ -89,9 +94,12 @@ class SongsViewModelTest {
         songRepository = mockk()
         songsPreferencesRepository = mockk()
         playlistRepository = mockk()
+        playerRepository = mockk()
 
         every { songRepository.getAllSongs() } returns flowOf(emptyList())
         every { playlistRepository.getAllPlaylists() } returns flowOf(emptyList())
+        // SongsViewModel collects playerState from init, so this must emit rather than be relaxed.
+        every { playerRepository.playerState } returns flowOf(PlayerState())
         coEvery { songsPreferencesRepository.getViewMode() } returns ViewMode.LIST
         coEvery { songsPreferencesRepository.getSortOrder() } returns SortOrder.TITLE
         coEvery { songsPreferencesRepository.getSortAscending() } returns true
@@ -102,7 +110,7 @@ class SongsViewModelTest {
         val songs = listOf(createSong(id = 1), createSong(id = 2))
         every { songRepository.getAllSongs() } returns flowOf(songs)
 
-        viewModel = SongsViewModel(songRepository, songsPreferencesRepository, playlistRepository)
+        viewModel = SongsViewModel(songRepository, songsPreferencesRepository, playlistRepository, playerRepository)
         advanceUntilIdle()
 
         assertEquals(songs, viewModel.uiState.value.songs)
@@ -114,7 +122,7 @@ class SongsViewModelTest {
     @Test
     fun `ToggleViewMode changes view mode from LIST to GRID`() = runTest {
         coEvery { songsPreferencesRepository.saveViewMode(any()) } returns Unit
-        viewModel = SongsViewModel(songRepository, songsPreferencesRepository, playlistRepository)
+        viewModel = SongsViewModel(songRepository, songsPreferencesRepository, playlistRepository, playerRepository)
         advanceUntilIdle()
 
         viewModel.handleIntent(SongsIntent.ToggleViewMode)
@@ -128,7 +136,7 @@ class SongsViewModelTest {
     fun `ToggleViewMode changes view mode from GRID to LIST`() = runTest {
         coEvery { songsPreferencesRepository.getViewMode() } returns ViewMode.GRID
         coEvery { songsPreferencesRepository.saveViewMode(any()) } returns Unit
-        viewModel = SongsViewModel(songRepository, songsPreferencesRepository, playlistRepository)
+        viewModel = SongsViewModel(songRepository, songsPreferencesRepository, playlistRepository, playerRepository)
         advanceUntilIdle()
 
         viewModel.handleIntent(SongsIntent.ToggleViewMode)
@@ -142,7 +150,7 @@ class SongsViewModelTest {
     fun `ChangeSortOrder with same order toggles ascending`() = runTest {
         coEvery { songsPreferencesRepository.saveSortOrder(any()) } returns Unit
         coEvery { songsPreferencesRepository.saveSortAscending(any()) } returns Unit
-        viewModel = SongsViewModel(songRepository, songsPreferencesRepository, playlistRepository)
+        viewModel = SongsViewModel(songRepository, songsPreferencesRepository, playlistRepository, playerRepository)
         advanceUntilIdle()
 
         viewModel.handleIntent(SongsIntent.ChangeSortOrder(SortOrder.TITLE))
@@ -156,7 +164,7 @@ class SongsViewModelTest {
     fun `ChangeSortOrder with different order sets ascending to true`() = runTest {
         coEvery { songsPreferencesRepository.saveSortOrder(any()) } returns Unit
         coEvery { songsPreferencesRepository.saveSortAscending(any()) } returns Unit
-        viewModel = SongsViewModel(songRepository, songsPreferencesRepository, playlistRepository)
+        viewModel = SongsViewModel(songRepository, songsPreferencesRepository, playlistRepository, playerRepository)
         advanceUntilIdle()
 
         viewModel.handleIntent(SongsIntent.ChangeSortOrder(SortOrder.ARTIST))
@@ -166,24 +174,34 @@ class SongsViewModelTest {
         assertTrue(viewModel.uiState.value.sortAscending)
     }
 
+    /**
+     * Collects the effect stream while the intent is handled.
+     *
+     * The previous version did `uiEffect.collect { assertEquals(...) }` directly, which can never
+     * pass: `uiEffect` is a `SharedFlow` with no replay, so the collector only subscribes after
+     * the emit has already happened and then parks forever waiting for a second value.
+     */
     @Test
     fun `SongClick emits NavigateToPlayer effect`() = runTest {
         val song = createSong(id = 123L)
-        viewModel = SongsViewModel(songRepository, songsPreferencesRepository, playlistRepository)
+        viewModel = SongsViewModel(songRepository, songsPreferencesRepository, playlistRepository, playerRepository)
         advanceUntilIdle()
+
+        val effects = mutableListOf<SongsEffect>()
+        val job = launch { viewModel.uiEffect.collect { effects += it } }
+        runCurrent()
 
         viewModel.handleIntent(SongsIntent.SongClick(song))
         advanceUntilIdle()
+        job.cancel()
 
-        viewModel.uiEffect.collect { effect ->
-            assertEquals(SongsEffect.NavigateToPlayer(123L), effect)
-        }
+        assertEquals(listOf(SongsEffect.NavigateToPlayer(123L)), effects)
     }
 
     @Test
     fun `ShowAddToPlaylistDialog updates state with song`() = runTest {
         val song = createSong(id = 1L)
-        viewModel = SongsViewModel(songRepository, songsPreferencesRepository, playlistRepository)
+        viewModel = SongsViewModel(songRepository, songsPreferencesRepository, playlistRepository, playerRepository)
         advanceUntilIdle()
 
         viewModel.handleIntent(SongsIntent.ShowAddToPlaylistDialog(song))
@@ -196,7 +214,7 @@ class SongsViewModelTest {
     @Test
     fun `DismissAddToPlaylistDialog clears state`() = runTest {
         val song = createSong(id = 1L)
-        viewModel = SongsViewModel(songRepository, songsPreferencesRepository, playlistRepository)
+        viewModel = SongsViewModel(songRepository, songsPreferencesRepository, playlistRepository, playerRepository)
         advanceUntilIdle()
 
         viewModel.handleIntent(SongsIntent.ShowAddToPlaylistDialog(song))
@@ -213,7 +231,7 @@ class SongsViewModelTest {
         val song = createSong(id = 1L)
         val playlistId = 10L
         coEvery { playlistRepository.addSongToPlaylist(playlistId, song.id) } returns Unit
-        viewModel = SongsViewModel(songRepository, songsPreferencesRepository, playlistRepository)
+        viewModel = SongsViewModel(songRepository, songsPreferencesRepository, playlistRepository, playerRepository)
         advanceUntilIdle()
 
         viewModel.handleIntent(SongsIntent.ShowAddToPlaylistDialog(song))
@@ -232,7 +250,7 @@ class SongsViewModelTest {
         val playlistId = 100L
         coEvery { playlistRepository.createPlaylist(playlistName) } returns playlistId
         coEvery { playlistRepository.addSongToPlaylist(playlistId, song.id) } returns Unit
-        viewModel = SongsViewModel(songRepository, songsPreferencesRepository, playlistRepository)
+        viewModel = SongsViewModel(songRepository, songsPreferencesRepository, playlistRepository, playerRepository)
         advanceUntilIdle()
 
         viewModel.handleIntent(SongsIntent.ShowAddToPlaylistDialog(song))
@@ -249,7 +267,7 @@ class SongsViewModelTest {
     fun `loadPlaylists updates state with playlists`() = runTest {
         val playlists = listOf(createPlaylist(id = 1), createPlaylist(id = 2))
         every { playlistRepository.getAllPlaylists() } returns flowOf(playlists)
-        viewModel = SongsViewModel(songRepository, songsPreferencesRepository, playlistRepository)
+        viewModel = SongsViewModel(songRepository, songsPreferencesRepository, playlistRepository, playerRepository)
         advanceUntilIdle()
 
         assertEquals(playlists, viewModel.uiState.value.playlists)

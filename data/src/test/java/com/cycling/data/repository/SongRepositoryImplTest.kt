@@ -3,6 +3,8 @@ package com.cycling.data.repository
 import com.cycling.data.local.dao.SongDao
 import com.cycling.data.local.entity.SongEntity
 import com.cycling.data.local.mediastore.MediaStoreHelper
+import com.cycling.data.local.scanner.SongLibraryWriter
+import com.cycling.domain.repository.ExcludedFolderRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -21,13 +23,22 @@ class SongRepositoryImplTest {
 
     private lateinit var songDao: SongDao
     private lateinit var mediaStoreHelper: MediaStoreHelper
+    private lateinit var songLibraryWriter: SongLibraryWriter
+    private lateinit var excludedFolderRepository: ExcludedFolderRepository
     private lateinit var songRepository: SongRepositoryImpl
 
     @Before
     fun setup() {
         songDao = mockk()
         mediaStoreHelper = mockk()
-        songRepository = SongRepositoryImpl(songDao, mediaStoreHelper)
+        songLibraryWriter = mockk()
+        excludedFolderRepository = mockk()
+        songRepository = SongRepositoryImpl(
+            songDao,
+            mediaStoreHelper,
+            songLibraryWriter,
+            excludedFolderRepository
+        )
     }
 
     private fun createSongEntity(
@@ -247,4 +258,55 @@ class SongRepositoryImplTest {
 
         assertEquals(42, result)
     }
+
+    /**
+     * Regression guard for the second destructive write path.
+     *
+     * `refreshSongs` used to do `deleteAllSongs()` + a bulk re-insert, which wiped favourites,
+     * play counts, and — through the `playlist_songs` cascade — every playlist. It must now go
+     * through [SongLibraryWriter] and must never delete the table wholesale.
+     */
+    @Test
+    fun `refreshSongs delegates to the writer and never wipes the table`() = runTest {
+        val excluded = listOf("/storage/emulated/0/Podcasts")
+        coEvery { excludedFolderRepository.getExcludedPaths() } returns excluded
+        every { mediaStoreHelper.queryAllSongs(excluded) } returns listOf(createSong())
+        coEvery { songLibraryWriter.write(any(), any()) } returns 1
+
+        songRepository.refreshSongs()
+
+        coVerify(exactly = 1) { songLibraryWriter.write(any(), any()) }
+        coVerify(exactly = 0) { songDao.deleteAllSongs() }
+        coVerify(exactly = 0) { songDao.insertSongs(any()) }
+    }
+
+    @Test
+    fun `refreshSongs respects excluded folders`() = runTest {
+        val excluded = listOf("/storage/emulated/0/Podcasts")
+        coEvery { excludedFolderRepository.getExcludedPaths() } returns excluded
+        every { mediaStoreHelper.queryAllSongs(excluded) } returns emptyList()
+        coEvery { songLibraryWriter.write(any(), any()) } returns 0
+
+        songRepository.refreshSongs()
+
+        coVerify(exactly = 1) { mediaStoreHelper.queryAllSongs(excluded) }
+    }
+
+    private fun createSong(
+        id: Long = 1L,
+        path: String = "/storage/emulated/0/Music/test.mp3"
+    ) = com.cycling.domain.model.Song(
+        id = id,
+        title = "Test Song",
+        artist = "Test Artist",
+        album = "Test Album",
+        duration = 180000L,
+        path = path,
+        albumId = 1L,
+        artistId = 1L,
+        dateAdded = 1L,
+        dateModified = 1L,
+        size = 5000000L,
+        mimeType = "audio/mpeg"
+    )
 }

@@ -9,5 +9,7 @@ data class PlaylistEntity(
     val id: Long = 0,
     val name: String,
     val dateAdded: Long,
-    val dateModified: Long
+    val dateModified: Long,
+    /** User-supplied cover URI; falls back to the first song's art when null. */
+    val customCover: String? = null
 )
