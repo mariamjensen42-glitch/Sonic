@@ -15,17 +15,21 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class DeepSeekApiServiceImpl @Inject constructor() : DeepSeekApiService {
+class DeepSeekApiServiceImpl @Inject constructor(
+    sharedClient: OkHttpClient
+) : DeepSeekApiService {
 
     private val json = Json {
         ignoreUnknownKeys = true
         encodeDefaults = true
     }
 
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
+    /**
+     * Derived from the shared client so the connection pool and disk cache are reused.
+     * LLM responses are slow, so the read timeout is widened well past the shared default.
+     */
+    private val client = sharedClient.newBuilder()
         .readTimeout(60, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
     companion object {

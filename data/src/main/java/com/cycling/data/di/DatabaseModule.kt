@@ -3,10 +3,13 @@ package com.cycling.data.di
 import android.content.Context
 import androidx.room.Room
 import com.cycling.data.local.dao.AiInfoCacheDao
+import com.cycling.data.local.dao.LyricsCacheDao
 import com.cycling.data.local.dao.PlaylistDao
 import com.cycling.data.local.dao.SearchHistoryDao
 import com.cycling.data.local.dao.SongDao
+import com.cycling.data.local.dao.SongStateDao
 import com.cycling.data.local.database.AppDatabase
+import com.cycling.data.local.database.MIGRATION_1_2
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -18,9 +21,6 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
 
-
-
-
     @Provides
     @Singleton
     fun provideAppDatabase(
@@ -31,7 +31,9 @@ object DatabaseModule {
             AppDatabase::class.java,
             "sonic_database"
         )
-            .fallbackToDestructiveMigration()
+            .addMigrations(MIGRATION_1_2)
+            // Downgrades only happen on a sideloaded older build; there is nothing to preserve.
+            .fallbackToDestructiveMigrationOnDowngrade()
             .build()
     }
 
@@ -53,5 +55,15 @@ object DatabaseModule {
     @Provides
     fun provideSearchHistoryDao(database: AppDatabase): SearchHistoryDao {
         return database.searchHistoryDao()
+    }
+
+    @Provides
+    fun provideSongStateDao(database: AppDatabase): SongStateDao {
+        return database.songStateDao()
+    }
+
+    @Provides
+    fun provideLyricsCacheDao(database: AppDatabase): LyricsCacheDao {
+        return database.lyricsCacheDao()
     }
 }

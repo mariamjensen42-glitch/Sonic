@@ -4,6 +4,7 @@ import com.cycling.domain.model.Album
 import com.cycling.domain.model.Artist
 import com.cycling.domain.model.Song
 import com.cycling.domain.model.SearchResult
+import com.cycling.domain.repository.PlayerRepository
 import com.cycling.domain.usecase.SearchHistoryUseCase
 import com.cycling.domain.usecase.GetSearchSuggestionsUseCase
 import com.cycling.domain.usecase.SearchAllUseCase
@@ -31,6 +32,7 @@ class SearchViewModelTest {
     private lateinit var searchAllUseCase: SearchAllUseCase
     private lateinit var searchHistoryUseCase: SearchHistoryUseCase
     private lateinit var getSearchSuggestionsUseCase: GetSearchSuggestionsUseCase
+    private lateinit var playerRepository: PlayerRepository
     private lateinit var viewModel: SearchViewModel
 
     private fun createSong(
@@ -98,8 +100,10 @@ class SearchViewModelTest {
 
     @Before
     fun setup() {
+        searchAllUseCase = mockk()
         searchHistoryUseCase = mockk()
         getSearchSuggestionsUseCase = mockk()
+        playerRepository = mockk(relaxed = true)
 
         every { searchHistoryUseCase.getAll() } returns flowOf(emptyList())
         every { searchAllUseCase(any()) } returns flowOf(SearchResult())
@@ -116,7 +120,8 @@ class SearchViewModelTest {
         viewModel = SearchViewModel(
             searchAllUseCase,
             searchHistoryUseCase,
-            getSearchSuggestionsUseCase
+            getSearchSuggestionsUseCase,
+            playerRepository
         )
         advanceUntilIdle()
 
@@ -132,7 +137,8 @@ class SearchViewModelTest {
         viewModel = SearchViewModel(
             searchAllUseCase,
             searchHistoryUseCase,
-            getSearchSuggestionsUseCase
+            getSearchSuggestionsUseCase,
+            playerRepository
         )
         advanceUntilIdle()
 
@@ -156,7 +162,8 @@ class SearchViewModelTest {
         viewModel = SearchViewModel(
             searchAllUseCase,
             searchHistoryUseCase,
-            getSearchSuggestionsUseCase
+            getSearchSuggestionsUseCase,
+            playerRepository
         )
         advanceUntilIdle()
 
@@ -174,7 +181,8 @@ class SearchViewModelTest {
         viewModel = SearchViewModel(
             searchAllUseCase,
             searchHistoryUseCase,
-            getSearchSuggestionsUseCase
+            getSearchSuggestionsUseCase,
+            playerRepository
         )
         advanceUntilIdle()
 
@@ -193,7 +201,8 @@ class SearchViewModelTest {
         viewModel = SearchViewModel(
             searchAllUseCase,
             searchHistoryUseCase,
-            getSearchSuggestionsUseCase
+            getSearchSuggestionsUseCase,
+            playerRepository
         )
         advanceUntilIdle()
 
@@ -209,7 +218,8 @@ class SearchViewModelTest {
         viewModel = SearchViewModel(
             searchAllUseCase,
             searchHistoryUseCase,
-            getSearchSuggestionsUseCase
+            getSearchSuggestionsUseCase,
+            playerRepository
         )
         advanceUntilIdle()
 
@@ -224,7 +234,8 @@ class SearchViewModelTest {
         viewModel = SearchViewModel(
             searchAllUseCase,
             searchHistoryUseCase,
-            getSearchSuggestionsUseCase
+            getSearchSuggestionsUseCase,
+            playerRepository
         )
         advanceUntilIdle()
 
@@ -239,7 +250,8 @@ class SearchViewModelTest {
         viewModel = SearchViewModel(
             searchAllUseCase,
             searchHistoryUseCase,
-            getSearchSuggestionsUseCase
+            getSearchSuggestionsUseCase,
+            playerRepository
         )
         advanceUntilIdle()
 
@@ -260,7 +272,8 @@ class SearchViewModelTest {
         viewModel = SearchViewModel(
             searchAllUseCase,
             searchHistoryUseCase,
-            getSearchSuggestionsUseCase
+            getSearchSuggestionsUseCase,
+            playerRepository
         )
         advanceUntilIdle()
 
@@ -276,7 +289,8 @@ class SearchViewModelTest {
         viewModel = SearchViewModel(
             searchAllUseCase,
             searchHistoryUseCase,
-            getSearchSuggestionsUseCase
+            getSearchSuggestionsUseCase,
+            playerRepository
         )
         advanceUntilIdle()
 
@@ -292,7 +306,8 @@ class SearchViewModelTest {
         viewModel = SearchViewModel(
             searchAllUseCase,
             searchHistoryUseCase,
-            getSearchSuggestionsUseCase
+            getSearchSuggestionsUseCase,
+            playerRepository
         )
         advanceUntilIdle()
 

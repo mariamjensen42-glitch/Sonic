@@ -2,12 +2,14 @@ package com.cycling.data.repository
 
 import com.cycling.data.local.dao.SongDao
 import com.cycling.data.local.mediastore.MediaStoreHelper
+import com.cycling.data.local.scanner.SongLibraryWriter
 import com.cycling.data.mapper.toDomain
 import com.cycling.data.mapper.toEntity
 import com.cycling.domain.model.FolderContent
 import com.cycling.domain.model.FolderItem
 import com.cycling.domain.model.LibraryStats
 import com.cycling.domain.model.Song
+import com.cycling.domain.repository.ExcludedFolderRepository
 import com.cycling.domain.repository.SongRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -20,7 +22,9 @@ import javax.inject.Singleton
 @Singleton
 class SongRepositoryImpl @Inject constructor(
     private val songDao: SongDao,
-    private val mediaStoreHelper: MediaStoreHelper
+    private val mediaStoreHelper: MediaStoreHelper,
+    private val songLibraryWriter: SongLibraryWriter,
+    private val excludedFolderRepository: ExcludedFolderRepository
 ) : SongRepository {
 
     override fun getAllSongs(): Flow<List<Song>> {
@@ -63,12 +67,13 @@ class SongRepositoryImpl @Inject constructor(
 
     override suspend fun refreshSongs() {
         Timber.d("refreshSongs: starting refresh")
-        val songs = mediaStoreHelper.queryAllSongs()
-        val entities = songs.map { it.toEntity() }
-        Timber.d("refreshSongs: found ${entities.size} songs from MediaStore")
-        songDao.deleteAllSongs()
-        songDao.insertSongs(entities)
-        Timber.d("refreshSongs: completed")
+        // Goes through the same writer as MusicScanner: the old delete-then-reinsert wiped
+        // favourites, play counts and (via the playlist_songs cascade) every playlist.
+        // Previously this also ignored excluded folders, unlike a real scan.
+        val excludedPaths = excludedFolderRepository.getExcludedPaths()
+        val songs = mediaStoreHelper.queryAllSongs(excludedPaths)
+        val written = songLibraryWriter.write(songs.map { it.toEntity() })
+        Timber.d("refreshSongs: completed, $written songs")
     }
 
     override suspend fun getSongCount(): Int {
