@@ -10,6 +10,7 @@ import com.cycling.data.repository.MusicScannerRepositoryImpl
 import com.cycling.data.repository.PlaylistRepositoryImpl
 import com.cycling.data.repository.ScanProgressRepositoryImpl
 import com.cycling.data.repository.SearchHistoryRepositoryImpl
+import com.cycling.data.repository.SettingsRepositoryImpl
 import com.cycling.data.repository.SongRepositoryImpl
 import com.cycling.data.repository.SongsPreferencesRepositoryImpl
 import com.cycling.domain.repository.AiRepository
@@ -22,6 +23,7 @@ import com.cycling.domain.repository.MusicScannerRepository
 import com.cycling.domain.repository.PlaylistRepository
 import com.cycling.domain.repository.ScanProgressRepository
 import com.cycling.domain.repository.SearchHistoryRepository
+import com.cycling.domain.repository.SettingsRepository
 import com.cycling.domain.repository.SongRepository
 import com.cycling.domain.repository.SongsPreferencesRepository
 import dagger.Binds
@@ -105,4 +107,10 @@ abstract class RepositoryModule {
     abstract fun bindAudioMetadataRepository(
         audioMetadataRepositoryImpl: AudioMetadataRepositoryImpl
     ): AudioMetadataRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindSettingsRepository(
+        settingsRepositoryImpl: SettingsRepositoryImpl
+    ): SettingsRepository
 }
