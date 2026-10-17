@@ -27,12 +27,18 @@ class PlaylistRepositoryImpl @Inject constructor(
                 flowOf(emptyList())
             } else {
                 Timber.d("getAllPlaylists: found ${entities.size} playlists")
+                // 逐个观察：entity 本身变化（改名 / 写介绍）也会重新发射，
+                // 不能在 flatMapLatest 外面把 entity 当成快照捕获。
                 val playlistFlows = entities.map { entity ->
                     combine(
+                        playlistDao.observePlaylistById(entity.id),
                         playlistDao.getPlaylistSongCount(entity.id),
                         playlistDao.getPlaylistFirstSongAlbumArtFlow(entity.id)
-                    ) { count, albumArt ->
-                        entity.toDomain().copy(numberOfSongs = count, albumArt = albumArt)
+                    ) { fresh, count, albumArt ->
+                        (fresh ?: entity).toDomain().copy(
+                            numberOfSongs = count,
+                            albumArt = albumArt
+                        )
                     }
                 }
                 combine(playlistFlows) { it.toList() }
@@ -46,6 +52,13 @@ class PlaylistRepositoryImpl @Inject constructor(
         return playlist
     }
 
+    override fun observePlaylistById(id: Long): Flow<Playlist?> {
+        Timber.d("observePlaylistById: id=$id")
+        return playlistDao.observePlaylistById(id).map { entity ->
+            entity?.toDomain()
+        }
+    }
+
     override fun getSongsInPlaylist(playlistId: Long): Flow<List<Song>> {
         Timber.d("getSongsInPlaylist: playlistId=$playlistId")
         return playlistDao.getSongsInPlaylist(playlistId).map { entities ->
@@ -54,13 +67,25 @@ class PlaylistRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun createPlaylist(name: String): Long {
+    override suspend fun createPlaylist(name: String): Long = createPlaylist(name, null)
+
+    override suspend fun createPlaylist(name: String, description: String?): Long {
+        val now = System.currentTimeMillis() / 1000
         val playlist = PlaylistEntity(
             name = name,
-            dateAdded = System.currentTimeMillis() / 1000,
-            dateModified = System.currentTimeMillis() / 1000
+            dateAdded = now,
+            dateModified = now,
+            description = description
         )
         return playlistDao.insertPlaylist(playlist)
+    }
+
+    override suspend fun updatePlaylistDescription(playlistId: Long, description: String?) {
+        playlistDao.updatePlaylistDescription(
+            id = playlistId,
+            description = description,
+            dateModified = System.currentTimeMillis() / 1000
+        )
     }
 
     override suspend fun deletePlaylist(playlistId: Long) {
@@ -77,8 +102,19 @@ class PlaylistRepositoryImpl @Inject constructor(
         playlistDao.addSongsToPlaylist(playlistId, songIds)
     }
 
+    override suspend fun moveSong(playlistId: Long, fromIndex: Int, toIndex: Int) {
+        Timber.d("moveSong: playlistId=$playlistId, $fromIndex -> $toIndex")
+        playlistDao.moveSong(playlistId, fromIndex, toIndex)
+    }
+
     override suspend fun removeSongFromPlaylist(playlistId: Long, songId: Long) {
         playlistDao.removeSongFromPlaylist(playlistId, songId)
+    }
+
+    override suspend fun removeSongsFromPlaylist(playlistId: Long, songIds: List<Long>) {
+        if (songIds.isEmpty()) return
+        Timber.d("removeSongsFromPlaylist: playlistId=$playlistId, ${songIds.size} songs")
+        playlistDao.removeSongsFromPlaylist(playlistId, songIds)
     }
 
     override fun getPlaylistSongCount(playlistId: Long): Flow<Int> {

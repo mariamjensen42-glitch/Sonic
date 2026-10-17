@@ -36,6 +36,9 @@ class AudioMetadataRepositoryImpl @Inject constructor(
         )
     }
 
+    override suspend fun getReplayGainDb(filePath: String): Float? =
+        audioMetadataHelper.extractReplayGainDb(filePath)
+
     override suspend fun updateAudioTags(filePath: String, tagUpdate: TagUpdate): Result<Boolean> {
         Timber.d("updateAudioTags: filePath=$filePath, tagUpdate=$tagUpdate")
         return try {

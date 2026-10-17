@@ -1,32 +1,40 @@
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+
 package com.cycling.presentation.songs
 
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Sort
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -37,13 +45,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.cycling.core.ui.components.M3CircularProgressIndicator
-import com.cycling.core.ui.components.M3ExtendedFAB
-import com.cycling.core.ui.components.M3DetailTopAppBar
-import com.cycling.core.ui.theme.M3Spacing
+import com.cycling.core.ui.components.M3SymbolIcon
+import com.cycling.core.ui.components.SymbolIconName
+import com.cycling.core.ui.theme.SonLayout
+import com.cycling.core.ui.theme.SonSizes
+import com.cycling.core.ui.theme.SonSpacing
 import com.cycling.domain.model.Song
 import com.cycling.domain.model.SortOrder
 import com.cycling.presentation.R
@@ -51,10 +61,13 @@ import com.cycling.presentation.components.MenuItem
 import com.cycling.presentation.components.PlaylistPickerDialog
 import com.cycling.presentation.components.SongListItem
 import com.cycling.presentation.components.formatDuration
+import com.cycling.presentation.permissions.MediaLibraryPermission
 import com.cycling.presentation.player.PlayerIntent
 import com.cycling.presentation.player.PlayerViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** 多选操作栏的高度，用来给列表补底部留白。 */
+private val SelectionBarHeight = 72.dp
+
 @Composable
 fun SongsScreen(
     onNavigateBack: () -> Unit,
@@ -68,6 +81,16 @@ fun SongsScreen(
     var showSortMenu by remember { mutableStateOf(false) }
     var expandedSongId by remember { mutableStateOf<Long?>(null) }
     val scrollState = rememberLazyListState()
+
+    // 空列表上的按钮要区分"没权限"和"没歌"：没权限时先去要权限，要到手就直接扫，
+    // 否则用户按下去只会得到一个依然空着的列表。
+    var hasMediaPermission by remember { mutableStateOf(MediaLibraryPermission.isGranted(context)) }
+    val mediaPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        hasMediaPermission = permissions.values.all { it }
+        if (hasMediaPermission) viewModel.handleIntent(SongsIntent.ScanLibrary)
+    }
     LaunchedEffect(Unit) {
         viewModel.uiEffect.collect { effect ->
             when (effect) {
@@ -82,7 +105,10 @@ fun SongsScreen(
                     onNavigateToPlayer(effect.songId)
                 }
                 is SongsEffect.ShowToast -> {
-                    Toast.makeText(context, context.getString(effect.message), Toast.LENGTH_SHORT).show()
+                    val message = effect.arg
+                        ?.let { context.getString(effect.message, it) }
+                        ?: context.getString(effect.message)
+                    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -94,50 +120,126 @@ fun SongsScreen(
 
     Scaffold(
         topBar = {
-            M3DetailTopAppBar(
-                title = stringResource(R.string.songs_title),
-                navigationIcon = Icons.AutoMirrored.Filled.ArrowBack,
-                navigationIconContentDescription = stringResource(R.string.songs_back_desc),
-                onNavigationClick = onNavigateBack,
+            TopAppBar(
+                title = {
+                    Text(
+                        text = if (uiState.selectionMode) {
+                            stringResource(R.string.songs_selected_count, uiState.selectedSongIds.size)
+                        } else {
+                            stringResource(R.string.songs_title)
+                        },
+                        style = MaterialTheme.typography.titleLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                },
+                navigationIcon = {
+                    IconButton(
+                        onClick = {
+                            if (uiState.selectionMode) {
+                                viewModel.handleIntent(SongsIntent.ExitSelectionMode)
+                            } else {
+                                onNavigateBack()
+                            }
+                        }
+                    ) {
+                        M3SymbolIcon(
+                            name = if (uiState.selectionMode) {
+                                SymbolIconName.Close
+                            } else {
+                                SymbolIconName.ArrowBack
+                            },
+                            filled = true,
+                            contentDescription = if (uiState.selectionMode) {
+                                stringResource(R.string.songs_exit_selection_desc)
+                            } else {
+                                stringResource(R.string.songs_back_desc)
+                            }
+                        )
+                    }
+                },
                 actions = {
-                    Box {
-                        IconButton(onClick = { showSortMenu = true }) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.Sort,
-                                contentDescription = stringResource(R.string.songs_sort_desc)
+                    if (uiState.selectionMode) {
+                        val allSelected = sortedSongs.isNotEmpty() &&
+                            uiState.selectedSongIds.size == sortedSongs.size
+                        IconButton(
+                            onClick = {
+                                viewModel.handleIntent(
+                                    if (allSelected) SongsIntent.ClearSelection else SongsIntent.SelectAll
+                                )
+                            }
+                        ) {
+                            M3SymbolIcon(
+                                name = SymbolIconName.SelectAll,
+                                filled = true,
+                                contentDescription = if (allSelected) {
+                                    stringResource(R.string.songs_clear_selection_desc)
+                                } else {
+                                    stringResource(R.string.songs_select_all_desc)
+                                }
                             )
                         }
-                        DropdownMenu(
-                            expanded = showSortMenu,
-                            onDismissRequest = { showSortMenu = false }
+                    } else {
+                        IconButton(
+                            onClick = { viewModel.handleIntent(SongsIntent.EnterSelectionMode) }
                         ) {
-                            SortOrder.entries.forEach { sortOrder ->
-                                DropdownMenuItem(
-                                    text = { Text(getSortOrderName(sortOrder)) },
-                                    onClick = {
-                                        viewModel.handleIntent(SongsIntent.ChangeSortOrder(sortOrder))
-                                        showSortMenu = false
-                                    }
+                            M3SymbolIcon(
+                                name = SymbolIconName.Checklist,
+                                filled = true,
+                                contentDescription = stringResource(R.string.songs_select_desc)
+                            )
+                        }
+                        Box {
+                            IconButton(onClick = { showSortMenu = true }) {
+                                M3SymbolIcon(
+                                    name = SymbolIconName.Sort,
+                                    filled = true,
+                                    contentDescription = stringResource(R.string.songs_sort_desc)
                                 )
+                            }
+                            DropdownMenu(
+                                expanded = showSortMenu,
+                                onDismissRequest = { showSortMenu = false }
+                            ) {
+                                SortOrder.entries.forEach { sortOrder ->
+                                    DropdownMenuItem(
+                                        text = { Text(text = getSortOrderName(sortOrder)) },
+                                        onClick = {
+                                            viewModel.handleIntent(SongsIntent.ChangeSortOrder(sortOrder))
+                                            showSortMenu = false
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface
+                )
             )
-        },
-        containerColor = MaterialTheme.colorScheme.surface
+        }
     ) { paddingValues ->
         Box(modifier = Modifier.padding(paddingValues)) {
             if (uiState.isLoading) {
                 LoadingState()
             } else if (sortedSongs.isEmpty()) {
-                EmptySongsState()
+                EmptySongsState(
+                    isScanning = uiState.isScanning,
+                    hasMediaPermission = hasMediaPermission,
+                    onScan = { viewModel.handleIntent(SongsIntent.ScanLibrary) },
+                    onRequestPermission = { mediaPermissionLauncher.launch(MediaLibraryPermission.names) }
+                )
             } else {
                 Box(modifier = Modifier.fillMaxSize()) {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         state = scrollState,
-                        contentPadding = PaddingValues(bottom = M3Spacing.extraExtraLarge)
+                        contentPadding = PaddingValues(
+                            bottom = SonLayout.bottomBarClearance +
+                                if (uiState.selectionMode) SelectionBarHeight else 0.dp
+                        )
                     ) {
                         item {
                             Text(
@@ -145,8 +247,8 @@ fun SongsScreen(
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(
-                                    horizontal = M3Spacing.medium,
-                                    vertical = M3Spacing.small
+                                    horizontal = SonSpacing.medium,
+                                    vertical = SonSpacing.small
                                 )
                             )
                         }
@@ -157,11 +259,24 @@ fun SongsScreen(
                                 showDivider = index < sortedSongs.size - 1,
                                 subtitle = "${song.artist} · ${formatDuration(song.duration)}",
                                 showDuration = false,
-                                showMoreButton = true,
+                                showMoreButton = !uiState.selectionMode,
+                                selected = if (uiState.selectionMode) {
+                                    song.id in uiState.selectedSongIds
+                                } else {
+                                    null
+                                },
                                 moreMenuExpanded = expandedSongId == song.id,
                                 onMoreClick = { expandedSongId = song.id },
                                 onMoreDismiss = { expandedSongId = null },
-                                onClick = { viewModel.handleIntent(SongsIntent.SongClick(song)) },
+                                onClick = {
+                                    // 多选模式下单击是勾选。播放要退出多选再做，否则用户会在
+                                    // "我只是想挑几首" 的过程中把当前队列换掉。
+                                    if (uiState.selectionMode) {
+                                        viewModel.handleIntent(SongsIntent.ToggleSelection(song.id))
+                                    } else {
+                                        viewModel.handleIntent(SongsIntent.SongClick(song))
+                                    }
+                                },
                                 moreMenuItems = listOf(
                                     MenuItem(name = stringResource(R.string.songs_play_next), onClick = {
                                         playerViewModel.handleIntent(PlayerIntent.PlayNext(song))
@@ -175,21 +290,40 @@ fun SongsScreen(
                         }
                     }
 
-                    M3ExtendedFAB(
-                        text = stringResource(R.string.songs_play_all),
-                        icon = Icons.Default.PlayArrow,
-                        onClick = {
-                            if (sortedSongs.isNotEmpty()) {
-                                playerViewModel.handleIntent(
-                                    PlayerIntent.PlaySong(sortedSongs.first(), sortedSongs)
+                    if (uiState.selectionMode) {
+                        SongSelectionBar(
+                            selectedCount = uiState.selectedSongIds.size,
+                            onAddToPlaylist = {
+                                viewModel.handleIntent(SongsIntent.ShowBatchAddToPlaylistDialog)
+                            },
+                            onFavorite = { viewModel.handleIntent(SongsIntent.BatchSetFavorite(true)) },
+                            onUnfavorite = { viewModel.handleIntent(SongsIntent.BatchSetFavorite(false)) },
+                            modifier = Modifier.align(Alignment.BottomCenter)
+                        )
+                    } else {
+                        ExtendedFloatingActionButton(
+                            text = { Text(text = stringResource(R.string.songs_play_all)) },
+                            icon = {
+                                M3SymbolIcon(
+                                    name = SymbolIconName.PlayArrow,
+                                    filled = true,
+                                    contentDescription = null
                                 )
-                                onNavigateToPlayer(sortedSongs.first().id)
-                            }
-                        },
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(M3Spacing.medium)
-                    )
+                            },
+                            onClick = {
+                                if (sortedSongs.isNotEmpty()) {
+                                    playerViewModel.handleIntent(
+                                        PlayerIntent.PlaySong(sortedSongs.first(), sortedSongs)
+                                    )
+                                    onNavigateToPlayer(sortedSongs.first().id)
+                                }
+                            },
+                            expanded = true,
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(SonSpacing.medium)
+                        )
+                    }
                 }
             }
         }
@@ -204,6 +338,74 @@ fun SongsScreen(
         },
         onCreateNewPlaylist = { viewModel.handleIntent(SongsIntent.CreatePlaylistAndAddSong(it)) }
     )
+
+    PlaylistPickerDialog(
+        visible = uiState.showBatchAddToPlaylistDialog,
+        playlists = uiState.playlists,
+        onDismiss = { viewModel.handleIntent(SongsIntent.DismissBatchAddToPlaylistDialog) },
+        onPlaylistSelected = { playlistId ->
+            viewModel.handleIntent(SongsIntent.BatchAddToPlaylist(playlistId))
+        },
+        onCreateNewPlaylist = { viewModel.handleIntent(SongsIntent.CreatePlaylistAndAddSelected(it)) }
+    )
+}
+
+/**
+ * 多选时替换掉右下角播放按钮的操作栏。
+ *
+ * 放在底部而不是顶部：这三个动作都会改动选中的歌，靠近拇指、且离"取消"（左上角）足够远，
+ * 不会误触。
+ */
+@Composable
+private fun SongSelectionBar(
+    selectedCount: Int,
+    onAddToPlaylist: () -> Unit,
+    onFavorite: () -> Unit,
+    onUnfavorite: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val enabled = selectedCount > 0
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceContainer
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = SonLayout.screenMargin, vertical = SonSpacing.small),
+            horizontalArrangement = Arrangement.spacedBy(SonSpacing.small),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            FilledTonalButton(
+                onClick = onAddToPlaylist,
+                enabled = enabled,
+                modifier = Modifier.weight(1f)
+            ) {
+                M3SymbolIcon(
+                    name = SymbolIconName.PlaylistAdd,
+                    filled = true,
+                    contentDescription = null,
+                    modifier = Modifier.size(SonSizes.buttonIcon)
+                )
+                Spacer(modifier = Modifier.width(SonSpacing.extraSmall))
+                Text(text = stringResource(R.string.songs_batch_add_to_playlist))
+            }
+            FilledTonalButton(onClick = onFavorite, enabled = enabled) {
+                M3SymbolIcon(
+                    name = SymbolIconName.Favorite,
+                    filled = true,
+                    contentDescription = stringResource(R.string.songs_batch_favorite)
+                )
+            }
+            FilledTonalButton(onClick = onUnfavorite, enabled = enabled) {
+                M3SymbolIcon(
+                    name = SymbolIconName.Favorite,
+                    filled = false,
+                    contentDescription = stringResource(R.string.songs_batch_unfavorite)
+                )
+            }
+        }
+    }
 }
 
 @Composable
@@ -212,34 +414,51 @@ private fun LoadingState() {
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
-        M3CircularProgressIndicator()
+        LoadingIndicator()
     }
 }
 
 @Composable
-private fun EmptySongsState() {
+private fun EmptySongsState(
+    isScanning: Boolean,
+    hasMediaPermission: Boolean,
+    onScan: () -> Unit,
+    onRequestPermission: () -> Unit
+) {
     Column(
         modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Icon(
-            imageVector = Icons.Default.MusicNote,
+        M3SymbolIcon(
+            name = SymbolIconName.MusicNote,
+            filled = false,
             contentDescription = null,
-            modifier = Modifier.size(64.dp),
+            modifier = Modifier.size(SonSizes.iconExtraLarge),
             tint = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Spacer(modifier = Modifier.height(M3Spacing.medium))
+        Spacer(modifier = Modifier.height(SonSpacing.medium))
         Text(
             text = stringResource(R.string.songs_empty_title),
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.headlineSmall,
             color = MaterialTheme.colorScheme.onSurface
         )
+        Spacer(modifier = Modifier.height(SonSpacing.small))
         Text(
             text = stringResource(R.string.songs_empty_subtitle),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        Spacer(modifier = Modifier.height(SonSpacing.large))
+        when {
+            isScanning -> LoadingIndicator()
+            hasMediaPermission -> Button(onClick = onScan) {
+                Text(text = stringResource(R.string.scan_start))
+            }
+            else -> Button(onClick = onRequestPermission) {
+                Text(text = stringResource(R.string.grant_permission))
+            }
+        }
     }
 }
 

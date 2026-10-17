@@ -1,4 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- 桌面小组件。声明在 presentation 里：壳工程只负责装配，组件随 UI 模块一起走资源合并。 -->
+    <application>
+        <receiver
+            android:name=".widget.SonicWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/sonic_widget_info" />
+        </receiver>
+    </application>
+
 </manifest>

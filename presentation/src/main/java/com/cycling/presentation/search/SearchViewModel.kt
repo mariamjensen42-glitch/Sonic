@@ -6,6 +6,7 @@ import com.cycling.domain.usecase.SearchHistoryUseCase
 import com.cycling.domain.usecase.GetSearchSuggestionsUseCase
 import com.cycling.domain.usecase.SearchAllUseCase
 import com.cycling.domain.repository.PlayerRepository
+import com.cycling.domain.repository.SongRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
@@ -30,7 +31,8 @@ class SearchViewModel @Inject constructor(
     private val searchAllUseCase: SearchAllUseCase,
     private val searchHistoryUseCase: SearchHistoryUseCase,
     private val getSearchSuggestionsUseCase: GetSearchSuggestionsUseCase,
-    private val playerRepository: PlayerRepository
+    private val playerRepository: PlayerRepository,
+    private val songRepository: SongRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SearchUiState())
@@ -63,8 +65,13 @@ class SearchViewModel @Inject constructor(
                 if (query.isNotBlank()) {
                     performSearch(query)
                 } else {
-                    _uiState.update { 
-                        it.copy(songs = emptyList(), albums = emptyList(), artists = emptyList()) 
+                    _uiState.update {
+                        it.copy(
+                            songs = emptyList(),
+                            albums = emptyList(),
+                            artists = emptyList(),
+                            lyricsMatches = emptyList()
+                        )
                     }
                 }
             }
@@ -79,6 +86,7 @@ class SearchViewModel @Inject constructor(
             is SearchIntent.ClearHistory -> handleClearHistory()
             is SearchIntent.TabSelected -> handleTabSelected(intent.tab)
             is SearchIntent.SongClicked -> handleSongClick(intent.song)
+            is SearchIntent.ToggleFavorite -> handleToggleFavorite(intent.song)
             is SearchIntent.AlbumClicked -> handleAlbumClick(intent.album)
             is SearchIntent.ArtistClicked -> handleArtistClick(intent.artist)
             is SearchIntent.ClearSearch -> handleClearSearch()
@@ -149,10 +157,25 @@ class SearchViewModel @Inject constructor(
     }
 
     private fun handleClearSearch() {
-        _uiState.update { 
-            SearchUiState(searchHistory = _uiState.value.searchHistory) 
+        _uiState.update {
+            SearchUiState(searchHistory = _uiState.value.searchHistory)
         }
         searchQuery.value = ""
+    }
+
+    /**
+     * 只把新状态写回结果列表，不重新跑一次搜索：结果里每一行的 Song 都来自同一次查询，
+     * 重查会让列表闪一下，而收藏位与查询条件本来就无关。
+     */
+    private fun handleToggleFavorite(song: com.cycling.domain.model.Song) {
+        viewModelScope.launch {
+            val isFavorite = songRepository.toggleFavorite(song.id)
+            _uiState.update { state ->
+                state.copy(
+                    songs = state.songs.map { if (it.id == song.id) it.copy(isFavorite = isFavorite) else it }
+                )
+            }
+        }
     }
 
     private fun performSearch(query: String) {
@@ -161,12 +184,16 @@ class SearchViewModel @Inject constructor(
         
         searchAllUseCase(query)
             .onEach { result ->
-                Timber.d("performSearch: found ${result.songs.size} songs, ${result.albums.size} albums, ${result.artists.size} artists")
-                _uiState.update { 
+                Timber.d(
+                    "performSearch: ${result.songs.size} songs, ${result.albums.size} albums, " +
+                        "${result.artists.size} artists, ${result.lyricsMatches.size} lyrics"
+                )
+                _uiState.update {
                     it.copy(
                         songs = result.songs,
                         albums = result.albums,
                         artists = result.artists,
+                        lyricsMatches = result.lyricsMatches,
                         isSearching = false
                     )
                 }

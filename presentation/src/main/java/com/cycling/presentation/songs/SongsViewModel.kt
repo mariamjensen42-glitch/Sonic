@@ -9,6 +9,7 @@ import com.cycling.domain.repository.PlayerRepository
 import com.cycling.domain.repository.PlaylistRepository
 import com.cycling.domain.repository.SongRepository
 import com.cycling.domain.repository.SongsPreferencesRepository
+import com.cycling.domain.usecase.ScanMusicUseCase
 import com.cycling.presentation.R
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -17,6 +18,8 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -27,7 +30,8 @@ class SongsViewModel @Inject constructor(
     private val songRepository: SongRepository,
     private val songsPreferencesRepository: SongsPreferencesRepository,
     private val playlistRepository: PlaylistRepository,
-    private val playerRepository: PlayerRepository
+    private val playerRepository: PlayerRepository,
+    private val scanMusicUseCase: ScanMusicUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SongsUiState())
@@ -41,6 +45,7 @@ class SongsViewModel @Inject constructor(
         loadSongs()
         loadPlaylists()
         observePlayerState()
+        observeScanProgress()
     }
 
     private fun observePlayerState() {
@@ -54,6 +59,7 @@ class SongsViewModel @Inject constructor(
     fun handleIntent(intent: SongsIntent) {
         when (intent) {
             is SongsIntent.LoadSongs -> loadSongs()
+            is SongsIntent.ScanLibrary -> scanLibrary()
             is SongsIntent.ToggleViewMode -> toggleViewMode()
             is SongsIntent.ChangeSortOrder -> changeSortOrder(intent.sortOrder)
             is SongsIntent.SongClick -> onSongClick(intent.song)
@@ -61,6 +67,17 @@ class SongsViewModel @Inject constructor(
             is SongsIntent.AddToPlaylist -> addToPlaylist(intent.playlistId)
             is SongsIntent.DismissAddToPlaylistDialog -> dismissAddToPlaylistDialog()
             is SongsIntent.CreatePlaylistAndAddSong -> createPlaylistAndAddSong(intent.name)
+            is SongsIntent.EnterSelectionMode -> enterSelectionMode()
+            is SongsIntent.ExitSelectionMode -> exitSelectionMode()
+            is SongsIntent.ToggleSelection -> toggleSelection(intent.songId)
+            is SongsIntent.SelectAll -> selectAll()
+            is SongsIntent.ClearSelection -> _uiState.update { it.copy(selectedSongIds = emptySet()) }
+            is SongsIntent.ShowBatchAddToPlaylistDialog -> showBatchAddToPlaylistDialog()
+            is SongsIntent.DismissBatchAddToPlaylistDialog ->
+                _uiState.update { it.copy(showBatchAddToPlaylistDialog = false) }
+            is SongsIntent.BatchAddToPlaylist -> batchAddToPlaylist(intent.playlistId)
+            is SongsIntent.CreatePlaylistAndAddSelected -> createPlaylistAndAddSelected(intent.name)
+            is SongsIntent.BatchSetFavorite -> batchSetFavorite(intent.isFavorite)
         }
     }
 
@@ -80,6 +97,26 @@ class SongsViewModel @Inject constructor(
                 Timber.d("loadSongs: loaded ${songs.size} songs")
                 _uiState.update { it.copy(songs = songs, isLoading = false) }
             }
+        }
+    }
+
+    /**
+     * 扫描状态取自扫描器本身而不是本地标志位：首次启动那次自动扫描是在这个界面之外发起的，
+     * 用本地标志位的话，用户在扫描进行中切到歌曲页，看到的会是一个空列表加一个可点的按钮。
+     */
+    private fun observeScanProgress() {
+        scanMusicUseCase.progress()
+            .onEach { progress ->
+                _uiState.update { it.copy(isScanning = progress.isScanning) }
+            }
+            .launchIn(viewModelScope)
+    }
+
+    private fun scanLibrary() {
+        viewModelScope.launch {
+            scanMusicUseCase.scan()
+                .onFailure { _uiEffect.emit(SongsEffect.ShowToast(R.string.scan_failed)) }
+            // 列表本身是 Room 的 Flow，扫描写入之后会自己更新，这里不用再查一遍
         }
     }
 
@@ -131,7 +168,7 @@ class SongsViewModel @Inject constructor(
         val song = _uiState.value.songToAdd ?: return
         viewModelScope.launch {
             playlistRepository.addSongToPlaylist(playlistId, song.id)
-            _uiEffect.emit(SongsEffect.ShowToast(R.string.songs_vm_added_to_playlist))
+            _uiEffect.emit(SongsEffect.ShowToast(R.string.playlist_added_to))
             dismissAddToPlaylistDialog()
         }
     }
@@ -141,8 +178,92 @@ class SongsViewModel @Inject constructor(
         viewModelScope.launch {
             val playlistId = playlistRepository.createPlaylist(name)
             playlistRepository.addSongToPlaylist(playlistId, song.id)
-            _uiEffect.emit(SongsEffect.ShowToast(R.string.songs_vm_created_and_added))
+            _uiEffect.emit(SongsEffect.ShowToast(R.string.playlist_created_and_added))
             dismissAddToPlaylistDialog()
         }
     }
+
+    // region 多选
+
+    private fun enterSelectionMode() {
+        _uiState.update { it.copy(selectionMode = true, selectedSongIds = emptySet()) }
+    }
+
+    /**
+     * 退出多选时把已勾选项一起清掉：留着的话，下次进多选会看到上一轮的选择，
+     * 而用户以为那是空的。
+     */
+    private fun exitSelectionMode() {
+        _uiState.update {
+            it.copy(
+                selectionMode = false,
+                selectedSongIds = emptySet(),
+                showBatchAddToPlaylistDialog = false
+            )
+        }
+    }
+
+    private fun toggleSelection(songId: Long) {
+        _uiState.update { state ->
+            val selected = state.selectedSongIds
+            state.copy(
+                selectedSongIds = if (songId in selected) selected - songId else selected + songId
+            )
+        }
+    }
+
+    /** 全选当前列表里的每一首。列表被排序/筛选过也仍是同一批 id，不需要再拿界面上的顺序。 */
+    private fun selectAll() {
+        _uiState.update { it.copy(selectedSongIds = it.songs.map { song -> song.id }.toSet()) }
+    }
+
+    private fun showBatchAddToPlaylistDialog() {
+        if (_uiState.value.selectedSongIds.isEmpty()) return
+        _uiState.update { it.copy(showBatchAddToPlaylistDialog = true) }
+    }
+
+    private fun batchAddToPlaylist(playlistId: Long) {
+        val songIds = _uiState.value.selectedSongIds.toList()
+        if (songIds.isEmpty()) return
+        viewModelScope.launch {
+            playlistRepository.addSongsToPlaylist(playlistId, songIds)
+            _uiState.update { it.copy(showBatchAddToPlaylistDialog = false) }
+            _uiEffect.emit(SongsEffect.ShowToast(R.string.songs_batch_added_to_playlist, songIds.size))
+            exitSelectionMode()
+        }
+    }
+
+    private fun createPlaylistAndAddSelected(name: String) {
+        val songIds = _uiState.value.selectedSongIds.toList()
+        viewModelScope.launch {
+            val playlistId = playlistRepository.createPlaylist(name)
+            if (songIds.isNotEmpty()) {
+                playlistRepository.addSongsToPlaylist(playlistId, songIds)
+            }
+            _uiState.update { it.copy(showBatchAddToPlaylistDialog = false) }
+            _uiEffect.emit(SongsEffect.ShowToast(R.string.songs_batch_added_to_playlist, songIds.size))
+            exitSelectionMode()
+        }
+    }
+
+    private fun batchSetFavorite(isFavorite: Boolean) {
+        val songIds = _uiState.value.selectedSongIds.toList()
+        if (songIds.isEmpty()) return
+        viewModelScope.launch {
+            songRepository.setFavoriteBatch(songIds, isFavorite)
+            _uiEffect.emit(
+                SongsEffect.ShowToast(
+                    message = if (isFavorite) {
+                        R.string.songs_batch_favorited
+                    } else {
+                        R.string.songs_batch_unfavorited
+                    },
+                    arg = songIds.size
+                )
+            )
+            exitSelectionMode()
+        }
+    }
+
+    // endregion
 }

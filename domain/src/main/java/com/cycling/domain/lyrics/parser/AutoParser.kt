@@ -12,6 +12,7 @@ class AutoParser(private val guesser: LyricsFormatGuesser) : ILyricsParser {
         registerParser("TTML", TTMLParser)
         registerParser("LYRICIFY_SYLLABLE", LyricifySyllableParser)
         registerParser("WORD_BY_WORD_LRC", WordByWordLrcParser)
+        registerParser("YRC", YrcParser)
     }
 
     private fun registerParser(formatName: String, parser: ILyricsParser) {

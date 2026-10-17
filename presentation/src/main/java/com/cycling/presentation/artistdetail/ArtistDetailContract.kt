@@ -1,24 +1,13 @@
 package com.cycling.presentation.artistdetail
 
-import com.cycling.domain.model.Artist
-import com.cycling.domain.model.Song
-import kotlinx.coroutines.flow.StateFlow
-
-data class ArtistDetailUiState(
-    val artist: Artist? = null,
-    val songs: List<Song> = emptyList(),
-    val isLoading: Boolean = true,
-    val currentSongId: Long? = null,
-    val isPlaying: Boolean = false,
-    val likedSongIds: Set<Long> = emptySet()
-)
-
+/**
+ * 歌手详情页特有的用户意图。
+ *
+ * 公共意图（点击、随机、多选、批量收藏、添加到歌单等）见
+ * [com.cycling.presentation.collectiondetail.SongCollectionIntent]，
+ * 由基类 [com.cycling.presentation.collectiondetail.CollectionDetailViewModel] 分发。
+ */
 sealed interface ArtistDetailIntent {
-    data class LoadArtist(val artistId: Long) : ArtistDetailIntent
-    data class SongClick(val song: Song) : ArtistDetailIntent
+    /** 切换单曲收藏。 */
     data class ToggleFavorite(val songId: Long) : ArtistDetailIntent
-}
-
-sealed interface ArtistDetailEffect {
-    data class NavigateToPlayer(val songId: Long) : ArtistDetailEffect
 }

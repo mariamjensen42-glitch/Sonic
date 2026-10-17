@@ -137,6 +137,26 @@ interface SongDao {
     @Query("UPDATE songs SET lastPlayedAt = :lastPlayedAt WHERE id = :songId")
     suspend fun updateLastPlayedAt(songId: Long, lastPlayedAt: Long)
 
+    /**
+     * Restores listening stats from a backup, never lowering what is already on this device.
+     *
+     * `MAX` rather than assignment: a restore is usually onto a fresh install (nothing to lose),
+     * but importing an older backup over a lived-in library must not erase later plays.
+     */
+    @Query(
+        """
+        UPDATE songs SET
+            playCount = MAX(playCount, :playCount),
+            lastPlayedAt = CASE
+                WHEN lastPlayedAt IS NULL THEN :lastPlayedAt
+                WHEN :lastPlayedAt IS NULL THEN lastPlayedAt
+                ELSE MAX(lastPlayedAt, :lastPlayedAt)
+            END
+        WHERE id = :songId
+        """
+    )
+    suspend fun restorePlayStats(songId: Long, playCount: Int, lastPlayedAt: Long?)
+
     @Query("SELECT * FROM songs WHERE bitrate = 0")
     suspend fun getSongsWithoutBitrate(): List<SongEntity>
 

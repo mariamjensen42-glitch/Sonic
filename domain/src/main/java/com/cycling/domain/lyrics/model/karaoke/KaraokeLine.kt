@@ -35,24 +35,5 @@ data class KaraokeLine(
             return current in (start - 800)..(end + 800)
     }
 
-    fun List<KaraokeSyllable>.contents(): String {
-        return this.joinToString("") { it.content }
-    }
 }
 
-fun SyncedLine.toKaraokeLine(): KaraokeLine {
-    return KaraokeLine(
-        syllables = listOf(
-            KaraokeSyllable(
-                this.content,
-                this.start,
-                this.end
-            )
-        ),
-        translation = this.translation,
-        isAccompaniment = false,
-        alignment = KaraokeAlignment.Unspecified,
-        start = this.start,
-        end = this.end
-    )
-}

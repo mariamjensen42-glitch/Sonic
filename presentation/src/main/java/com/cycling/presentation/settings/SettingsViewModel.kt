@@ -1,14 +1,20 @@
 package com.cycling.presentation.settings
 
-import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cycling.domain.model.ExcludedFolder
 import com.cycling.domain.model.LibraryStats
+import com.cycling.domain.model.LyricsProvider
 import com.cycling.domain.model.ScanResult
 import com.cycling.domain.model.ScanStep
 import com.cycling.domain.repository.AiRepository
 import com.cycling.domain.repository.ExcludedFolderRepository
+import com.cycling.domain.repository.LibraryTransferRepository
+import com.cycling.domain.repository.PlayerRepository
+import com.cycling.domain.repository.SettingsRepository
+import com.cycling.domain.repository.SettingsRepository.Companion.DEFAULT_LYRICS_PROVIDER_ORDER
+import com.cycling.domain.repository.SettingsRepository.Companion.DEFAULT_PLAYBACK_SPEED
+import com.cycling.domain.repository.SettingsRepository.Companion.DEFAULT_SLEEP_TIMER_PRESET_MINUTES
 import com.cycling.domain.usecase.GetLibraryStatsUseCase
 import com.cycling.domain.usecase.ScanMusicUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -18,6 +24,8 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import com.cycling.presentation.R
@@ -45,7 +53,23 @@ data class SettingsUiState(
     val apiKeySaved: Boolean = false,
     val libraryStats: LibraryStats? = null,
     val isLoadingStats: Boolean = false,
-    val statsError: String? = null
+    val statsError: String? = null,
+    /** 一次备份/恢复是否正在进行，用来禁用重复点击。 */
+    val isTransferring: Boolean = false,
+    val onlineLyricsEnabled: Boolean = true,
+    val lyricsProviderOrder: List<LyricsProvider> = DEFAULT_LYRICS_PROVIDER_ORDER,
+    val playbackSpeed: Float = DEFAULT_PLAYBACK_SPEED,
+    val skipSilence: Boolean = false,
+    val replayGainEnabled: Boolean = false,
+    val audioFadeDurationMs: Long = SettingsRepository.DEFAULT_AUDIO_FADE_DURATION_MS,
+    val rememberPlaybackPosition: Boolean = true,
+    val openPlayerOnPlay: Boolean = true,
+    /** 队列播完后是否自动续上风格相近的歌。 */
+    val autoContinueEnabled: Boolean = true,
+    /** 上次选过的睡眠时长，用作下次打开选择器时的默认值。 */
+    val sleepTimerMinutes: Int = DEFAULT_SLEEP_TIMER_PRESET_MINUTES,
+    /** 定时器剩余毫秒，没开就是 null。 */
+    val sleepTimerRemainingMs: Long? = null
 )
 
 sealed interface SettingsScanStep {
@@ -69,6 +93,21 @@ sealed interface SettingsIntent {
     data object SaveApiKey : SettingsIntent
     data object ClearApiKey : SettingsIntent
     data object LoadLibraryStats : SettingsIntent
+    data class SetOnlineLyricsEnabled(val enabled: Boolean) : SettingsIntent
+    /** Moves [provider] [offset] places through the priority list; out-of-range moves are ignored. */
+    data class MoveLyricsProvider(val provider: LyricsProvider, val offset: Int) : SettingsIntent
+    data class SetPlaybackSpeed(val speed: Float) : SettingsIntent
+    data class SetSkipSilence(val enabled: Boolean) : SettingsIntent
+    data class SetReplayGainEnabled(val enabled: Boolean) : SettingsIntent
+    data class SetAudioFadeDuration(val durationMs: Long) : SettingsIntent
+    data class SetRememberPlaybackPosition(val enabled: Boolean) : SettingsIntent
+    data class SetOpenPlayerOnPlay(val enabled: Boolean) : SettingsIntent
+    data class SetAutoContinueEnabled(val enabled: Boolean) : SettingsIntent
+    data class ExportBackup(val targetUri: String) : SettingsIntent
+    data class ImportBackup(val sourceUri: String) : SettingsIntent
+    data class ImportM3u(val sourceUri: String) : SettingsIntent
+    data class SetSleepTimer(val minutes: Int) : SettingsIntent
+    data object CancelSleepTimer : SettingsIntent
 }
 
 sealed interface SettingsEffect {
@@ -82,7 +121,10 @@ class SettingsViewModel @Inject constructor(
     private val aiRepository: AiRepository,
     private val scanMusicUseCase: ScanMusicUseCase,
     private val excludedFolderRepository: ExcludedFolderRepository,
-    private val getLibraryStatsUseCase: GetLibraryStatsUseCase
+    private val getLibraryStatsUseCase: GetLibraryStatsUseCase,
+    private val settingsRepository: SettingsRepository,
+    private val libraryTransferRepository: LibraryTransferRepository,
+    private val playerRepository: PlayerRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -102,6 +144,9 @@ class SettingsViewModel @Inject constructor(
         observeScanProgress()
         loadExcludedFolders()
         loadLibraryStats()
+        observeLyricsSettings()
+        observePlaybackSettings()
+        observeSleepTimer()
     }
 
     fun handleIntent(intent: SettingsIntent) {
@@ -119,6 +164,158 @@ class SettingsViewModel @Inject constructor(
             is SettingsIntent.SaveApiKey -> saveApiKey()
             is SettingsIntent.ClearApiKey -> clearApiKey()
             is SettingsIntent.LoadLibraryStats -> loadLibraryStats()
+            is SettingsIntent.SetOnlineLyricsEnabled -> setOnlineLyricsEnabled(intent.enabled)
+            is SettingsIntent.MoveLyricsProvider -> moveLyricsProvider(intent.provider, intent.offset)
+            is SettingsIntent.SetPlaybackSpeed -> setPlaybackSpeed(intent.speed)
+            is SettingsIntent.SetSkipSilence -> setSkipSilence(intent.enabled)
+            is SettingsIntent.SetReplayGainEnabled -> setReplayGainEnabled(intent.enabled)
+            is SettingsIntent.SetAudioFadeDuration -> setAudioFadeDuration(intent.durationMs)
+            is SettingsIntent.SetRememberPlaybackPosition -> setRememberPlaybackPosition(intent.enabled)
+            is SettingsIntent.SetOpenPlayerOnPlay -> setOpenPlayerOnPlay(intent.enabled)
+            is SettingsIntent.SetAutoContinueEnabled -> setAutoContinueEnabled(intent.enabled)
+            is SettingsIntent.ExportBackup -> exportBackup(intent.targetUri)
+            is SettingsIntent.ImportBackup -> importBackup(intent.sourceUri)
+            is SettingsIntent.ImportM3u -> importM3u(intent.sourceUri)
+            is SettingsIntent.SetSleepTimer -> setSleepTimer(intent.minutes)
+            is SettingsIntent.CancelSleepTimer -> playerRepository.cancelSleepTimer()
+        }
+    }
+
+    /**
+     * 睡眠定时器跑在播放器里而不是这个 ViewModel 里：它到点要暂停的是播放器，而且用户设好之后
+     * 会离开设置页。这里只负责把选择传下去、再把剩余时间读回来显示。
+     */
+    private fun observeSleepTimer() {
+        settingsRepository.sleepTimerPresetMinutes
+            .onEach { minutes -> _uiState.update { it.copy(sleepTimerMinutes = minutes) } }
+            .launchIn(viewModelScope)
+        playerRepository.sleepTimerRemainingMs
+            .onEach { remaining -> _uiState.update { it.copy(sleepTimerRemainingMs = remaining) } }
+            .launchIn(viewModelScope)
+    }
+
+    private fun setSleepTimer(minutes: Int) {
+        playerRepository.setSleepTimer(minutes)
+        viewModelScope.launch { settingsRepository.setSleepTimerPresetMinutes(minutes) }
+    }
+
+    /**
+     * 速度与跳过静音由 PlayerManager 直接从仓库读取，所以写进仓库就已经生效 —— 这里读回来只是
+     * 为了让设置页显示的值和真正在跑的值是同一个。
+     */
+    private fun observePlaybackSettings() {
+        settingsRepository.playbackSpeed
+            .onEach { speed -> _uiState.update { it.copy(playbackSpeed = speed) } }
+            .launchIn(viewModelScope)
+        settingsRepository.skipSilence
+            .onEach { enabled -> _uiState.update { it.copy(skipSilence = enabled) } }
+            .launchIn(viewModelScope)
+        settingsRepository.replayGainEnabled
+            .onEach { enabled -> _uiState.update { it.copy(replayGainEnabled = enabled) } }
+            .launchIn(viewModelScope)
+        settingsRepository.audioFadeDurationMs
+            .onEach { durationMs -> _uiState.update { it.copy(audioFadeDurationMs = durationMs) } }
+            .launchIn(viewModelScope)
+        settingsRepository.rememberPlaybackPosition
+            .onEach { enabled -> _uiState.update { it.copy(rememberPlaybackPosition = enabled) } }
+            .launchIn(viewModelScope)
+        settingsRepository.openPlayerOnPlay
+            .onEach { enabled -> _uiState.update { it.copy(openPlayerOnPlay = enabled) } }
+            .launchIn(viewModelScope)
+        settingsRepository.autoContinueEnabled
+            .onEach { enabled -> _uiState.update { it.copy(autoContinueEnabled = enabled) } }
+            .launchIn(viewModelScope)
+    }
+
+    private fun setPlaybackSpeed(speed: Float) {
+        viewModelScope.launch { settingsRepository.setPlaybackSpeed(speed) }
+    }
+
+    private fun setSkipSilence(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setSkipSilence(enabled) }
+    }
+
+    private fun setReplayGainEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setReplayGainEnabled(enabled) }
+    }
+
+    private fun setAudioFadeDuration(durationMs: Long) {
+        viewModelScope.launch { settingsRepository.setAudioFadeDurationMs(durationMs) }
+    }
+
+    private fun setRememberPlaybackPosition(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setRememberPlaybackPosition(enabled) }
+    }
+
+    private fun setOpenPlayerOnPlay(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setOpenPlayerOnPlay(enabled) }
+    }
+
+    private fun setAutoContinueEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setAutoContinueEnabled(enabled) }
+    }
+
+    /**
+     * 备份/恢复都是用户挑完文件之后才发生的一次性长任务。这里统一加 [isTransferring] 门闩：
+     * SAF 回调可能被连点，重复写同一个文件会相互截断。
+     */
+    private fun exportBackup(targetUri: String) {
+        if (_uiState.value.isTransferring) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isTransferring = true) }
+            runCatching { libraryTransferRepository.exportBackup(targetUri) }
+                .onSuccess { count ->
+                    _uiEffect.emit(
+                        SettingsEffect.ShowToast(R.string.settings_vm_backup_exported, count)
+                    )
+                }
+                .onFailure { error ->
+                    Timber.e(error, "exportBackup failed")
+                    _uiEffect.emit(SettingsEffect.ShowToast(R.string.settings_vm_transfer_failed))
+                }
+            _uiState.update { it.copy(isTransferring = false) }
+        }
+    }
+
+    private fun importBackup(sourceUri: String) {
+        if (_uiState.value.isTransferring) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isTransferring = true) }
+            runCatching { libraryTransferRepository.importBackup(sourceUri) }
+                .onSuccess { result ->
+                    _uiEffect.emit(
+                        SettingsEffect.ShowToast(
+                            R.string.settings_vm_backup_restored,
+                            result.matchedSongs
+                        )
+                    )
+                }
+                .onFailure { error ->
+                    Timber.e(error, "importBackup failed")
+                    _uiEffect.emit(SettingsEffect.ShowToast(R.string.settings_vm_transfer_failed))
+                }
+            _uiState.update { it.copy(isTransferring = false) }
+        }
+    }
+
+    private fun importM3u(sourceUri: String) {
+        if (_uiState.value.isTransferring) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isTransferring = true) }
+            runCatching { libraryTransferRepository.importM3u(sourceUri, playlistName = null) }
+                .onSuccess { result ->
+                    _uiEffect.emit(
+                        SettingsEffect.ShowToast(
+                            R.string.settings_vm_m3u_imported,
+                            result.imported
+                        )
+                    )
+                }
+                .onFailure { error ->
+                    Timber.e(error, "importM3u failed")
+                    _uiEffect.emit(SettingsEffect.ShowToast(R.string.settings_vm_transfer_failed))
+                }
+            _uiState.update { it.copy(isTransferring = false) }
         }
     }
 
@@ -248,6 +445,43 @@ class SettingsViewModel @Inject constructor(
                 Timber.d("loadExcludedFolders: loaded ${folders.size} folders")
                 _uiState.update { it.copy(excludedFolders = folders, isLoadingFolders = false) }
             }
+        }
+    }
+
+    private fun observeLyricsSettings() {
+        viewModelScope.launch {
+            settingsRepository.onlineLyricsEnabled.collect { enabled ->
+                _uiState.update { it.copy(onlineLyricsEnabled = enabled) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.lyricsProviderOrder.collect { order ->
+                _uiState.update { it.copy(lyricsProviderOrder = order) }
+            }
+        }
+    }
+
+    /**
+     * Persists the published order and lets the repository's flow update the UI, rather than
+     * writing the new list to state directly — the repository is the one place that guarantees the
+     * stored order is never empty.
+     */
+    private fun setOnlineLyricsEnabled(enabled: Boolean) {
+        Timber.d("setOnlineLyricsEnabled: enabled = $enabled")
+        viewModelScope.launch { settingsRepository.setOnlineLyricsEnabled(enabled) }
+    }
+
+    private fun moveLyricsProvider(provider: LyricsProvider, offset: Int) {
+        val current = _uiState.value.lyricsProviderOrder
+        val from = current.indexOf(provider)
+        val to = from + offset
+        if (from < 0 || to !in current.indices) return
+
+        Timber.d("moveLyricsProvider: $provider $from -> $to")
+        viewModelScope.launch {
+            settingsRepository.setLyricsProviderOrder(
+                current.toMutableList().apply { add(to, removeAt(from)) }
+            )
         }
     }
 

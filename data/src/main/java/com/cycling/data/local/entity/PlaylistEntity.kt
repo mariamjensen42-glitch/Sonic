@@ -11,5 +11,7 @@ data class PlaylistEntity(
     val dateAdded: Long,
     val dateModified: Long,
     /** User-supplied cover URI; falls back to the first song's art when null. */
-    val customCover: String? = null
+    val customCover: String? = null,
+    /** 歌单介绍，AI 创建时写入。 */
+    val description: String? = null
 )

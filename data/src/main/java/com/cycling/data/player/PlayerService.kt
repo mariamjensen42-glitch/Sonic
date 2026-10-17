@@ -31,19 +31,23 @@ class PlayerService : MediaSessionService() {
     @Inject
     lateinit var exoPlayer: ExoPlayer
 
+    @Inject
+    lateinit var bitmapLoader: MediaStoreBitmapLoader
+
     private var mediaSession: MediaSession? = null
 
     companion object {
         private const val NOTIFICATION_CHANNEL_ID = "music_playback_channel"
-        const val NOTIFICATION_ID = 1001
 
+        /**
+         * Starts the service in the foreground.
+         *
+         * The five-second deadline this call arms is only met once the player is engaged, so
+         * callers must be on their way into `play()` — see [PlaybackServiceController.start] —
+         * and [PlayerService.onCreate] must have registered the session with [addSession].
+         */
         fun start(context: Context) {
-            val intent = Intent(context, PlayerService::class.java)
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
-            }
+            context.startForegroundService(Intent(context, PlayerService::class.java))
         }
     }
 
@@ -53,10 +57,23 @@ class PlayerService : MediaSessionService() {
         
         createNotificationChannel()
         
-        mediaSession = MediaSession.Builder(this, exoPlayer)
+        val session = MediaSession.Builder(this, exoPlayer)
             .setCallback(PlayerSessionCallback())
             .setSessionActivity(createSessionActivity())
+            // The stock loader cannot read this app's album-art URIs, which is why the notification
+            // and the system control bar used to come up without a cover — see
+            // [MediaStoreBitmapLoader].
+            .setBitmapLoader(bitmapLoader)
             .build()
+        mediaSession = session
+
+        // Hand the session to MediaSessionService, which is what actually makes `startForeground`
+        // reachable. The base class only learns about a session from a media-action start intent
+        // or from a controller binding, and this app never uses a MediaController (see
+        // ExoPlayerPlaybackEngine), so without this call nothing ever reaches
+        // `updateNotification` and every `startForegroundService` is killed five seconds later
+        // with ForegroundServiceDidNotStartInTimeException.
+        addSession(session)
 
         exoPlayer.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {

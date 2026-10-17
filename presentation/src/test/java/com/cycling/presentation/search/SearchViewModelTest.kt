@@ -5,6 +5,7 @@ import com.cycling.domain.model.Artist
 import com.cycling.domain.model.Song
 import com.cycling.domain.model.SearchResult
 import com.cycling.domain.repository.PlayerRepository
+import com.cycling.domain.repository.SongRepository
 import com.cycling.domain.usecase.SearchHistoryUseCase
 import com.cycling.domain.usecase.GetSearchSuggestionsUseCase
 import com.cycling.domain.usecase.SearchAllUseCase
@@ -33,6 +34,7 @@ class SearchViewModelTest {
     private lateinit var searchHistoryUseCase: SearchHistoryUseCase
     private lateinit var getSearchSuggestionsUseCase: GetSearchSuggestionsUseCase
     private lateinit var playerRepository: PlayerRepository
+    private lateinit var songRepository: SongRepository
     private lateinit var viewModel: SearchViewModel
 
     private fun createSong(
@@ -104,6 +106,7 @@ class SearchViewModelTest {
         searchHistoryUseCase = mockk()
         getSearchSuggestionsUseCase = mockk()
         playerRepository = mockk(relaxed = true)
+        songRepository = mockk(relaxed = true)
 
         every { searchHistoryUseCase.getAll() } returns flowOf(emptyList())
         every { searchAllUseCase(any()) } returns flowOf(SearchResult())
@@ -121,7 +124,8 @@ class SearchViewModelTest {
             searchAllUseCase,
             searchHistoryUseCase,
             getSearchSuggestionsUseCase,
-            playerRepository
+            playerRepository,
+            songRepository
         )
         advanceUntilIdle()
 
@@ -138,7 +142,8 @@ class SearchViewModelTest {
             searchAllUseCase,
             searchHistoryUseCase,
             getSearchSuggestionsUseCase,
-            playerRepository
+            playerRepository,
+            songRepository
         )
         advanceUntilIdle()
 
@@ -163,7 +168,8 @@ class SearchViewModelTest {
             searchAllUseCase,
             searchHistoryUseCase,
             getSearchSuggestionsUseCase,
-            playerRepository
+            playerRepository,
+            songRepository
         )
         advanceUntilIdle()
 
@@ -182,7 +188,8 @@ class SearchViewModelTest {
             searchAllUseCase,
             searchHistoryUseCase,
             getSearchSuggestionsUseCase,
-            playerRepository
+            playerRepository,
+            songRepository
         )
         advanceUntilIdle()
 
@@ -202,7 +209,8 @@ class SearchViewModelTest {
             searchAllUseCase,
             searchHistoryUseCase,
             getSearchSuggestionsUseCase,
-            playerRepository
+            playerRepository,
+            songRepository
         )
         advanceUntilIdle()
 
@@ -219,7 +227,8 @@ class SearchViewModelTest {
             searchAllUseCase,
             searchHistoryUseCase,
             getSearchSuggestionsUseCase,
-            playerRepository
+            playerRepository,
+            songRepository
         )
         advanceUntilIdle()
 
@@ -235,7 +244,8 @@ class SearchViewModelTest {
             searchAllUseCase,
             searchHistoryUseCase,
             getSearchSuggestionsUseCase,
-            playerRepository
+            playerRepository,
+            songRepository
         )
         advanceUntilIdle()
 
@@ -251,7 +261,8 @@ class SearchViewModelTest {
             searchAllUseCase,
             searchHistoryUseCase,
             getSearchSuggestionsUseCase,
-            playerRepository
+            playerRepository,
+            songRepository
         )
         advanceUntilIdle()
 
@@ -273,7 +284,8 @@ class SearchViewModelTest {
             searchAllUseCase,
             searchHistoryUseCase,
             getSearchSuggestionsUseCase,
-            playerRepository
+            playerRepository,
+            songRepository
         )
         advanceUntilIdle()
 
@@ -290,7 +302,8 @@ class SearchViewModelTest {
             searchAllUseCase,
             searchHistoryUseCase,
             getSearchSuggestionsUseCase,
-            playerRepository
+            playerRepository,
+            songRepository
         )
         advanceUntilIdle()
 
@@ -307,7 +320,8 @@ class SearchViewModelTest {
             searchAllUseCase,
             searchHistoryUseCase,
             getSearchSuggestionsUseCase,
-            playerRepository
+            playerRepository,
+            songRepository
         )
         advanceUntilIdle()
 
@@ -315,5 +329,28 @@ class SearchViewModelTest {
         advanceUntilIdle()
 
         coVerify { searchHistoryUseCase.save(any()) }
+    }
+
+    @Test
+    fun `ToggleFavorite writes through and updates the row it was tapped on`() = runTest {
+        val song = createSong(id = 42L, isFavorite = false)
+        coEvery { songRepository.toggleFavorite(42L) } returns true
+        every { searchAllUseCase(any()) } returns flowOf(SearchResult(songs = listOf(song)))
+        viewModel = SearchViewModel(
+            searchAllUseCase,
+            searchHistoryUseCase,
+            getSearchSuggestionsUseCase,
+            playerRepository,
+            songRepository
+        )
+        advanceUntilIdle()
+
+        viewModel.handleIntent(SearchIntent.SearchQueryChanged("test"))
+        advanceUntilIdle()
+        viewModel.handleIntent(SearchIntent.ToggleFavorite(song))
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { songRepository.toggleFavorite(42L) }
+        assertTrue(viewModel.uiState.value.songs.single().isFavorite)
     }
 }

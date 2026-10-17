@@ -14,10 +14,12 @@
 .cxx
 local.properties
 
-# External reference projects
-/spotify-clone-jetpack-compose-main/
 
 # Signing files (removed for this project)
 # *.keystore
 # *.jks
 # key.properties
+/.tmp/
+/.workbuddy-ai/
+/.trae/
+/.reasonix/

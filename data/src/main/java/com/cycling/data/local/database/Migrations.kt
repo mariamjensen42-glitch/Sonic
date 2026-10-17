@@ -50,3 +50,62 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
         )
     }
 }
+
+/**
+ * v2 → v3: the playlist description written by the AI playlist generator.
+ *
+ * Additive like every migration here — existing playlists keep a NULL description and the
+ * detail page simply hides the section for them.
+ */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE playlists ADD COLUMN description TEXT")
+    }
+}
+
+/**
+ * v3 → v4: lyrics the user wrote themselves.
+ *
+ * Its own table rather than a column on `songs` or a row in `lyrics_cache`: the cache is keyed by
+ * a `title|artist|duration` fingerprint that moves when the user re-tags the file, and a lyrics
+ * blob on `songs` would be rewritten by every scan's upsert. Cascade with `songs` so a row cannot
+ * outlive the track and be served for a different file that later reuses the id.
+ */
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `lyrics_override` (
+                `songId` INTEGER NOT NULL,
+                `rawContent` TEXT NOT NULL,
+                `updatedAt` INTEGER NOT NULL,
+                PRIMARY KEY(`songId`),
+                FOREIGN KEY(`songId`) REFERENCES `songs`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+            )
+            """.trimIndent()
+        )
+    }
+}
+
+/**
+ * v4 → v5: searchable lyrics text.
+ *
+ * A per-song index rather than searching `lyrics_cache`: the cache only holds downloads and is
+ * keyed by a fingerprint, while this covers sidecar files, embedded tags and user text too.
+ * Existing rows stay unindexed until their lyrics are resolved once (played, opened, or edited).
+ */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `lyrics_index` (
+                `songId` INTEGER NOT NULL,
+                `content` TEXT NOT NULL,
+                `updatedAt` INTEGER NOT NULL,
+                PRIMARY KEY(`songId`),
+                FOREIGN KEY(`songId`) REFERENCES `songs`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+            )
+            """.trimIndent()
+        )
+    }
+}

@@ -51,6 +51,55 @@ class AudioMetadataHelper @Inject constructor() {
         }
     }
 
+    /**
+     * 读取 ReplayGain 的曲目增益。
+     *
+     * 不去做完整的标签解析，而是在文件头部若干字节里找 `replaygain_track_gain` 这个键，再取它
+     * 后面第一个带 `dB` 的数字。理由：ReplayGain 在 MP3 里是 ID3v2 的 TXXX 帧、在 FLAC/OGG 里
+     * 是 Vorbis comment、在 M4A 里是 iTunes 的自定义 atom —— 三种格式三套解析器，而播放器每换
+     * 一首歌就要问一次。这个键在三种格式里都是明文的 ASCII，落在文件头部，扫一遍就够了。
+     *
+     * 扫描范围固定为 [REPLAY_GAIN_SCAN_BYTES]：ID3v2 头、Vorbis comment 块、以及
+     * faststart 过的 M4A 的 `moov` 都在这个范围内；`moov` 在文件尾部的 M4A 读不到，返回 null，
+     * 播放时按不启用处理，不会出错。
+     */
+    suspend fun extractReplayGainDb(filePath: String): Float? = withContext(Dispatchers.IO) {
+        return@withContext try {
+            val file = File(filePath)
+            if (!file.exists()) return@withContext null
+
+            val head = ByteArray(REPLAY_GAIN_SCAN_BYTES)
+            val read = file.inputStream().use { it.read(head) }
+            if (read <= 0) return@withContext null
+
+            parseReplayGainTrackGain(String(head, 0, read, Charsets.ISO_8859_1))
+        } catch (e: Exception) {
+            Timber.w(e, "extractReplayGainDb failed for: $filePath")
+            null
+        }
+    }
+
+    private fun parseReplayGainTrackGain(rawText: String): Float? {
+        // ID3v2 的 TXXX 值可能是 UTF-16，按单字节解码后会变成夹着 NUL 的字符流；
+        // 去掉 NUL 就还原成可搜索的明文，对本来就是单字节的 Vorbis comment 无影响。
+        val text = rawText.replace("\u0000", "")
+
+        var searchFrom = 0
+        while (true) {
+            val keyAt = text.indexOf(REPLAY_GAIN_KEY, searchFrom, ignoreCase = true)
+            if (keyAt < 0) return null
+
+            val valueFrom = keyAt + REPLAY_GAIN_KEY.length
+            val windowEnd = (valueFrom + REPLAY_GAIN_VALUE_WINDOW).coerceAtMost(text.length)
+            if (valueFrom < windowEnd) {
+                val match = REPLAY_GAIN_VALUE_REGEX.find(text.substring(valueFrom, windowEnd))
+                val gain = match?.groupValues?.get(1)?.toFloatOrNull()
+                if (gain != null) return gain
+            }
+            searchFrom = valueFrom
+        }
+    }
+
     private fun extractMp3Metadata(filePath: String): AudioMetadataResult {
         val mp3File = Mp3File(filePath)
         
@@ -134,5 +183,18 @@ class AudioMetadataHelper @Inject constructor() {
             Timber.e(e, "Failed to update MP3 tags for: $filePath")
             false
         }
+    }
+
+    private companion object {
+        const val REPLAY_GAIN_KEY = "replaygain_track_gain"
+
+        /** 头部扫描范围：够覆盖 ID3v2 头与 Vorbis comment，又不会为每首歌读进整张专辑封面。 */
+        const val REPLAY_GAIN_SCAN_BYTES = 128 * 1024
+
+        /** 键后面允许出现的字符数。真实标签形如 `-7.53 dB`，40 个字符足够宽松。 */
+        const val REPLAY_GAIN_VALUE_WINDOW = 40
+
+        /** 只认带 `dB` 单位的数字，避免把后面的 `replaygain_track_peak` 之类的值当成增益。 */
+        val REPLAY_GAIN_VALUE_REGEX = Regex("""(-?\d+(?:\.\d+)?)\s*dB""", RegexOption.IGNORE_CASE)
     }
 }
