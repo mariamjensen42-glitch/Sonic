@@ -4,6 +4,7 @@ import androidx.compose.ui.unit.dp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -37,8 +38,8 @@ class SonColorFieldTest {
         listOf(false, true).forEach { dark ->
             val spec = SonColorField.spec(dark = dark)
 
-            assertEquals(0f, spec.verticalAlphaAt(SonColorField.HeroBottomFraction), 0f)
-            assertEquals(0f, spec.radialAlphaAt(0.60f), 0f)
+            assertEquals(0f, spec.vertical.alphaAt(SonColorField.HeroBottomFraction), 0f)
+            assertEquals(0f, spec.radial.alphaAt(0.60f), 0f)
 
             // 径向椭圆在 hero 下沿正好走到最后一个 stop（60%），两层同时归零。
             val radialProgressAtHeroBottom =
@@ -61,29 +62,28 @@ class SonColorFieldTest {
         val spec = SonColorField.spec(dark = false, end = SonColorFieldEnd.HeroBottom)
 
         assertNull(spec.tail)
-        assertEquals(0f, spec.tailAlphaAt(0f), 0f)
+        assertEquals(0f, spec.tail?.alphaAt(0f) ?: 0f, 0f)
     }
 
     @Test
-    fun `detail end fades out within twelve dp`() {
-        val spec = SonColorField.spec(dark = false, end = SonColorFieldEnd.Detail())
-        val end = spec.end as SonColorFieldEnd.Detail
+    fun `detail tail uses the accepted vertical peak and ends within twelve dp`() {
+        val spec = SonColorField.spec(dark = false, end = SonColorFieldEnd.Detail)
 
-        assertEquals(12.dp, end.tail)
+        assertEquals(12.dp, SonColorField.DetailTail)
         assertNotNull(spec.tail)
-        assertEquals(0.58f, spec.tailAlphaAt(0f), 0f)
-        assertEquals(0f, spec.tailAlphaAt(1f), 0f)
+        assertEquals(0.46f, spec.tail?.alphaAt(0f) ?: -1f, 0f)
+        assertEquals(0f, spec.tail?.alphaAt(1f) ?: -1f, 0f)
 
         // 首行歌曲位于 tail 之后：垂直层在 hero 下沿已经归零，不会再往下染色。
-        assertEquals(0f, spec.verticalAlphaAt(SonColorField.HeroBottomFraction), 0f)
+        assertEquals(0f, spec.vertical.alphaAt(SonColorField.HeroBottomFraction), 0f)
     }
 
     @Test
     fun `dark detail tail is dimmer than light tail`() {
-        val light = SonColorField.spec(dark = false, end = SonColorFieldEnd.Detail())
-        val dark = SonColorField.spec(dark = true, end = SonColorFieldEnd.Detail())
+        val light = SonColorField.spec(dark = false, end = SonColorFieldEnd.Detail)
+        val dark = SonColorField.spec(dark = true, end = SonColorFieldEnd.Detail)
 
-        assertEquals(0.42f, dark.tailAlphaAt(0f), 0f)
-        assertEquals(true, light.tailAlphaAt(0f) > dark.tailAlphaAt(0f))
+        assertEquals(0.30f, dark.tail?.alphaAt(0f) ?: -1f, 0f)
+        assertTrue((light.tail?.alphaAt(0f) ?: 0f) > (dark.tail?.alphaAt(0f) ?: 0f))
     }
 }

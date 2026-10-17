@@ -6,13 +6,16 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.interaction.InteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.CornerBasedShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp
@@ -25,46 +28,45 @@ import androidx.compose.ui.unit.lerp
  * 2. hero 折叠：尺寸、圆角（RectangleShape → MaterialTheme.shapes.small 8dp）、
  *    位置连续插值，由滚动进度驱动，不是定时动画。
  *
- * 其余 Material 组件（Button / IconButton / ListItem / Chip …）保留官方按压反馈，
- * 不在这里包转发壳。
+ * 端点的圆角不在这里重复写 28dp / 8dp：PressIdleCorner / HeroFoldCorner 从
+ * SonShapes.extraLarge / SonShapes.small 读回。这里唯一保留的 RoundedCornerShape
+ * 是 morph 的中间帧。
  */
 object SonShapeMorph {
 
-    /** LargeFloatingActionButton 的默认圆角，与 SonShapes.extraLarge 一致。 */
-    val PressIdleCorner = 28.dp
+    /** 96dp 的 LargeFloatingActionButton 变成圆时的半径；由 FAB 尺寸推导。 */
+    private val PressEndCorner = SonSizes.fabLarge / 2f
 
-    /** 96dp 的 LargeFloatingActionButton 变成圆时的半径；CircleShape 的几何等价。 */
-    val PressEndCorner = SonSizes.fabLarge / 2f
+    /** hero 折叠后的圆角来自 SonShapes.small，不在 helper 里复制一份 8dp。 */
+    private val HeroFoldCorner: Dp = SonShapes.small.cornerDp()
 
-    /** hero 折叠后的圆角，与 SonShapes.small 一致。 */
-    val HeroFoldCorner = 8.dp
+    /** 播放键 idle 圆角来自 SonShapes.extraLarge，不在 helper 里复制一份 28dp。 */
+    private val PressIdleCorner: Dp = SonShapes.extraLarge.cornerDp()
 
     /** 按压进度 0..1 对应的圆角；0 是 idle，1 是圆。 */
-    fun pressCorner(progress: Float, idleCorner: Dp = PressIdleCorner): Dp =
-        lerp(idleCorner, PressEndCorner, progress.coerceIn(0f, 1f))
+    fun pressCorner(progress: Float): Dp =
+        lerp(PressIdleCorner, PressEndCorner, progress.coerceIn(0f, 1f))
 
     /**
-     * 按压进度 0..1 对应的形状。0 返回主题的 extraLarge（不是手写 28dp），
-     * 1 返回 CircleShape；中间按圆角线性插值。
+     * 按压进度 0..1 对应的形状。0 返回主题的 extraLarge，1 返回 CircleShape；
+     * 中间按圆角线性插值。
      */
-    fun pressShape(progress: Float, idleCorner: Dp = PressIdleCorner): Shape {
-        val clamped = progress.coerceIn(0f, 1f)
-        return when {
-            clamped <= 0f ->
-                if (idleCorner == PressIdleCorner) SonShapes.extraLarge else RoundedCornerShape(idleCorner)
-
-            clamped >= 1f -> CircleShape
-            else -> RoundedCornerShape(pressCorner(clamped, idleCorner))
-        }
-    }
+    fun pressShape(progress: Float): Shape =
+        interpolateShape(
+            progress = progress,
+            startShape = SonShapes.extraLarge,
+            endShape = CircleShape,
+            startCorner = PressIdleCorner,
+            endCorner = PressEndCorner
+        )
 
     /**
      * hero 折叠在某一进度下的几何。start 通常是 hero 的边长与左上角，
      * end 是 top bar 缩略图的边长与左上角；中间全部线性插值。
+     * 圆角由 [heroFoldShape] / [heroFoldLayerShape] 负责，不重复放在这里。
      */
     data class HeroFold(
         val size: Dp,
-        val corner: Dp,
         val x: Dp,
         val y: Dp
     )
@@ -81,24 +83,23 @@ object SonShapeMorph {
         val clamped = progress.coerceIn(0f, 1f)
         return HeroFold(
             size = lerp(startSize, endSize, clamped),
-            corner = HeroFoldCorner * clamped,
             x = lerp(startX, endX, clamped),
             y = lerp(startY, endY, clamped)
         )
     }
 
     /**
-     * hero 折叠的形状：0 是 RectangleShape，1 是 MaterialTheme.shapes.small (8dp)，
+     * hero 折叠的视觉形状：0 是 RectangleShape，1 是 MaterialTheme.shapes.small，
      * 中间按视觉圆角线性插值。
      */
-    fun heroFoldShape(progress: Float): Shape {
-        val clamped = progress.coerceIn(0f, 1f)
-        return when {
-            clamped <= 0f -> RectangleShape
-            clamped >= 1f -> SonShapes.small
-            else -> RoundedCornerShape(HeroFoldCorner * clamped)
-        }
-    }
+    fun heroFoldShape(progress: Float): Shape =
+        interpolateShape(
+            progress = progress,
+            startShape = RectangleShape,
+            endShape = SonShapes.small,
+            startCorner = 0.dp,
+            endCorner = HeroFoldCorner
+        )
 
     /**
      * graphicsLayer 版本的折叠形状。
@@ -120,15 +121,38 @@ object SonShapeMorph {
  * 取 fastSpatialSpec，不写裸 spring/tween。
  */
 @Composable
-fun rememberPressShapeMorph(
-    interactionSource: InteractionSource,
-    idleCorner: Dp = SonShapeMorph.PressIdleCorner
-): Shape {
+fun rememberPressShapeMorph(interactionSource: InteractionSource): Shape {
     val pressed by interactionSource.collectIsPressedAsState()
     val progress by animateFloatAsState(
         targetValue = if (pressed) 1f else 0f,
         animationSpec = MaterialTheme.motionScheme.fastSpatialSpec<Float>(),
         label = "pressShapeMorph"
     )
-    return SonShapeMorph.pressShape(progress = progress, idleCorner = idleCorner)
+    return SonShapeMorph.pressShape(progress)
 }
+
+/**
+ * 中间帧的形状：两端用主题形状，中间只插值圆角。
+ * 这是 morph 唯一需要 RoundedCornerShape 的地方，页面不接触它。
+ */
+private fun interpolateShape(
+    progress: Float,
+    startShape: Shape,
+    endShape: Shape,
+    startCorner: Dp,
+    endCorner: Dp
+): Shape {
+    val clamped = progress.coerceIn(0f, 1f)
+    return when {
+        clamped <= 0f -> startShape
+        clamped >= 1f -> endShape
+        else -> RoundedCornerShape(lerp(startCorner, endCorner, clamped))
+    }
+}
+
+/**
+ * SonShapes 的圆角是 Dp CornerSize。用一个 1x1 的探针在 density=1 下取回 dp 值，
+ * 让 28dp / 8dp 只存在于 Shape.kt 的 Shapes 定义里。
+ */
+private fun CornerBasedShape.cornerDp(): Dp =
+    topStart.toPx(Size(1f, 1f), Density(1f)).dp
