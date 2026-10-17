@@ -17,12 +17,16 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.lazy.LazyColumn
@@ -30,11 +34,9 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LoadingIndicator
@@ -42,6 +44,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -59,13 +62,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -81,9 +88,11 @@ import com.cycling.core.ui.components.SymbolIconName
 import com.cycling.core.ui.components.M3Artwork
 import com.cycling.core.ui.theme.LocalSonExtendedColors
 import com.cycling.core.ui.theme.SonLayout
+import com.cycling.core.ui.theme.SonShapeMorph
 import com.cycling.core.ui.theme.SonSizes
 import com.cycling.core.ui.theme.SonSpacing
 import com.cycling.core.ui.theme.SonicTheme
+import com.cycling.core.ui.theme.sonColorFieldDetailFade
 import com.cycling.domain.model.Song
 import com.cycling.presentation.R
 import com.cycling.presentation.collectiondetail.CollectionDetailEffect
@@ -197,6 +206,12 @@ fun CollectionDetailScreen(
         // 拖拽落点的换算基准：曲目行是两行 ListItem，固定 72dp 高。
         val reorderRowHeightPx = with(density) { 72.dp.toPx() }
 
+        // hero 折叠 overlay 的终点：top bar 里的 32dp 缩略图槽位。
+        // 先由布局回填；未测量时停在左上角，只影响折叠末端的一帧。
+        var topBarArtworkOffset by remember { mutableStateOf(Offset.Zero) }
+        // 顶栏底色 band 的高度：状态栏 + TopAppBar。
+        val statusBarInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+
         // 折叠进度 0→1。头部整体离开视口后固定为 1，避免首项索引变化导致回弹。
         val collapse = remember(heroSide, density) {
             derivedStateOf {
@@ -222,33 +237,46 @@ fun CollectionDetailScreen(
                 // 封面底部就会露出等高的空白带。
                 contentWindowInsets = WindowInsets(0, 0, 0, 0),
                 topBar = {
-                    // 顶栏保持透明，封面因此能顶到状态栏底下；折叠过半后才补上实底与标题。
-                    CenterAlignedTopAppBar(
+                    // 顶栏保持透明；底色由内容层顶部的 surface band 提供。
+                    // 这样折叠中的封面可以画在 band 之上、图标/标题之下。
+                    val navigationIconColor = lerp(
+                        LocalSonExtendedColors.current.onArtwork,
+                        MaterialTheme.colorScheme.onSurface,
+                        collapse.value
+                    )
+                    val actionIconColor = lerp(
+                        LocalSonExtendedColors.current.onArtwork,
+                        MaterialTheme.colorScheme.onSurfaceVariant,
+                        collapse.value
+                    )
+                    TopAppBar(
                         title = {
-                            // 缩略图出现时才占位，避免标题在不可见阶段被顶偏。
-                            val headerAlpha = collapse.headerAlpha()
-                            if (headerAlpha > 0f) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    M3Artwork(
-                                        artwork = artwork,
-                                        placeholderIcon = placeholderIcon,
-                                        shape = MaterialTheme.shapes.small,
-                                        modifier = Modifier
-                                            .size(SonSizes.appBarArtwork)
-                                            .graphicsLayer { alpha = headerAlpha }
-                                    )
-                                    Spacer(modifier = Modifier.width(SonSpacing.small))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                // 缩略图槽位：hero 折叠 overlay 的终点对齐这里。
+                                // 位置在布局后回填，避免在页面里猜 top bar padding。
+                                Spacer(
+                                    modifier = Modifier
+                                        .size(SonSizes.appBarArtwork)
+                                        .onGloballyPositioned { coordinates ->
+                                            topBarArtworkOffset = coordinates.positionInRoot()
+                                        }
+                                )
+                                Spacer(modifier = Modifier.width(SonSpacing.small))
+                                val headerAlpha = collapse.headerAlpha()
+                                if (headerAlpha > 0f) {
                                     Text(
                                         text = title,
                                         style = MaterialTheme.typography.titleMediumEmphasized,
                                         maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier
+                                            .graphicsLayer { alpha = headerAlpha }
                                     )
                                 }
                             }
                         },
                         navigationIcon = {
-                            // 半透明圆形浮标：压在封面上仍可读，滚动到底色后自动转为常规图标按钮。
+                            // 顶栏透明：图标颜色随折叠进度从 onArtwork 过渡到 onSurface。
                             DetailTopBarAction(
                                 onClick = {
                                     when {
@@ -272,7 +300,8 @@ fun CollectionDetailScreen(
                                         R.string.collection_detail_exit_selection_desc
                                     )
                                     else -> backContentDescription
-                                }
+                                },
+                                contentColor = navigationIconColor
                             )
                         },
                         actions = {
@@ -297,7 +326,8 @@ fun CollectionDetailScreen(
                                             } else {
                                                 R.string.songs_select_all_desc
                                             }
-                                        )
+                                        ),
+                                        contentColor = actionIconColor
                                     )
                                 }
                                 reorderMode -> {
@@ -306,7 +336,8 @@ fun CollectionDetailScreen(
                                         icon = SymbolIconName.Check,
                                         contentDescription = stringResource(
                                             R.string.collection_detail_reorder_done_desc
-                                        )
+                                        ),
+                                        contentColor = actionIconColor
                                     )
                                 }
                                 songs.isNotEmpty() -> {
@@ -316,7 +347,8 @@ fun CollectionDetailScreen(
                                             icon = SymbolIconName.IosShare,
                                             contentDescription = stringResource(
                                                 R.string.playlist_detail_export_m3u
-                                            )
+                                            ),
+                                            contentColor = actionIconColor
                                         )
                                     }
                                     DetailTopBarAction(
@@ -324,7 +356,8 @@ fun CollectionDetailScreen(
                                             onIntent(SongCollectionIntent.EnterSelectionMode)
                                         },
                                         icon = SymbolIconName.Checklist,
-                                        contentDescription = stringResource(R.string.songs_select_desc)
+                                        contentDescription = stringResource(R.string.songs_select_desc),
+                                        contentColor = actionIconColor
                                     )
                                     if (canReorder) {
                                         DetailTopBarAction(
@@ -332,29 +365,19 @@ fun CollectionDetailScreen(
                                             icon = SymbolIconName.SwapVert,
                                             contentDescription = stringResource(
                                                 R.string.collection_detail_reorder_desc
-                                            )
+                                            ),
+                                            contentColor = actionIconColor
                                         )
                                     }
                                 }
                             }
                         },
-                        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                            containerColor = lerp(
-                                Color.Transparent,
-                                MaterialTheme.colorScheme.surface,
-                                collapse.containerAlpha()
-                            ),
-                            scrolledContainerColor = MaterialTheme.colorScheme.surface,
-                            navigationIconContentColor = lerp(
-                                LocalSonExtendedColors.current.onArtwork,
-                                MaterialTheme.colorScheme.onSurface,
-                                collapse.value
-                            ),
-                            titleContentColor = lerp(
-                                LocalSonExtendedColors.current.onArtwork,
-                                MaterialTheme.colorScheme.onSurface,
-                                collapse.value
-                            )
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = Color.Transparent,
+                            scrolledContainerColor = Color.Transparent,
+                            navigationIconContentColor = navigationIconColor,
+                            titleContentColor = navigationIconColor,
+                            actionIconContentColor = actionIconColor
                         )
                     )
                 }
@@ -362,18 +385,8 @@ fun CollectionDetailScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(
-                            // 封面下方的 color field：从 hero 底部开始，以封面派生的
-                            // primaryContainer 铺一层低透明度色面，再落回 surface。
-                            Brush.verticalGradient(
-                                0f to Color.Transparent,
-                                0.42f to Color.Transparent,
-                                0.55f to MaterialTheme.colorScheme.primaryContainer
-                                    .copy(alpha = 0.32f),
-                                0.80f to MaterialTheme.colorScheme.surfaceContainerLow,
-                                1f to MaterialTheme.colorScheme.surface
-                            )
-                        )
+                        // 安静面：旧的四段色面已删除，正文从 surface 开始。
+                        .background(MaterialTheme.colorScheme.surface)
                 ) {
                     LazyColumn(
                         state = listState,
@@ -395,15 +408,10 @@ fun CollectionDetailScreen(
                                 }
                             }
                         } else {
+                            // hero 由列表之上的 fold overlay 绘制；列表只保留同高的滚动占位，
+                            // collapse 仍由首项的 scroll offset 驱动。
                             item {
-                                CollectionHero(
-                                    name = title,
-                                    subtitle = subtitle,
-                                    artwork = artwork,
-                                    placeholderIcon = placeholderIcon,
-                                    side = heroSide,
-                                    collapse = collapse
-                                )
+                                Spacer(modifier = Modifier.height(heroSide))
                             }
 
                             if (firstSong != null) {
@@ -525,6 +533,30 @@ fun CollectionDetailScreen(
                         }
                     }
 
+                    // 顶栏底色：在列表之上、折叠封面之下。旧的四段页面渐变已删除，
+                    // 这里只负责折叠到 top bar 后的 surface 实底。
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(statusBarInset + SonSizes.topAppBarHeight)
+                            // 在 layer 内读 collapse：滚动时只更新这一层的 alpha，
+                            // 不让整段 content（含 LazyColumn）重组。
+                            .graphicsLayer { alpha = collapse.containerAlpha() }
+                            .background(MaterialTheme.colorScheme.surface)
+                    ) { }
+
+                    if (!uiState.isLoading) {
+                        CollectionHeroFold(
+                            name = title,
+                            subtitle = subtitle,
+                            artwork = artwork,
+                            placeholderIcon = placeholderIcon,
+                            side = heroSide,
+                            collapse = collapse,
+                            targetOffset = topBarArtworkOffset
+                        )
+                    }
+
                     if (uiState.selectionMode) {
                         CollectionSelectionBar(
                             selectedCount = uiState.selectedSongIds.size,
@@ -586,22 +618,20 @@ fun CollectCollectionDetailEffects(
 }
 
 /**
- * 顶栏动作按钮：与返回键同款的半透明圆形浮标，压在封面上仍可读，
- * 滚动到底色后自动转为常规图标按钮。
+ * 顶栏动作按钮：顶栏保持透明，图标颜色由调用方按折叠进度传入。
+ * 压在封面上时是 onArtwork，滚到 surface 后是 onSurface / onSurfaceVariant；
+ * 不再加第二层 scrim 浮标（hero 顶部 scrim 已经负责可读性）。
  */
 @Composable
 fun DetailTopBarAction(
     onClick: () -> Unit,
     icon: SymbolIconName,
-    contentDescription: String?
+    contentDescription: String?,
+    contentColor: Color
 ) {
-    val extended = LocalSonExtendedColors.current
-    FilledTonalIconButton(
+    IconButton(
         onClick = onClick,
-        colors = IconButtonDefaults.filledTonalIconButtonColors(
-            containerColor = extended.artworkScrim.copy(alpha = HeroScrimTitleAlpha),
-            contentColor = extended.onArtwork
-        )
+        colors = IconButtonDefaults.iconButtonColors(contentColor = contentColor)
     ) {
         M3SymbolIcon(name = icon, filled = true, contentDescription = contentDescription)
     }
@@ -624,13 +654,17 @@ fun CollectionActions(
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            // hero 下沿最多 12dp 的 primaryContainer fade；画在动作区 top padding 里，
+            // 不增加布局高度，也不进入首行。
+            .sonColorFieldDetailFade()
             .padding(horizontal = SonLayout.screenMargin, vertical = SonSpacing.medium),
         contentAlignment = Alignment.Center
     ) {
         Surface(
             shape = CircleShape,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+            // 动作簇是这一屏唯一的受限饱和色块；播放全部仍是 primary/onPrimary。
+            color = MaterialTheme.colorScheme.secondaryContainer,
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
         ) {
             Row(
                 modifier = Modifier.padding(SonSpacing.extraSmall),
@@ -757,7 +791,7 @@ fun PlaylistDescription(
  *
  * 遮罩与标题留在外层、不参与平移 —— 否则与封面基准不一致，标题会脱离封面底部。
  *
- * 我的音乐页的收藏 hero 与三个详情页共用同一组件，保证沉浸式头图的观感一致。
+ * 我的音乐页的收藏 hero 仍用这个视差版本；CollectionDetail 的连续折叠见 [CollectionHeroFold]。
  */
 @Composable
 fun CollectionHero(
@@ -793,21 +827,7 @@ fun CollectionHero(
                 }
         )
 
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    // 四段式：顶部托住状态栏图标 → 长坡降到通透 → 缓慢回压 → 底部压实托住标题。
-                    // 中段刻意留长并保持通透，任何封面都能完整显色；两个转折都靠多停一点避免硬边。
-                    Brush.verticalGradient(
-                        0f to extended.artworkScrim.copy(alpha = HeroScrimTopAlpha),
-                        HeroScrimClearStop to Color.Transparent,
-                        HeroScrimEaseStop to extended.artworkScrim.copy(alpha = HeroScrimEaseAlpha),
-                        HeroTitleZoneStart to extended.artworkScrim.copy(alpha = HeroScrimTitleAlpha),
-                        1f to extended.artworkScrim
-                    )
-                )
-        )
+        HeroScrim()
 
         Column(
             modifier = Modifier
@@ -834,6 +854,134 @@ fun CollectionHero(
                 color = extended.onArtwork.copy(alpha = HeroSubTextAlpha),
                 textAlign = TextAlign.Center
             )
+        }
+    }
+}
+
+/**
+ * hero 的四段式封面遮罩：顶部托住状态栏图标 → 长坡降到通透 → 缓慢回压 → 底部压实托住标题。
+ * 中段刻意留长并保持通透，任何封面都能完整显色；两个转折都靠多停一点避免硬边。
+ */
+@Composable
+private fun HeroScrim(scrimAlpha: Float = 1f) {
+    val extended = LocalSonExtendedColors.current
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .graphicsLayer { alpha = scrimAlpha }
+            .background(
+                Brush.verticalGradient(
+                    0f to extended.artworkScrim.copy(alpha = HeroScrimTopAlpha),
+                    HeroScrimClearStop to Color.Transparent,
+                    HeroScrimEaseStop to extended.artworkScrim.copy(alpha = HeroScrimEaseAlpha),
+                    HeroTitleZoneStart to extended.artworkScrim.copy(alpha = HeroScrimTitleAlpha),
+                    1f to extended.artworkScrim
+                )
+            )
+    ) { }
+}
+
+/**
+ * CollectionDetail 的 hero 折叠。
+ *
+ * 旧 [CollectionHero] 是 list item 内的视差滚动 + 顶栏缩略图 crossfade；这里把同一个
+ * 封面画在列表之上，尺寸、圆角、位置全部由滚动 collapse 连续插值，最后落到 top bar
+ * 的 32dp 缩略图槽位（[targetOffset] 由槽位测量得到）。列表用同高 Spacer 保留滚动
+ * 距离，因此不需要 shared element API 也能得到真实的 fold。
+ *
+ * 标题按 prototype 的曲线在折叠前 45% 内淡出；顶栏标题从 45% 起交叉淡入。
+ * 尺寸/圆角/位置来自 [SonShapeMorph.heroFold]，页面不手写形状或弹簧。
+ */
+@Composable
+private fun CollectionHeroFold(
+    name: String,
+    subtitle: String,
+    artwork: String?,
+    placeholderIcon: SymbolIconName,
+    side: Dp,
+    collapse: State<Float>,
+    targetOffset: Offset
+) {
+    val progress = collapse.value
+    val density = LocalDensity.current
+    val targetX = with(density) { targetOffset.x.toDp() }
+    val targetY = with(density) { targetOffset.y.toDp() }
+    val fold = SonShapeMorph.heroFold(
+        progress = progress,
+        startSize = side,
+        endSize = SonSizes.appBarArtwork,
+        endX = targetX,
+        endY = targetY
+    )
+    val titleAlpha = (1f - progress * 2.2f).coerceIn(0f, 1f)
+    val scale = if (side > 0.dp) (fold.size / side).coerceIn(0f, 1f) else 0f
+    val extended = LocalSonExtendedColors.current
+
+    // 用 graphicsLayer 的 scale/translation 走折叠：不每帧改布局，封面不会被反复测量/解码。
+    // 圆角也在 layer 局部坐标里按 scale 反算，保证视觉圆角仍是 0 → 8dp。
+    Box(
+        modifier = Modifier
+            .size(side)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                translationX = fold.x.toPx()
+                translationY = fold.y.toPx()
+                transformOrigin = TransformOrigin(0f, 0f)
+                shape = SonShapeMorph.heroFoldLayerShape(progress, scale)
+                clip = true
+            }
+    ) {
+        M3Artwork(
+            artwork = artwork,
+            placeholderIcon = placeholderIcon,
+            shape = RectangleShape,
+            modifier = Modifier.fillMaxSize()
+        )
+
+        // 缩略图阶段不再需要遮罩，随折叠淡出，留下封面本身的颜色。
+        HeroScrim(scrimAlpha = (1f - progress).coerceIn(0f, 1f))
+    }
+
+    // 标题不参与 cover 的 scale：字体保持固定，只随 cover 的可见宽度被裁切并淡出，
+    // 避免 fold 变成标题形变。顶栏标题从 45% 起接手。
+    if (titleAlpha > 0f) {
+        Box(
+            modifier = Modifier
+                .offset(x = fold.x, y = fold.y)
+                .size(fold.size)
+                .clip(SonShapeMorph.heroFoldShape(progress))
+                .graphicsLayer { alpha = titleAlpha }
+        ) {
+            Column(
+                // 保持 hero 原始宽度排版，只让外层 clip 随 cover 收窄；字体和换行都不参与 fold。
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .requiredWidth(side)
+                    .padding(
+                        horizontal = SonLayout.screenMargin,
+                        vertical = SonSpacing.extraLarge
+                    ),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = name,
+                    style = MaterialTheme.typography.displaySmallEmphasized,
+                    color = extended.onArtwork,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(SonSpacing.small))
+
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = extended.onArtwork.copy(alpha = HeroSubTextAlpha),
+                    textAlign = TextAlign.Center
+                )
+            }
         }
     }
 }

@@ -96,6 +96,9 @@ object SonSizes {
     /** 导航栏最小高度。 */
     val shortNavigationBarHeight = 64.dp
 
+    /** Material 3 TopAppBar 的高度（不含状态栏）。 */
+    val topAppBarHeight = 64.dp
+
     // ── 列表 ───────────────────────────────────────────────────────
     /** 列表项单行最小高度。 */
     val listItemMinHeight = 56.dp
