@@ -1,6 +1,5 @@
 package com.cycling.domain.repository
 
-import com.cycling.domain.model.AudioEffectsSettings
 import com.cycling.domain.model.LyricsProvider
 import com.cycling.domain.model.ThemeMode
 import kotlinx.coroutines.flow.Flow
@@ -36,9 +35,6 @@ interface SettingsRepository {
 
     val replayGainEnabled: Flow<Boolean>
     suspend fun setReplayGainEnabled(enabled: Boolean)
-
-    val audioEffects: Flow<AudioEffectsSettings>
-    suspend fun setAudioEffects(settings: AudioEffectsSettings)
 
     /** Default duration offered by the sleep-timer sheet, in minutes. */
     val sleepTimerPresetMinutes: Flow<Int>

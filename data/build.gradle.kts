@@ -48,7 +48,6 @@ dependencies {
     ksp(libs.androidx.hilt.compiler)
     
     implementation(libs.kotlinx.coroutines.core)
-    implementation(libs.kotlinx.coroutines.guava)
     implementation(libs.androidx.datastore.preferences)
 
     implementation(libs.androidx.media3.exoplayer)
@@ -67,7 +66,6 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
-    testImplementation(libs.turbine)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.kotlinx.coroutines.test)

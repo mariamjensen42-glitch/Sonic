@@ -4,7 +4,7 @@ import com.cycling.domain.lyrics.model.SyncedLyrics
 import com.cycling.domain.lyrics.model.karaoke.KaraokeAlignment
 import com.cycling.domain.lyrics.model.karaoke.KaraokeLine
 import com.cycling.domain.lyrics.model.karaoke.KaraokeSyllable
-import com.cycling.domain.lyrics.utils.SimpleXmlParser
+import com.cycling.domain.lyrics.utils.DomXmlParser
 import com.cycling.domain.lyrics.utils.XmlElement
 import com.cycling.domain.lyrics.utils.parseAsTime
 
@@ -43,7 +43,7 @@ object TTMLParser : ILyricsParser {
     override fun parse(content: String): SyncedLyrics {
         val content = preformattingTTML(content)
         val parsedLines = mutableListOf<KaraokeLine>()
-        val parser = SimpleXmlParser()
+        val parser = DomXmlParser()
         val rootElement = parser.parse(content)
 
         val agentAlignments = parseMetadata(rootElement)

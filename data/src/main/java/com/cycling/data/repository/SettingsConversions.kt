@@ -15,23 +15,11 @@ import com.cycling.domain.repository.SettingsRepository.Companion.MIN_PLAYBACK_S
  */
 internal object SettingsConversions {
 
-    /** `BassBoost` / `Virtualizer` express strength on a 0..1000 scale. */
-    const val DEFAULT_EFFECT_STRENGTH = 500
-    const val MAX_EFFECT_STRENGTH = 1000
-
-    fun clampEffectStrength(value: Int): Int = value.coerceIn(0, MAX_EFFECT_STRENGTH)
-
     inline fun <reified T : Enum<T>> parseEnum(raw: String?, fallback: T): T =
         raw?.let { runCatching { enumValueOf<T>(it) }.getOrNull() } ?: fallback
 
     fun parsePlaybackSpeed(raw: String?): Float =
         raw?.toFloatOrNull()?.coerceIn(MIN_PLAYBACK_SPEED, MAX_PLAYBACK_SPEED) ?: DEFAULT_PLAYBACK_SPEED
-
-    /** Equalizer band levels, stored as a comma-separated list. */
-    fun parseBandLevels(raw: String?): List<Int> =
-        raw?.split(',')?.mapNotNull { it.trim().toIntOrNull() } ?: emptyList()
-
-    fun encodeBandLevels(levels: List<Int>): String = levels.joinToString(",")
 
     /** Unknown names are dropped; an empty result falls back to the default order. */
     fun parseLyricsProviders(raw: String?): List<LyricsProvider> {
