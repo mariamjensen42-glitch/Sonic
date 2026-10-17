@@ -162,10 +162,27 @@ class SonTonalScheme internal constructor(
         private val EXPRESSIVE_SECONDARY_ROTATIONS = doubleArrayOf(45.0, 95.0, 45.0, 20.0, 45.0, 90.0, 45.0, 45.0, 45.0, 45.0)
         private val EXPRESSIVE_TERTIARY_ROTATIONS = doubleArrayOf(120.0, 120.0, 20.0, 45.0, 20.0, 15.0, 20.0, 120.0, 20.0, 120.0)
 
+        /**
+         * 近灰封面的 HCT chroma 阈值。低于它时色相不可靠，用品牌色相兜底；
+         * 阈值只在这里出现一次，页面不判断封面彩度。
+         */
+        const val GRAYSCALE_CHROMA_THRESHOLD = 16.0
+
+        /**
+         * 解析种子色相：chroma 低于 [GRAYSCALE_CHROMA_THRESHOLD] 时退回品牌色相，
+         * 否则保留种子色相。提取器的最低彩度提升仍然独立存在。
+         */
+        fun resolveSeedHue(seedHue: Double, chroma: Double): Double =
+            if (chroma < GRAYSCALE_CHROMA_THRESHOLD) {
+                Hct.fromColor(SonicSeed).hue
+            } else {
+                seedHue
+            }
+
         fun from(color: Color, style: SonSchemeStyle = SonSchemeStyle.Expressive): SonTonalScheme {
             val hct = Hct.fromColor(color)
             // 种子接近无彩色时色相不稳定，退回品牌色相，避免整库变灰
-            val hue = if (hct.chroma < Hct.ACHROMATIC_CHROMA * 5) Hct.fromColor(SonicSeed).hue else hct.hue
+            val hue = resolveSeedHue(seedHue = hct.hue, chroma = hct.chroma)
             return when (style) {
                 SonSchemeStyle.Expressive -> expressive(hue)
                 SonSchemeStyle.TonalSpot -> tonalSpot(hue)

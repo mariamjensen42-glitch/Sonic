@@ -13,6 +13,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -73,6 +74,7 @@ import com.cycling.core.ui.components.M3Artwork
 import com.cycling.core.ui.theme.SonLayout
 import com.cycling.core.ui.theme.SonSizes
 import com.cycling.core.ui.theme.SonSpacing
+import com.cycling.core.ui.theme.rememberPressShapeMorph
 import com.cycling.domain.model.RepeatMode
 import com.cycling.domain.model.Song
 import com.cycling.domain.repository.SettingsRepository.Companion.MAX_PLAYBACK_SPEED
@@ -571,6 +573,10 @@ private fun PlayerFullControls(
     onToggleShuffle: () -> Unit,
     onToggleRepeat: () -> Unit
 ) {
+    // 播放键的按压形变只读 FAB 自己的 InteractionSource；图标切换不会触发形状变化。
+    val playInteractionSource = remember { MutableInteractionSource() }
+    val playShape = rememberPressShapeMorph(playInteractionSource)
+
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -607,7 +613,11 @@ private fun PlayerFullControls(
             )
         }
 
-        LargeFloatingActionButton(onClick = onPlayPause) {
+        LargeFloatingActionButton(
+            onClick = onPlayPause,
+            shape = playShape,
+            interactionSource = playInteractionSource
+        ) {
             M3SymbolIcon(
                 name = if (isPlaying) SymbolIconName.Pause else SymbolIconName.PlayArrow,
                 filled = true,
