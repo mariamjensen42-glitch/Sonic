@@ -15,7 +15,7 @@ shape morph 也需要边界：Material 组件自带按压反馈，但 hero 封�
 - **B 做底**：hero 周围只有 primaryContainer 光晕（径向 + 纵向两层），到封面下沿收干净；标题、正文、列表用 surface。亮色 alpha 0.46 / 0.70，暗色 0.30 / 0.62；文字处必须归零。
 - **动作簇 secondaryContainer**：CollectionDetail 的三个动作收在一个 secondaryContainer 胶囊里，补一块受限的饱和色面；不覆盖列表，不动 FAB 的 primaryContainer。
 - **近灰封面兜底品牌色**：种子 HCT chroma < 16 时用 SonicSeed 的色相；阈值由 #18 校准。
-- **morph 只有两处主题层能力**：播放键按压 28dp ↔ CircleShape；hero 折叠（尺寸/圆角/位置连续插值，滚动驱动）。其余交给 Material 组件内置；底栏/迷你播放器留给 #5。
+- **morph 只有两处主题层能力**：播放键按压 28dp ↔ CircleShape；hero 折叠（尺寸/圆角/位置连续插值，滚动驱动）。其余交给 Material 组件内置；底栏按 #5 已定标准 NavigationBar（无 FAB、无容器 morph），迷你播放器保持悬浮卡片。
 - 页面不写颜色、不写形状；数值进主题层（#18）。
 
 ## Considered Options
@@ -38,5 +38,6 @@ C 的 secondaryContainer 开关是测试里最有价值的反例：换角色能�
 - Player 会第一次出现色面（hero 光晕）；#9/#20 的构图方案可以直接用，但不要为了六条再塞动作簇。
 - 亮色 alpha 明显高于暗色；不要合并成一个常量。顶栏/状态栏会被染色，必须在真机上复看图标。
 - 近灰封面会得到品牌紫调；这是接受的代价（稳定 > 贴近封面）。
+- 底栏与迷你播放器按 #5 的决定保持标准 NavigationBar + 悬浮卡片，不纳入本规则的 morph 候选。
 - 对比度数值来自 OKLCH 原型，HCT/Compose 的真实值由 #18 重测；余量足够。
 - 原型留在 throwaway 分支，主分支只保留规则与 ADR；#18 负责主题层能力与最小验证。
