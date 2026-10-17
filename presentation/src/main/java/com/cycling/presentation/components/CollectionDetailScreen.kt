@@ -17,12 +17,14 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.lazy.LazyColumn
@@ -34,7 +36,6 @@ import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LoadingIndicator
@@ -57,11 +58,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -75,15 +76,17 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cycling.core.ui.components.M3SymbolIcon
 import com.cycling.core.ui.components.SymbolIconName
 import com.cycling.core.ui.components.M3Artwork
 import com.cycling.core.ui.theme.LocalSonExtendedColors
+import com.cycling.core.ui.theme.SonColorFieldBackground
 import com.cycling.core.ui.theme.SonLayout
+import com.cycling.core.ui.theme.SonShapeMorph
 import com.cycling.core.ui.theme.SonSizes
 import com.cycling.core.ui.theme.SonSpacing
 import com.cycling.core.ui.theme.SonicTheme
+import com.cycling.core.ui.theme.sonColorFieldDetailFade
 import com.cycling.domain.model.Song
 import com.cycling.presentation.R
 import com.cycling.presentation.collectiondetail.CollectionDetailEffect
@@ -116,8 +119,15 @@ private const val HeroScrimTitleAlpha = 0.42f
 /** 视差速率：封面以滚动量的这个比例跟随，越小纵深越强，但过小会脱节。 */
 private const val HeroParallaxRate = 0.5f
 
+/** hero 标题在折叠前 45% 淡出；顶栏标题从同一进度接手。 */
+private const val TitleFadeEnd = 0.45f
+
+/** hero cover 折叠后的尺寸比例与上移比例；顶栏缩略图继续用原有 crossfade。 */
+private const val HeroFoldEndScale = 0.72f
+private const val HeroFoldEndShift = 0.14f
+
 /** 顶栏标题（含缩略图）开始显现的折叠进度。 */
-private const val HeaderRevealStart = 0.45f
+private const val HeaderRevealStart = TitleFadeEnd
 
 /** 顶栏标题完全显现的折叠进度。 */
 private const val HeaderRevealEnd = 0.7f
@@ -197,6 +207,9 @@ fun CollectionDetailScreen(
         // 拖拽落点的换算基准：曲目行是两行 ListItem，固定 72dp 高。
         val reorderRowHeightPx = with(density) { 72.dp.toPx() }
 
+        // 顶栏底色 band 的高度：状态栏 + TopAppBar。
+        val statusBarInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+
         // 折叠进度 0→1。头部整体离开视口后固定为 1，避免首项索引变化导致回弹。
         val collapse = remember(heroSide, density) {
             derivedStateOf {
@@ -222,10 +235,20 @@ fun CollectionDetailScreen(
                 // 封面底部就会露出等高的空白带。
                 contentWindowInsets = WindowInsets(0, 0, 0, 0),
                 topBar = {
-                    // 顶栏保持透明，封面因此能顶到状态栏底下；折叠过半后才补上实底与标题。
+                    // 顶栏保持透明；底色由内容层顶部的 surface band 提供。
+                    // 折叠中的 cover 在列表内滚动，不改变顶栏的形状与对齐。
+                    val navigationIconColor = lerp(
+                        LocalSonExtendedColors.current.onArtwork,
+                        MaterialTheme.colorScheme.onSurface,
+                        collapse.value
+                    )
+                    val actionIconColor = lerp(
+                        LocalSonExtendedColors.current.onArtwork,
+                        MaterialTheme.colorScheme.onSurfaceVariant,
+                        collapse.value
+                    )
                     CenterAlignedTopAppBar(
                         title = {
-                            // 缩略图出现时才占位，避免标题在不可见阶段被顶偏。
                             val headerAlpha = collapse.headerAlpha()
                             if (headerAlpha > 0f) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -248,7 +271,7 @@ fun CollectionDetailScreen(
                             }
                         },
                         navigationIcon = {
-                            // 半透明圆形浮标：压在封面上仍可读，滚动到底色后自动转为常规图标按钮。
+                            // 顶栏透明：图标颜色随折叠进度从 onArtwork 过渡到 onSurface。
                             DetailTopBarAction(
                                 onClick = {
                                     when {
@@ -272,7 +295,8 @@ fun CollectionDetailScreen(
                                         R.string.collection_detail_exit_selection_desc
                                     )
                                     else -> backContentDescription
-                                }
+                                },
+                                contentColor = navigationIconColor
                             )
                         },
                         actions = {
@@ -297,7 +321,8 @@ fun CollectionDetailScreen(
                                             } else {
                                                 R.string.songs_select_all_desc
                                             }
-                                        )
+                                        ),
+                                        contentColor = actionIconColor
                                     )
                                 }
                                 reorderMode -> {
@@ -306,7 +331,8 @@ fun CollectionDetailScreen(
                                         icon = SymbolIconName.Check,
                                         contentDescription = stringResource(
                                             R.string.collection_detail_reorder_done_desc
-                                        )
+                                        ),
+                                        contentColor = actionIconColor
                                     )
                                 }
                                 songs.isNotEmpty() -> {
@@ -316,7 +342,8 @@ fun CollectionDetailScreen(
                                             icon = SymbolIconName.IosShare,
                                             contentDescription = stringResource(
                                                 R.string.playlist_detail_export_m3u
-                                            )
+                                            ),
+                                            contentColor = actionIconColor
                                         )
                                     }
                                     DetailTopBarAction(
@@ -324,7 +351,8 @@ fun CollectionDetailScreen(
                                             onIntent(SongCollectionIntent.EnterSelectionMode)
                                         },
                                         icon = SymbolIconName.Checklist,
-                                        contentDescription = stringResource(R.string.songs_select_desc)
+                                        contentDescription = stringResource(R.string.songs_select_desc),
+                                        contentColor = actionIconColor
                                     )
                                     if (canReorder) {
                                         DetailTopBarAction(
@@ -332,29 +360,19 @@ fun CollectionDetailScreen(
                                             icon = SymbolIconName.SwapVert,
                                             contentDescription = stringResource(
                                                 R.string.collection_detail_reorder_desc
-                                            )
+                                            ),
+                                            contentColor = actionIconColor
                                         )
                                     }
                                 }
                             }
                         },
                         colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                            containerColor = lerp(
-                                Color.Transparent,
-                                MaterialTheme.colorScheme.surface,
-                                collapse.containerAlpha()
-                            ),
-                            scrolledContainerColor = MaterialTheme.colorScheme.surface,
-                            navigationIconContentColor = lerp(
-                                LocalSonExtendedColors.current.onArtwork,
-                                MaterialTheme.colorScheme.onSurface,
-                                collapse.value
-                            ),
-                            titleContentColor = lerp(
-                                LocalSonExtendedColors.current.onArtwork,
-                                MaterialTheme.colorScheme.onSurface,
-                                collapse.value
-                            )
+                            containerColor = Color.Transparent,
+                            scrolledContainerColor = Color.Transparent,
+                            navigationIconContentColor = navigationIconColor,
+                            titleContentColor = navigationIconColor,
+                            actionIconContentColor = actionIconColor
                         )
                     )
                 }
@@ -362,18 +380,8 @@ fun CollectionDetailScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(
-                            // 封面下方的 color field：从 hero 底部开始，以封面派生的
-                            // primaryContainer 铺一层低透明度色面，再落回 surface。
-                            Brush.verticalGradient(
-                                0f to Color.Transparent,
-                                0.42f to Color.Transparent,
-                                0.55f to MaterialTheme.colorScheme.primaryContainer
-                                    .copy(alpha = 0.32f),
-                                0.80f to MaterialTheme.colorScheme.surfaceContainerLow,
-                                1f to MaterialTheme.colorScheme.surface
-                            )
-                        )
+                        // 安静面：旧的四段色面已删除，正文从 surface 开始。
+                        .background(MaterialTheme.colorScheme.surface)
                 ) {
                     LazyColumn(
                         state = listState,
@@ -395,8 +403,10 @@ fun CollectionDetailScreen(
                                 }
                             }
                         } else {
+                            // hero 自己就是 list item：色面、cover、scrim、标题都在 item 内，
+                            // 随滚动离开；fold 只改变 cover 的尺寸/圆角/位置。
                             item {
-                                CollectionHero(
+                                CollectionHeroFold(
                                     name = title,
                                     subtitle = subtitle,
                                     artwork = artwork,
@@ -408,17 +418,27 @@ fun CollectionDetailScreen(
 
                             if (firstSong != null) {
                                 item {
-                                    CollectionActions(
-                                        onPlayAll = {
-                                            onIntent(SongCollectionIntent.SongClick(firstSong))
-                                        },
-                                        onShuffle = {
-                                            onIntent(SongCollectionIntent.ShufflePlay)
-                                        },
-                                        onAddToPlaylist = {
-                                            onIntent(SongCollectionIntent.AddSongsToPlaylist)
-                                        }
-                                    )
+                                    // 12dp 下沿 fade 只属于 CollectionDetail；共享的
+                                    // CollectionActions 保持中性，不把色面带到 MyMusic。
+                                    Box(modifier = Modifier.sonColorFieldDetailFade()) {
+                                        CollectionActions(
+                                            onPlayAll = {
+                                                onIntent(
+                                                    SongCollectionIntent.SongClick(firstSong)
+                                                )
+                                            },
+                                            onShuffle = {
+                                                onIntent(SongCollectionIntent.ShufflePlay)
+                                            },
+                                            onAddToPlaylist = {
+                                                onIntent(SongCollectionIntent.AddSongsToPlaylist)
+                                            },
+                                            containerColor = MaterialTheme.colorScheme
+                                                .secondaryContainer,
+                                            contentColor = MaterialTheme.colorScheme
+                                                .onSecondaryContainer
+                                        )
+                                    }
                                 }
                             }
 
@@ -525,6 +545,20 @@ fun CollectionDetailScreen(
                         }
                     }
 
+                    // 顶栏底色：在列表之上；cover 从列表滚过时由这层 surface 实底接管。
+                    // 旧的四段页面渐变已删除，这里只负责滚动态的顶栏底色。
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            // M3 TopAppBar 与 ShortNavigationBar 同为 64dp；沿用现有
+                            // layout token，不新增尺寸 token。
+                            .height(statusBarInset + SonSizes.shortNavigationBarHeight)
+                            // 在 layer 内读 collapse：滚动时只更新这一层的 alpha，
+                            // 不让整段 content（含 LazyColumn）重组。
+                            .graphicsLayer { alpha = collapse.containerAlpha() }
+                            .background(MaterialTheme.colorScheme.surface)
+                    ) { }
+
                     if (uiState.selectionMode) {
                         CollectionSelectionBar(
                             selectedCount = uiState.selectedSongIds.size,
@@ -586,22 +620,20 @@ fun CollectCollectionDetailEffects(
 }
 
 /**
- * 顶栏动作按钮：与返回键同款的半透明圆形浮标，压在封面上仍可读，
- * 滚动到底色后自动转为常规图标按钮。
+ * 顶栏动作按钮：顶栏保持透明，图标颜色由调用方按折叠进度传入。
+ * 压在封面上时是 onArtwork，滚到 surface 后是 onSurface / onSurfaceVariant；
+ * 不再加第二层 scrim 浮标（hero 顶部 scrim 已经负责可读性）。
  */
 @Composable
 fun DetailTopBarAction(
     onClick: () -> Unit,
     icon: SymbolIconName,
-    contentDescription: String?
+    contentDescription: String?,
+    contentColor: Color
 ) {
-    val extended = LocalSonExtendedColors.current
-    FilledTonalIconButton(
+    IconButton(
         onClick = onClick,
-        colors = IconButtonDefaults.filledTonalIconButtonColors(
-            containerColor = extended.artworkScrim.copy(alpha = HeroScrimTitleAlpha),
-            contentColor = extended.onArtwork
-        )
+        colors = IconButtonDefaults.iconButtonColors(contentColor = contentColor)
     ) {
         M3SymbolIcon(name = icon, filled = true, contentDescription = contentDescription)
     }
@@ -614,12 +646,18 @@ fun DetailTopBarAction(
  * 播放全部仍是唯一的填充主按钮。曲目为空时整行不渲染，由调用方保证。
  *
  * [onAddToPlaylist] 可空：收藏曲目不属于任何歌单，我的音乐页传 null，此时按钮不占位。
+ *
+ * [containerColor] / [contentColor] 默认是中性的 surfaceContainerHigh /
+ * onSurfaceVariant，只有 CollectionDetail 显式传 secondaryContainer 让它成为该屏的
+ * 受限饱和色块；共享组件不把色面带去 MyMusic。
  */
 @Composable
 fun CollectionActions(
     onPlayAll: () -> Unit,
     onShuffle: () -> Unit,
-    onAddToPlaylist: (() -> Unit)? = null
+    onAddToPlaylist: (() -> Unit)? = null,
+    containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    contentColor: Color = MaterialTheme.colorScheme.onSurfaceVariant
 ) {
     Box(
         modifier = Modifier
@@ -629,8 +667,8 @@ fun CollectionActions(
     ) {
         Surface(
             shape = CircleShape,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+            color = containerColor,
+            contentColor = contentColor
         ) {
             Row(
                 modifier = Modifier.padding(SonSpacing.extraSmall),
@@ -757,7 +795,7 @@ fun PlaylistDescription(
  *
  * 遮罩与标题留在外层、不参与平移 —— 否则与封面基准不一致，标题会脱离封面底部。
  *
- * 我的音乐页的收藏 hero 与三个详情页共用同一组件，保证沉浸式头图的观感一致。
+ * 我的音乐页的收藏 hero 仍用这个视差版本；CollectionDetail 的连续折叠见 [CollectionHeroFold]。
  */
 @Composable
 fun CollectionHero(
@@ -768,8 +806,6 @@ fun CollectionHero(
     side: Dp,
     collapse: State<Float>
 ) {
-    val extended = LocalSonExtendedColors.current
-
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -793,48 +829,147 @@ fun CollectionHero(
                 }
         )
 
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    // 四段式：顶部托住状态栏图标 → 长坡降到通透 → 缓慢回压 → 底部压实托住标题。
-                    // 中段刻意留长并保持通透，任何封面都能完整显色；两个转折都靠多停一点避免硬边。
-                    Brush.verticalGradient(
-                        0f to extended.artworkScrim.copy(alpha = HeroScrimTopAlpha),
-                        HeroScrimClearStop to Color.Transparent,
-                        HeroScrimEaseStop to extended.artworkScrim.copy(alpha = HeroScrimEaseAlpha),
-                        HeroTitleZoneStart to extended.artworkScrim.copy(alpha = HeroScrimTitleAlpha),
-                        1f to extended.artworkScrim
-                    )
-                )
-        )
+        HeroScrim()
 
-        Column(
+        HeroCopy(
+            name = name,
+            subtitle = subtitle,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .padding(horizontal = SonLayout.screenMargin, vertical = SonSpacing.extraLarge),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = name,
-                // 海报级标题：与正文拉开一个数量级，这一屏的 expressive moment 由它承担。
-                style = MaterialTheme.typography.displaySmallEmphasized,
-                color = extended.onArtwork,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center
-            )
+                .padding(horizontal = SonLayout.screenMargin, vertical = SonSpacing.extraLarge)
+        )
+    }
+}
 
-            Spacer(modifier = Modifier.height(SonSpacing.small))
+/**
+ * hero 标题与副标题：海报级标题 + label 级副标题。旧 hero 与 CollectionHeroFold
+ * 共用，保证字体、颜色、层级只有一份。
+ */
+@Composable
+private fun HeroCopy(
+    name: String,
+    subtitle: String,
+    modifier: Modifier = Modifier
+) {
+    val extended = LocalSonExtendedColors.current
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = name,
+            // 海报级标题：与正文拉开一个数量级，这一屏的 expressive moment 由它承担。
+            style = MaterialTheme.typography.displaySmallEmphasized,
+            color = extended.onArtwork,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center
+        )
 
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.labelLarge,
-                color = extended.onArtwork.copy(alpha = HeroSubTextAlpha),
-                textAlign = TextAlign.Center
+        Spacer(modifier = Modifier.height(SonSpacing.small))
+
+        Text(
+            text = subtitle,
+            style = MaterialTheme.typography.labelLarge,
+            color = extended.onArtwork.copy(alpha = HeroSubTextAlpha),
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+/**
+ * hero 的四段式封面遮罩：顶部托住状态栏图标 → 长坡降到通透 → 缓慢回压 → 底部压实托住标题。
+ * 中段刻意留长并保持通透，任何封面都能完整显色；两个转折都靠多停一点避免硬边。
+ */
+@Composable
+private fun HeroScrim() {
+    val extended = LocalSonExtendedColors.current
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    0f to extended.artworkScrim.copy(alpha = HeroScrimTopAlpha),
+                    HeroScrimClearStop to Color.Transparent,
+                    HeroScrimEaseStop to extended.artworkScrim.copy(alpha = HeroScrimEaseAlpha),
+                    HeroTitleZoneStart to extended.artworkScrim.copy(alpha = HeroScrimTitleAlpha),
+                    1f to extended.artworkScrim
+                )
             )
-        }
+    ) { }
+}
+
+/**
+ * CollectionDetail 的 hero：色面 + cover + scrim + 标题都在同一个 list item 内。
+ *
+ * cover 在前 45% 的滚动量内连续改变尺寸、圆角、位置（field 从四周露出来），
+ * 然后随 item 一起滚出；顶栏缩略图/标题沿用原有 crossfade。标题固定在 hero
+ * 底部、字体和排版不参与 fold，只做 alpha crossfade，因此 glyph 不会被收缩框裁切。
+ *
+ * 所有 collapse 读取都在 graphicsLayer 内：滚动不触发布局，也不重组列表。
+ * 真正的 shared-element fold（cover 离开 list item 落进顶栏）需要 overlay + 每帧
+ * 布局，和本屏的折叠顶栏/列表架构冲突；这里采用 closest honest behavior，见报告。
+ */
+@Composable
+private fun CollectionHeroFold(
+    name: String,
+    subtitle: String,
+    artwork: String?,
+    placeholderIcon: SymbolIconName,
+    side: Dp,
+    collapse: State<Float>
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(1f)
+            .clipToBounds()
+    ) {
+        // 色面在 cover 背后；cover 收缩时从四周露出来。
+        SonColorFieldBackground(
+            heroBottom = side,
+            modifier = Modifier.fillMaxSize()
+        )
+
+        M3Artwork(
+            artwork = artwork,
+            placeholderIcon = placeholderIcon,
+            shape = RectangleShape,
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    val scroll = collapse.value
+                    val fold = SonShapeMorph.heroFold(
+                        progress = scroll,
+                        startSize = side,
+                        endSize = side * HeroFoldEndScale,
+                        endY = -side * HeroFoldEndShift
+                    )
+                    val scale = if (side > 0.dp) (fold.size / side).coerceIn(0f, 1f) else 0f
+                    scaleX = scale
+                    scaleY = scale
+                    translationY = fold.y.toPx()
+                    transformOrigin = TransformOrigin(0.5f, 0.5f)
+                    shape = SonShapeMorph.heroFoldLayerShape(scroll, scale)
+                    clip = true
+                }
+        )
+
+        HeroScrim()
+
+        // 标题不参与 cover 的 scale/clip：固定在 hero 底部，只做 alpha crossfade。
+        HeroCopy(
+            name = name,
+            subtitle = subtitle,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(horizontal = SonLayout.screenMargin, vertical = SonSpacing.extraLarge)
+                .graphicsLayer {
+                    alpha = (1f - collapse.value / TitleFadeEnd).coerceIn(0f, 1f)
+                }
+        )
     }
 }
 
