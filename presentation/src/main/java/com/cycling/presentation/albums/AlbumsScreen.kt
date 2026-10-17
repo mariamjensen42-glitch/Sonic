@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+
 package com.cycling.presentation.albums
 
 import androidx.compose.foundation.layout.Arrangement
@@ -13,19 +15,16 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Sort
-import androidx.compose.material.icons.filled.Album
-import androidx.compose.material.icons.outlined.Album
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -35,21 +34,22 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.cycling.core.ui.components.M3DetailTopAppBar
+import com.cycling.core.ui.components.M3SymbolIcon
+import com.cycling.core.ui.components.SymbolIconName
 import com.cycling.core.ui.components.M3MediaCard
-import com.cycling.core.ui.theme.M3Spacing
-import com.cycling.core.ui.theme.SpotifyColors
+import com.cycling.core.ui.theme.SonLayout
+import com.cycling.core.ui.theme.SonSizes
+import com.cycling.core.ui.theme.SonSpacing
 import com.cycling.domain.model.Album
 import com.cycling.domain.model.SortOrder
 import com.cycling.presentation.R
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AlbumsScreen(
     onNavigateBack: () -> Unit,
@@ -76,18 +76,31 @@ fun AlbumsScreen(
 
     Scaffold(
         topBar = {
-            M3DetailTopAppBar(
-                title = stringResource(R.string.albums_title),
-                navigationIcon = Icons.AutoMirrored.Filled.ArrowBack,
-                navigationIconContentDescription = stringResource(R.string.albums_back_desc),
-                onNavigationClick = onNavigateBack,
+            TopAppBar(
+                title = {
+                    Text(
+                        text = stringResource(R.string.albums_title),
+                        style = MaterialTheme.typography.titleLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        M3SymbolIcon(
+                            name = SymbolIconName.ArrowBack,
+                            filled = true,
+                            contentDescription = stringResource(R.string.albums_back_desc)
+                        )
+                    }
+                },
                 actions = {
                     Box {
                         IconButton(onClick = { showSortMenu = true }) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.Sort,
-                                contentDescription = stringResource(R.string.albums_sort_desc),
-                                tint = SpotifyColors.TextPrimary
+                            M3SymbolIcon(
+                                name = SymbolIconName.Sort,
+                                filled = true,
+                                contentDescription = stringResource(R.string.albums_sort_desc)
                             )
                         }
                         DropdownMenu(
@@ -96,7 +109,7 @@ fun AlbumsScreen(
                         ) {
                             listOf(SortOrder.TITLE, SortOrder.ARTIST).forEach { order ->
                                 DropdownMenuItem(
-                                    text = { Text(getSortOrderName(order)) },
+                                    text = { Text(text = getSortOrderName(order)) },
                                     onClick = {
                                         sortOrder = order
                                         showSortMenu = false
@@ -107,13 +120,11 @@ fun AlbumsScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = SpotifyColors.Background,
-                    titleContentColor = SpotifyColors.TextPrimary,
-                    navigationIconContentColor = SpotifyColors.TextPrimary
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface
                 )
             )
-        },
-        containerColor = SpotifyColors.Background
+        }
     ) { paddingValues ->
         Box(modifier = Modifier.padding(paddingValues)) {
             if (uiState.isLoading) {
@@ -121,46 +132,23 @@ fun AlbumsScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    com.cycling.core.ui.components.M3CircularProgressIndicator()
+                    LoadingIndicator()
                 }
             } else if (sortedAlbums.isEmpty()) {
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Spacer(modifier = Modifier.weight(1f))
-                    Icon(
-                        painter = painterResource(id = R.drawable.ic_album),
-                        contentDescription = null,
-                        modifier = Modifier.size(64.dp),
-                        tint = SpotifyColors.TextTertiary
-                    )
-                    Spacer(modifier = Modifier.height(M3Spacing.medium))
-                    Text(
-                        text = stringResource(R.string.albums_empty_title),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = SpotifyColors.TextPrimary
-                    )
-                    Text(
-                        text = stringResource(R.string.albums_empty_subtitle),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = SpotifyColors.TextSecondary
-                    )
-                    Spacer(modifier = Modifier.weight(1f))
-                }
+                EmptyAlbumsState()
             } else {
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
                     modifier = Modifier.fillMaxSize(),
                     state = gridState,
                     contentPadding = PaddingValues(
-                        start = M3Spacing.medium,
-                        end = M3Spacing.medium,
-                        top = M3Spacing.small,
-                        bottom = M3Spacing.extraExtraLarge + bottomPadding
+                        start = SonLayout.screenMargin,
+                        end = SonLayout.screenMargin,
+                        top = SonLayout.contentTopPadding,
+                        bottom = SonLayout.bottomBarClearance + bottomPadding
                     ),
-                    verticalArrangement = Arrangement.spacedBy(M3Spacing.medium),
-                    horizontalArrangement = Arrangement.spacedBy(M3Spacing.medium)
+                    verticalArrangement = Arrangement.spacedBy(SonLayout.gridGap),
+                    horizontalArrangement = Arrangement.spacedBy(SonLayout.gridGap)
                 ) {
                     items(sortedAlbums, key = { it.id }) { album ->
                         M3MediaCard(
@@ -168,11 +156,42 @@ fun AlbumsScreen(
                             subtitle = album.artist,
                             artwork = album.albumArt,
                             onClick = { viewModel.handleIntent(AlbumsIntent.AlbumClick(album)) },
-                            placeholderIcon = Icons.Default.Album
+                            placeholderIcon = SymbolIconName.Album,
+                            width = null
                         )
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun EmptyAlbumsState() {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            M3SymbolIcon(
+                name = SymbolIconName.Album,
+                filled = false,
+                contentDescription = null,
+                modifier = Modifier.size(SonSizes.iconExtraLarge),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(SonSpacing.medium))
+            Text(
+                text = stringResource(R.string.albums_empty_title),
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(SonSpacing.small))
+            Text(
+                text = stringResource(R.string.albums_empty_subtitle),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -185,11 +204,11 @@ private fun sortAlbums(albums: List<Album>, sortOrder: SortOrder): List<Album> {
     }
 }
 
-    @Composable
-    private fun getSortOrderName(sortOrder: SortOrder): String {
-        return when (sortOrder) {
-            SortOrder.TITLE -> stringResource(R.string.albums_sort_name)
-            SortOrder.ARTIST -> stringResource(R.string.albums_sort_artist)
-            else -> stringResource(R.string.albums_sort_name)
-        }
+@Composable
+private fun getSortOrderName(sortOrder: SortOrder): String {
+    return when (sortOrder) {
+        SortOrder.TITLE -> stringResource(R.string.albums_sort_name)
+        SortOrder.ARTIST -> stringResource(R.string.albums_sort_artist)
+        else -> stringResource(R.string.albums_sort_name)
     }
+}

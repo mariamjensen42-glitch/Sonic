@@ -10,6 +10,8 @@ import com.cycling.domain.repository.PlayerRepository
 import com.cycling.domain.repository.SongRepository
 import com.cycling.domain.usecase.SongQueryUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -23,6 +25,9 @@ import kotlinx.coroutines.launch
 import com.cycling.presentation.R
 import timber.log.Timber
 import javax.inject.Inject
+
+private const val FAVORITES_PLAYLIST_NAME = "我喜欢"
+private const val FAVORITES_PLAYLIST_THEME = "收藏的歌曲"
 
 @HiltViewModel
 class MyMusicViewModel @Inject constructor(
@@ -39,6 +44,9 @@ class MyMusicViewModel @Inject constructor(
     private val _uiEffect = MutableSharedFlow<MyMusicEffect>()
     val uiEffect: SharedFlow<MyMusicEffect> = _uiEffect.asSharedFlow()
 
+    private var favoriteDescriptionJob: Job? = null
+    private var requestedFavoriteSongsKey: String? = null
+
     init {
         loadData()
     }
@@ -47,6 +55,10 @@ class MyMusicViewModel @Inject constructor(
         when (intent) {
             is MyMusicIntent.FavoriteSongsClick -> handleFavoriteSongsClick()
             is MyMusicIntent.BackToPlaylists -> handleBackToPlaylists()
+            is MyMusicIntent.ToggleFavoriteDescription -> {
+                _uiState.update { it.copy(isFavoriteDescriptionExpanded = !it.isFavoriteDescriptionExpanded) }
+            }
+            is MyMusicIntent.ShuffleFavoriteSongs -> handleShuffleFavoriteSongs()
             is MyMusicIntent.SongClick -> handleSongClick(intent.song)
             is MyMusicIntent.ToggleFavorite -> toggleFavorite(intent.song)
             is MyMusicIntent.PlaylistClick -> handlePlaylistClick(intent.playlist)
@@ -72,6 +84,9 @@ class MyMusicViewModel @Inject constructor(
             launch {
                 songQueryUseCase.favorites().collectLatest { songs ->
                     _uiState.update { it.copy(favoriteSongs = songs) }
+                    if (_uiState.value.showFavoriteSongs) {
+                        loadFavoritePlaylistDescription(songs)
+                    }
                 }
             }
 
@@ -80,15 +95,141 @@ class MyMusicViewModel @Inject constructor(
                     _uiState.update { it.copy(playlists = playlists, isLoading = false) }
                 }
             }
+
+            launch {
+                playerRepository.playerState.collectLatest { playerState ->
+                    _uiState.update { it.copy(currentSongId = playerState.currentSong?.id) }
+                }
+            }
         }
     }
 
     private fun handleFavoriteSongsClick() {
         _uiState.update { it.copy(showFavoriteSongs = true) }
+        loadFavoritePlaylistDescription(_uiState.value.favoriteSongs)
     }
 
     private fun handleBackToPlaylists() {
-        _uiState.update { it.copy(showFavoriteSongs = false) }
+        favoriteDescriptionJob?.cancel()
+        favoriteDescriptionJob = null
+        requestedFavoriteSongsKey = null
+        _uiState.update {
+            it.copy(
+                showFavoriteSongs = false,
+                isFavoriteDescriptionGenerating = false
+            )
+        }
+    }
+
+    private fun loadFavoritePlaylistDescription(songs: List<Song>) {
+        if (songs.isEmpty()) {
+            favoriteDescriptionJob?.cancel()
+            favoriteDescriptionJob = null
+            requestedFavoriteSongsKey = null
+            _uiState.update {
+                it.copy(
+                    favoriteDescription = "",
+                    isFavoriteDescriptionExpanded = false,
+                    isFavoriteDescriptionGenerating = false
+                )
+            }
+            return
+        }
+
+        val requestKey = songs.joinToString(separator = "|") { "${it.id}:${it.title}:${it.artist}" }
+        if (requestKey == requestedFavoriteSongsKey) return
+
+        favoriteDescriptionJob?.cancel()
+        requestedFavoriteSongsKey = requestKey
+        _uiState.update {
+            it.copy(
+                favoriteDescription = "",
+                isFavoriteDescriptionExpanded = false,
+                isFavoriteDescriptionGenerating = true
+            )
+        }
+
+        favoriteDescriptionJob = viewModelScope.launch {
+            val cachedDescription = try {
+                aiRepository.getCachedFavoritePlaylistDescription(songs)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Timber.w(error, "loadFavoritePlaylistDescription cache lookup failed")
+                null
+            }
+
+            if (!isCurrentFavoriteDescriptionRequest(requestKey)) return@launch
+            if (!cachedDescription.isNullOrBlank()) {
+                _uiState.update {
+                    it.copy(
+                        favoriteDescription = cachedDescription,
+                        isFavoriteDescriptionGenerating = false
+                    )
+                }
+                return@launch
+            }
+
+            val generationResult = try {
+                aiRepository.generatePlaylistDescription(
+                    playlistName = FAVORITES_PLAYLIST_NAME,
+                    theme = FAVORITES_PLAYLIST_THEME,
+                    songs = songs
+                )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Result.failure(error)
+            }
+
+            generationResult.onSuccess { description ->
+                val cleanDescription = description.trim()
+                if (!isCurrentFavoriteDescriptionRequest(requestKey)) return@onSuccess
+                if (cleanDescription.isBlank()) {
+                    requestedFavoriteSongsKey = null
+                    _uiState.update { it.copy(isFavoriteDescriptionGenerating = false) }
+                    _uiEffect.emit(MyMusicEffect.ShowToast(R.string.playlist_detail_desc_failed))
+                    return@onSuccess
+                }
+
+                try {
+                    aiRepository.cacheFavoritePlaylistDescription(songs, cleanDescription)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    Timber.e(error, "cacheFavoritePlaylistDescription failed")
+                }
+                _uiState.update {
+                    it.copy(
+                        favoriteDescription = cleanDescription,
+                        isFavoriteDescriptionExpanded = true,
+                        isFavoriteDescriptionGenerating = false
+                    )
+                }
+            }.onFailure { error ->
+                Timber.e(error, "generate favorite playlist description failed")
+                if (isCurrentFavoriteDescriptionRequest(requestKey)) {
+                    requestedFavoriteSongsKey = null
+                    _uiState.update { it.copy(isFavoriteDescriptionGenerating = false) }
+                    _uiEffect.emit(MyMusicEffect.ShowToast(R.string.playlist_detail_desc_failed))
+                }
+            }
+        }
+    }
+
+    private fun currentFavoriteSongsKey(): String =
+        _uiState.value.favoriteSongs.joinToString(separator = "|") { "${it.id}:${it.title}:${it.artist}" }
+
+    private fun isCurrentFavoriteDescriptionRequest(requestKey: String): Boolean =
+        _uiState.value.showFavoriteSongs && requestKey == currentFavoriteSongsKey()
+
+    private fun handleShuffleFavoriteSongs() {
+        val shuffledSongs = _uiState.value.favoriteSongs.shuffled()
+        val firstSong = shuffledSongs.firstOrNull() ?: return
+        viewModelScope.launch {
+            playerRepository.playSong(firstSong, shuffledSongs)
+            _uiEffect.emit(MyMusicEffect.NavigateToPlayer(firstSong.id))
+        }
     }
 
     private fun handleSongClick(song: Song) {
@@ -246,7 +387,18 @@ class MyMusicViewModel @Inject constructor(
             val playlistName = state.aiGeneratedPlaylistName.ifBlank { "AI歌单" }
 
             try {
-                val playlistId = playlistRepository.createPlaylist(playlistName)
+                // 介绍据已选定的曲目生成，所以放在选曲之后、建单之前。
+                // 生成失败不阻断建单 —— 歌单本身比介绍重要，介绍留空即可。
+                val description = aiRepository
+                    .generatePlaylistDescription(
+                        playlistName = playlistName,
+                        theme = state.themeInput.ifBlank { playlistName },
+                        songs = songs
+                    )
+                    .getOrNull()
+                    ?.takeIf { it.isNotBlank() }
+
+                val playlistId = playlistRepository.createPlaylist(playlistName, description)
                 val songIds = songs.map { it.id }
                 playlistRepository.addSongsToPlaylist(playlistId, songIds)
                 handleDismissAiCreateDialog()

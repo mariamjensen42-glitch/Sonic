@@ -6,7 +6,11 @@ plugins {
 
 android {
     namespace = "com.cycling.domain"
-    compileSdk = 36
+    // material3 1.5.0-alpha29 与 Compose 1.13.0-alpha01 的 AAR 要求 minCompileSdk = 37。
+    // 显式带上 minor：37 只有带点目录（android-37.0/37.1/37.2），
+    // 写全版本号才能保证解析到已安装的平台。
+    compileSdk = 37
+    compileSdkMinor = 1
 
     defaultConfig {
         minSdk = 30

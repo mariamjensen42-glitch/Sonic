@@ -2,7 +2,6 @@ package com.cycling.presentation.ai
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.cycling.domain.model.AiInfoType
 import com.cycling.domain.repository.AiRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow

@@ -1,10 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.Sonic" parent="android:Theme.Material.Light.NoActionBar">
-        <!-- Draw behind status bar -->
-        <item name="android:windowTranslucentStatus">true</item>
+    <!--
+      Compose-only 应用，颜色与排版全部由 SonicTheme（Material 3 Expressive）接管。
+      这里只负责窗口层面的行为：无标题栏、边到边、系统栏透明、不强制系统栏对比遮罩，
+      以及一个与主题 surface 同色的启动背景，避免冷启动闪烁。
+
+      框架只提供 `android:Theme.DeviceDefault.DayNight`，没有 `.NoActionBar` 变体，
+      因此手动关闭标题栏（windowActionBar=false 必须与 windowNoTitle=true 成对出现）。
+    -->
+    <style name="Theme.Sonic" parent="android:Theme.DeviceDefault.DayNight">
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowBackground">@color/sonic_window_background</item>
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:enforceStatusBarContrast">false</item>
+        <item name="android:enforceNavigationBarContrast">false</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
     </style>
 </resources>

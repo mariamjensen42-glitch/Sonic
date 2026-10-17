@@ -12,19 +12,11 @@ class AutoParser(private val guesser: LyricsFormatGuesser) : ILyricsParser {
         registerParser("TTML", TTMLParser)
         registerParser("LYRICIFY_SYLLABLE", LyricifySyllableParser)
         registerParser("WORD_BY_WORD_LRC", WordByWordLrcParser)
+        registerParser("YRC", YrcParser)
     }
 
-    fun registerParser(formatName: String, parser: ILyricsParser) {
+    private fun registerParser(formatName: String, parser: ILyricsParser) {
         parsers[formatName] = parser
-    }
-
-    fun register(format: LyricsFormatGuesser.LyricsFormat, parser: ILyricsParser) {
-        guesser.registerFormat(format)
-        registerParser(format.name, parser)
-    }
-
-    override fun parse(lines: List<String>): SyncedLyrics {
-        return parse(lines.joinToString("\n"))
     }
 
     override fun parse(content: String): SyncedLyrics {
@@ -33,24 +25,5 @@ class AutoParser(private val guesser: LyricsFormatGuesser) : ILyricsParser {
 
         return parser?.parse(content.split("\n"))
             ?: SyncedLyrics(lines = emptyList())
-    }
-
-    class Builder {
-        private val guesser = LyricsFormatGuesser()
-        private val customParsers = mutableMapOf<String, ILyricsParser>()
-
-        fun withFormat(format: LyricsFormatGuesser.LyricsFormat, parser: ILyricsParser): Builder {
-            guesser.registerFormat(format)
-            customParsers[format.name] = parser
-            return this
-        }
-
-        fun build(): AutoParser {
-            val autoParser = AutoParser(guesser)
-            customParsers.forEach { (name, parser) ->
-                autoParser.registerParser(name, parser)
-            }
-            return autoParser
-        }
     }
 }

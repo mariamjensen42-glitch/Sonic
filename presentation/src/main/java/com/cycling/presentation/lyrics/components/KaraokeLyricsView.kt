@@ -1,10 +1,9 @@
 package com.cycling.presentation.lyrics.components
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.core.EaseOut
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -24,31 +23,31 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextMotion
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastRoundToInt
+import com.cycling.core.ui.theme.LocalSonExtendedColors
+import com.cycling.core.ui.theme.SonMotionTiming
+import com.cycling.core.ui.theme.SonSpacing
 import com.cycling.domain.lyrics.model.ISyncedLine
 import com.cycling.domain.lyrics.model.SyncedLyrics
 import com.cycling.domain.lyrics.model.karaoke.KaraokeAlignment
@@ -56,11 +55,12 @@ import com.cycling.domain.lyrics.model.karaoke.KaraokeLine
 import com.cycling.domain.lyrics.model.synced.SyncedLine
 import com.cycling.presentation.lyrics.utils.isRtl
 import com.cycling.presentation.lyrics.utils.modifier.dynamicFadingEdge
-import com.cycling.core.ui.theme.M3Spacing
-import com.cycling.core.ui.theme.M3Motion
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
+
+/** 行尾滚动余量：让最后几行也能滚到高亮位置。 */
+private val ScrollTailHeight = 2000.dp
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
@@ -71,42 +71,38 @@ fun KaraokeLyricsView(
     onLineClicked: (ISyncedLine) -> Unit,
     onLinePressed: (ISyncedLine) -> Unit,
     modifier: Modifier = Modifier,
-    normalLineTextStyle: TextStyle = LocalTextStyle.current.copy(
-        fontSize = 34.sp,
-        fontWeight = FontWeight.Bold,
+    normalLineTextStyle: TextStyle = MaterialTheme.typography.headlineMedium.copy(
         textMotion = TextMotion.Animated,
     ),
-    accompanimentLineTextStyle: TextStyle = LocalTextStyle.current.copy(
-        fontSize = 20.sp,
-        fontWeight = FontWeight.Bold,
+    accompanimentLineTextStyle: TextStyle = MaterialTheme.typography.titleMedium.copy(
         textMotion = TextMotion.Animated,
     ),
     textColor: Color = Color.Unspecified,
     breathingDotsDefaults: KaraokeBreathingDotsDefaults = KaraokeBreathingDotsDefaults(),
-    blendMode: BlendMode = BlendMode.Plus,
     useBlurEffect: Boolean = true,
-    offset: Dp = M3Spacing.extraLarge,
-    showDebugRectangles: Boolean = false
+    offset: Dp = SonSpacing.extraLarge,
 ) {
     val density = LocalDensity.current
-    val colorScheme = MaterialTheme.colorScheme
-    val primaryTextColor = if (textColor == Color.Unspecified) colorScheme.onSurface else textColor
-    val mutedTextColor = colorScheme.onSurfaceVariant
-    
+    val extended = LocalSonExtendedColors.current
+    val motionScheme = MaterialTheme.motionScheme
+    val activeTextColor = if (textColor == Color.Unspecified) extended.lyricsActive else textColor
+    val mutedTextColor = extended.lyricsInactive
+    val fadeMaskColor = MaterialTheme.colorScheme.surface
+
     val stableNormalTextStyle = remember(normalLineTextStyle) { normalLineTextStyle }
     val stableAccompanimentTextStyle =
         remember(accompanimentLineTextStyle) { accompanimentLineTextStyle }
     val stableOffset = remember(offset) { offset }
     val stableOffsetPx =
         remember(stableOffset) { with(density) { stableOffset.toPx().fastRoundToInt() } }
-    val stableBlendMode = remember(blendMode) { blendMode }
 
     val textMeasurer = rememberTextMeasurer()
-    val layoutCache = remember { mutableStateMapOf<Int, List<SyllableLayout>>() }
+    // 一次性写入的布局缓存：逐条写入会让每个已读过 map 的行都重组一次，代价是 O(n²)
+    val layoutCache = remember { mutableStateOf<Map<Int, List<SyllableLayout>>?>(null) }
 
     LaunchedEffect(lyrics, stableNormalTextStyle, stableAccompanimentTextStyle) {
-        layoutCache.clear()
-        withContext(Dispatchers.Default) {
+        layoutCache.value = null
+        val measured = withContext(Dispatchers.Default) {
             val normalStyle = stableNormalTextStyle.copy(textDirection = TextDirection.Content)
             val accompanimentStyle =
                 stableAccompanimentTextStyle.copy(textDirection = TextDirection.Content)
@@ -115,8 +111,9 @@ fun KaraokeLyricsView(
             val accompanimentSpaceWidth =
                 textMeasurer.measure(" ", accompanimentStyle).size.width.toFloat()
 
+            val result = HashMap<Int, List<SyllableLayout>>()
             lyrics.lines.forEachIndexed { index, line ->
-                if (!isActive) return@forEachIndexed
+                if (!isActive) return@withContext result
                 if (line is KaraokeLine) {
                     val style = if (line.isAccompaniment) accompanimentStyle else normalStyle
                     val spaceWidth =
@@ -128,25 +125,34 @@ fun KaraokeLyricsView(
                         line.syllables
                     }
 
-                    val layout = measureSyllablesAndDetermineAnimation(
+                    result[index] = measureSyllablesAndDetermineAnimation(
                         syllables = processedSyllables,
                         textMeasurer = textMeasurer,
                         style = style,
                         isAccompanimentLine = line.isAccompaniment,
                         spaceWidth = spaceWidth
                     )
-
-                    withContext(Dispatchers.Main) {
-                        layoutCache[index] = layout
-                    }
                 }
             }
+            result
         }
+        layoutCache.value = measured
     }
 
     val currentTimeMs: () -> Int = currentPosition
 
     val timeProvider = remember { currentPosition }
+
+    // 每帧 tick：只被绘制阶段读取，用于逐帧刷新进度而不触发重组。
+    // 只有 Animating 状态的行会去读它，静态行不会每帧失效，
+    // 离屏层 / 模糊效果因此可以复用，也避免每帧重做 saveLayer
+    val frameTick = remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) {
+        while (isActive) {
+            withFrameNanos { frameTick.intValue++ }
+        }
+    }
+    val animatedTimeProvider = remember { { frameTick.intValue; timeProvider() } }
 
     val firstFocusedLineIndex by remember(lyrics.lines) {
         derivedStateOf {
@@ -192,25 +198,6 @@ fun KaraokeLyricsView(
         }
     }
 
-    val isDuoView by remember {
-        derivedStateOf {
-            var hasStart = false
-            var hasEnd = false
-            if (lyrics.lines.isEmpty()) return@derivedStateOf false
-            for (line in lyrics.lines) {
-                if (line is KaraokeLine) {
-                    when (line.alignment) {
-                        KaraokeAlignment.Start -> hasStart = true
-                        KaraokeAlignment.End -> hasEnd = true
-                        else -> {}
-                    }
-                }
-                if (hasStart && hasEnd) break
-            }
-            hasStart && hasEnd
-        }
-    }
-
     val firstLine = lyrics.lines.firstOrNull()
 
     val haveDotsIntro by remember(firstLine) {
@@ -223,6 +210,14 @@ fun KaraokeLyricsView(
     val allFocusedLineIndex by remember(lyrics) {
         derivedStateOf {
             lyrics.getCurrentAllHighlightLineIndicesByTime(currentTimeMs())
+        }
+    }
+
+    // 已经开始（start <= now）的最后一行索引：用于区分"已唱完"和"还没开始"
+    val currentStartedLineIndex by remember(lyrics) {
+        derivedStateOf {
+            val time = currentTimeMs()
+            lyrics.lines.indexOfLast { it.start <= time }
         }
     }
 
@@ -262,7 +257,7 @@ fun KaraokeLyricsView(
                 if (scrollOffset != null) {
                     listState.animateScrollBy(
                         scrollOffset,
-                        tween(M3Motion.durationMedium, 0, EaseOut)
+                        SonMotionTiming.scrollSpec()
                     )
                 } else {
                     listState.animateScrollToItem(firstFocusedLineIndex, -stableOffsetPx)
@@ -274,7 +269,7 @@ fun KaraokeLyricsView(
         }
     }
 
-    Crossfade(lyrics) { lyrics ->
+    Crossfade(targetState = lyrics, animationSpec = motionScheme.defaultEffectsSpec()) { lyrics ->
         LazyColumn(
             state = listState,
             modifier = modifier.fillMaxSize(),
@@ -286,8 +281,19 @@ fun KaraokeLyricsView(
             ) { index, line ->
                 val isCurrentFocusLine by rememberUpdatedState(index in allFocusedLineIndex)
 
-                Column(modifier = Modifier.fillMaxWidth().dynamicFadingEdge(listState, index)) {
-                    val animDuration = M3Motion.durationLong + 100
+                // 只有正在推进的行需要逐帧重绘，静态行不该随时间变化
+                val linePhase = when {
+                    index in allFocusedLineIndex -> KaraokeLinePhase.Animating
+                    index <= currentStartedLineIndex -> KaraokeLinePhase.AfterEnd
+                    else -> KaraokeLinePhase.BeforeStart
+                }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .dynamicFadingEdge(listState, index, fadeMaskColor)
+                ) {
+                    val animDuration = SonMotionTiming.ACCOMPANIMENT_MS
 
                     val previousLine = lyrics.lines.getOrNull(index - 1)
 
@@ -303,7 +309,7 @@ fun KaraokeLyricsView(
                         }
                     }
 
-                    androidx.compose.animation.AnimatedVisibility(showDotsInterlude || showDotsIntro) {
+                    AnimatedVisibility(showDotsInterlude || showDotsIntro) {
                         KaraokeBreathingDots(
                             alignment = when (val line = previousLine ?: firstLine) {
                                 is KaraokeLine -> line.alignment
@@ -312,29 +318,23 @@ fun KaraokeLyricsView(
                             },
                             startTimeMs = previousLine?.end ?: 0,
                             endTimeMs = if (showDotsIntro) firstLine!!.start else line.start,
-                            currentTimeProvider = timeProvider,
+                            currentTimeProvider = animatedTimeProvider,
                             defaults = breathingDotsDefaults,
-                            modifier = Modifier.padding(vertical = M3Spacing.medium)
+                            modifier = Modifier.padding(vertical = SonSpacing.medium)
                         )
                     }
 
-                    val nextPendingLineIndex by remember(lyrics, currentTimeMs()) {
-                        derivedStateOf {
-                            val time = currentTimeMs()
-                            val index = lyrics.lines.indexOfFirst { it.start > time }
-                            if (index == -1) lyrics.lines.size - 1 else index
-                        }
-                    }
-
                     val distanceWeightState =
-                        remember(useBlurEffect, allFocusedLineIndex, nextPendingLineIndex) {
+                        remember(useBlurEffect) {
                             derivedStateOf {
                                 if (!useBlurEffect) return@derivedStateOf 0
 
                                 val (baseStart, baseEnd) = if (allFocusedLineIndex.isNotEmpty()) {
                                     allFocusedLineIndex.first() to allFocusedLineIndex.last()
                                 } else {
-                                    nextPendingLineIndex to nextPendingLineIndex
+                                    val next = (currentStartedLineIndex + 1)
+                                        .coerceAtMost(lyrics.lines.lastIndex)
+                                    next to next
                                 }
 
                                 when {
@@ -351,12 +351,14 @@ fun KaraokeLyricsView(
                         } else {
                             0f
                         },
-                        animationSpec = tween(M3Motion.durationMedium),
+                        animationSpec = motionScheme.defaultEffectsSpec(),
+                        label = "blurRadius"
                     )
 
                     val lineAlpha by animateFloatAsState(
                         targetValue = if (isCurrentFocusLine) 1f else 0.5f,
-                        animationSpec = tween(M3Motion.durationMedium),
+                        animationSpec = motionScheme.defaultEffectsSpec(),
+                        label = "lineAlpha"
                     )
 
                     when (line) {
@@ -377,19 +379,17 @@ fun KaraokeLyricsView(
                                     onLineClicked = { onLineClicked(line) },
                                     onLinePressed = { onLinePressed(line) },
                                     blurRadius = { blurRadiusState.value },
-                                    blendMode = stableBlendMode,
                                     activeAlpha = lineAlpha,
                                     inactiveAlpha = 0.5f,
                                 ) {
                                     KaraokeLineText(
                                         line = line,
-                                        currentTimeProvider = timeProvider,
+                                        currentTimeProvider = animatedTimeProvider,
+                                        phase = linePhase,
                                         normalLineTextStyle = stableNormalTextStyle,
                                         accompanimentLineTextStyle = stableAccompanimentTextStyle,
-                                        activeColor = primaryTextColor,
-                                        blendMode = stableBlendMode,
-                                        showDebugRectangles = showDebugRectangles,
-                                        precalculatedLayouts = layoutCache[index]
+                                        activeColor = activeTextColor,
+                                        precalculatedLayouts = layoutCache.value?.get(index)
                                     )
                                 }
                             } else {
@@ -405,26 +405,32 @@ fun KaraokeLyricsView(
                                     }
                                 }
 
-                                androidx.compose.animation.AnimatedVisibility(
+                                val accompanimentOrigin = TransformOrigin(
+                                    if (isVisualRightAligned) 1f else 0f, 0f
+                                )
+
+                                AnimatedVisibility(
                                     visible = isAccompanimentVisible,
                                     enter = scaleIn(
-                                        tween(animDuration), transformOrigin = TransformOrigin(
-                                            if (isVisualRightAligned) 1f else 0f, 0f
-                                        )
-                                    ) + fadeIn(tween(animDuration)) + slideInVertically(
-                                        tween(
-                                            animDuration
-                                        )
-                                    ) + expandVertically(tween(animDuration)),
+                                        SonMotionTiming.accompanimentSpec(entering = true),
+                                        transformOrigin = accompanimentOrigin
+                                    ) + fadeIn(
+                                        SonMotionTiming.accompanimentSpec(entering = true)
+                                    ) + slideInVertically(
+                                        SonMotionTiming.accompanimentSpec(entering = true)
+                                    ) + expandVertically(
+                                        SonMotionTiming.accompanimentSpec(entering = true)
+                                    ),
                                     exit = scaleOut(
-                                        tween(animDuration), transformOrigin = TransformOrigin(
-                                            if (isVisualRightAligned) 1f else 0f, 0f
-                                        )
-                                    ) + fadeOut(tween(animDuration)) + slideOutVertically(
-                                        tween(
-                                            animDuration
-                                        )
-                                    ) + shrinkVertically(tween(animDuration)),
+                                        SonMotionTiming.accompanimentSpec(entering = false),
+                                        transformOrigin = accompanimentOrigin
+                                    ) + fadeOut(
+                                        SonMotionTiming.accompanimentSpec(entering = false)
+                                    ) + slideOutVertically(
+                                        SonMotionTiming.accompanimentSpec(entering = false)
+                                    ) + shrinkVertically(
+                                        SonMotionTiming.accompanimentSpec(entering = false)
+                                    ),
                                 ) {
                                     LyricsLineItem(
                                         isFocused = isCurrentFocusLine,
@@ -432,18 +438,17 @@ fun KaraokeLyricsView(
                                         onLineClicked = { onLineClicked(line) },
                                         onLinePressed = { onLinePressed(line) },
                                         blurRadius = { blurRadiusState.value },
-                                        blendMode = stableBlendMode,
                                         activeAlpha = 0.6f,
                                         inactiveAlpha = 0.3f
                                     ) {
                                         KaraokeLineText(
                                             line = line,
-                                            currentTimeProvider = timeProvider,
+                                            currentTimeProvider = animatedTimeProvider,
+                                            phase = linePhase,
                                             normalLineTextStyle = stableNormalTextStyle,
                                             accompanimentLineTextStyle = stableAccompanimentTextStyle,
-                                            activeColor = primaryTextColor,
-                                            blendMode = stableBlendMode,
-                                            precalculatedLayouts = layoutCache[index]
+                                            activeColor = activeTextColor,
+                                            precalculatedLayouts = layoutCache.value?.get(index)
                                         )
                                     }
                                 }
@@ -458,7 +463,6 @@ fun KaraokeLyricsView(
                                 onLineClicked = { onLineClicked(line) },
                                 onLinePressed = { onLinePressed(line) },
                                 blurRadius = { blurRadiusState.value },
-                                blendMode = stableBlendMode,
                                 activeAlpha = lineAlpha,
                                 inactiveAlpha = 0.5f,
                             ) {
@@ -466,7 +470,7 @@ fun KaraokeLyricsView(
                                     line = line,
                                     isLineRtl = isLineRtl,
                                     textStyle = stableNormalTextStyle.copy(lineHeight = 1.2.em),
-                                    textColor = if (isCurrentFocusLine) primaryTextColor else mutedTextColor,
+                                    textColor = if (isCurrentFocusLine) activeTextColor else mutedTextColor,
                                 )
                             }
                         }
@@ -475,7 +479,7 @@ fun KaraokeLyricsView(
             }
             item("BottomSpacing") {
                 Spacer(
-                    modifier = Modifier.fillMaxWidth().height(2000.dp)
+                    modifier = Modifier.fillMaxWidth().height(ScrollTailHeight)
                 )
             }
         }

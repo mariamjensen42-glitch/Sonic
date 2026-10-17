@@ -17,6 +17,14 @@ import com.cycling.presentation.R
 import timber.log.Timber
 import javax.inject.Inject
 
+/**
+ * 文件夹浏览，两种来源用户自选：
+ *
+ * - 媒体库（[SongRepository.getLibraryFolderContent]）：扫描产物的目录树，免授权；
+ * - 本机文件夹（[SongRepository.getFolderContent]）：SAF 直读文件系统，未入库的也能播。
+ *
+ * 无论哪种来源，点文件都以该目录的歌曲列表起播。
+ */
 @HiltViewModel
 class FolderViewModel @Inject constructor(
     private val songRepository: SongRepository
@@ -29,61 +37,116 @@ class FolderViewModel @Inject constructor(
     val uiEffect: SharedFlow<FolderEffect> = _uiEffect.asSharedFlow()
 
     init {
-        loadRootFolders()
+        // 默认媒体库：与改造前的入口行为一致，老用户零学习成本
+        loadLibraryFolder("")
     }
 
     fun handleIntent(intent: FolderIntent) {
         when (intent) {
-            is FolderIntent.LoadRootFolders -> loadRootFolders()
-            is FolderIntent.NavigateToFolder -> navigateToFolder(intent.path)
+            is FolderIntent.LoadRoots -> loadRoots()
+            is FolderIntent.SelectSource -> selectSource(intent.source)
+            is FolderIntent.AddRoot -> addRoot(intent.treeUri)
+            is FolderIntent.NavigateToFolder -> navigateToFolder(intent.rootUri, intent.path)
+            is FolderIntent.NavigateToLibraryFolder -> loadLibraryFolder(intent.path)
             is FolderIntent.NavigateBack -> navigateBack()
             is FolderIntent.SongClick -> onSongClick(intent.song)
         }
     }
 
-    private fun loadRootFolders() {
-        Timber.d("loadRootFolders: starting")
+    private fun selectSource(source: FolderSource) {
+        if (_uiState.value.source == source) return
+        when (source) {
+            FolderSource.LIBRARY -> loadLibraryFolder("")
+            FolderSource.DEVICE_FILES -> loadRoots()
+        }
+    }
+
+    private fun loadLibraryFolder(path: String) {
+        Timber.d("loadLibraryFolder: path=$path")
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             try {
-                val content = songRepository.getFolderContent("")
-                _uiState.update { 
+                val content = songRepository.getLibraryFolderContent(path)
+                _uiState.update {
                     it.copy(
-                        currentPath = "",
-                        parentPath = null,
+                        source = FolderSource.LIBRARY,
+                        roots = emptyList(),
+                        currentRootUri = content.rootUri,
+                        currentPath = content.currentPath,
+                        parentPath = content.parentPath,
                         folders = content.folders,
-                        songs = emptyList(),
+                        songs = content.songs,
                         isLoading = false,
-                        title = "文件夹"
+                        title = content.currentPath.substringAfterLast('/').ifEmpty { "文件夹" }
                     )
                 }
-                Timber.d("loadRootFolders: found ${content.folders.size} folders")
+                Timber.d("loadLibraryFolder: ${content.folders.size} folders, ${content.songs.size} songs")
             } catch (e: Exception) {
-                Timber.e(e, "loadRootFolders: error")
+                Timber.e(e, "loadLibraryFolder: error")
                 _uiState.update { it.copy(isLoading = false) }
                 _uiEffect.emit(FolderEffect.ShowToast(R.string.folder_vm_load_failed))
             }
         }
     }
 
-    private fun navigateToFolder(path: String) {
-        Timber.d("navigateToFolder: path=$path")
+    private fun loadRoots() {
+        Timber.d("loadRoots: starting")
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             try {
-                val content = songRepository.getFolderContent(path)
-                val title = path.substringAfterLast("/")
+                val roots = songRepository.getFolderRoots()
                 _uiState.update {
                     it.copy(
+                        source = FolderSource.DEVICE_FILES,
+                        roots = roots,
+                        currentRootUri = "",
+                        currentPath = "",
+                        parentPath = null,
+                        folders = emptyList(),
+                        songs = emptyList(),
+                        isLoading = false,
+                        title = "文件夹"
+                    )
+                }
+                Timber.d("loadRoots: ${roots.size} roots")
+            } catch (e: Exception) {
+                Timber.e(e, "loadRoots: error")
+                _uiState.update { it.copy(isLoading = false) }
+                _uiEffect.emit(FolderEffect.ShowToast(R.string.folder_vm_load_failed))
+            }
+        }
+    }
+
+    private fun addRoot(treeUri: String) {
+        viewModelScope.launch {
+            val added = songRepository.addFolderRoot(treeUri)
+            if (!added) {
+                _uiEffect.emit(FolderEffect.ShowToast(R.string.folder_vm_add_root_failed))
+                return@launch
+            }
+            // 授权成功直接进入这棵树，省一次「根列表 -> 点击」
+            navigateToFolder(treeUri, "")
+        }
+    }
+
+    private fun navigateToFolder(rootUri: String, path: String) {
+        Timber.d("navigateToFolder: $rootUri path=$path")
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            try {
+                val content = songRepository.getFolderContent(rootUri, path)
+                _uiState.update {
+                    it.copy(
+                        currentRootUri = content.rootUri,
                         currentPath = content.currentPath,
                         parentPath = content.parentPath,
                         folders = content.folders,
                         songs = content.songs,
                         isLoading = false,
-                        title = if (title.isEmpty()) "文件夹" else title
+                        title = content.currentPath.substringAfterLast('/').ifEmpty { "文件夹" }
                     )
                 }
-                Timber.d("navigateToFolder: found ${content.folders.size} folders, ${content.songs.size} songs")
+                Timber.d("navigateToFolder: ${content.folders.size} folders, ${content.songs.size} songs")
             } catch (e: Exception) {
                 Timber.e(e, "navigateToFolder: error")
                 _uiState.update { it.copy(isLoading = false) }
@@ -93,11 +156,17 @@ class FolderViewModel @Inject constructor(
     }
 
     private fun navigateBack() {
-        val parentPath = _uiState.value.parentPath
-        if (parentPath != null) {
-            navigateToFolder(parentPath)
-        } else {
-            loadRootFolders()
+        when (_uiState.value.source) {
+            // 媒体库顶层再往上没有内容，停在原地；SAF 树根再往上回到根列表
+            FolderSource.LIBRARY -> _uiState.value.parentPath?.let(::loadLibraryFolder)
+            FolderSource.DEVICE_FILES -> {
+                val parentPath = _uiState.value.parentPath
+                if (parentPath != null) {
+                    navigateToFolder(_uiState.value.currentRootUri, parentPath)
+                } else {
+                    loadRoots()
+                }
+            }
         }
     }
 

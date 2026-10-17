@@ -44,6 +44,13 @@ class AiRepositoryImpl @Inject constructor(
         return cached
     }
 
+    override suspend fun getCachedFavoritePlaylistDescription(songs: List<Song>): String? =
+        aiInfoCacheStore.getFavoritePlaylistDescription(songs)
+
+    override suspend fun cacheFavoritePlaylistDescription(songs: List<Song>, description: String) {
+        aiInfoCacheStore.saveFavoritePlaylistDescription(songs, description)
+    }
+
     override suspend fun getSongInfo(songTitle: String, artist: String): Result<AiInfo> {
         Timber.d("getSongInfo: songTitle=$songTitle, artist=$artist")
         val cached = getCachedSongInfo(songTitle, artist)
@@ -128,6 +135,66 @@ class AiRepositoryImpl @Inject constructor(
         
         val prompt = buildPlaylistPrompt(theme, songs, songCount)
         return callPlaylistApi(apiKey, prompt)
+    }
+
+    override suspend fun generatePlaylistDescription(
+        playlistName: String,
+        theme: String,
+        songs: List<Song>
+    ): Result<String> {
+        Timber.d("generatePlaylistDescription: name=$playlistName, songCount=${songs.size}")
+
+        val apiKey = getApiKey() ?: run {
+            Timber.w("generatePlaylistDescription: API Key not configured")
+            return Result.failure(Exception("API Key 未配置"))
+        }
+
+        val request = DeepSeekRequest(
+            messages = listOf(
+                DeepSeekRequest.Message(
+                    role = "system",
+                    content = "你是一位资深音乐编辑。你写的歌单介绍简洁、有画面感、不浮夸，" +
+                        "像唱片内页的短文。只输出正文，不要标题、不要列表、不要引号。"
+                ),
+                DeepSeekRequest.Message(
+                    role = "user",
+                    content = buildDescriptionPrompt(playlistName, theme, songs)
+                )
+            )
+        )
+
+        return deepSeekApiService.chat(apiKey, request).mapCatching { response ->
+            val content = response.getContent()?.trim().orEmpty()
+            if (content.isEmpty()) throw Exception("API 返回空内容")
+            // 模型偶尔会带上引号或多余前缀，详情页直接展示，这里剥掉。
+            content.removeSurrounding("\"")
+                .removePrefix("介绍：")
+                .removePrefix("简介：")
+                .trim()
+        }
+    }
+
+    private fun buildDescriptionPrompt(
+        playlistName: String,
+        theme: String,
+        songs: List<Song>
+    ): String {
+        val songLines = songs.joinToString("\n") { "《${it.title}》- ${it.artist}" }
+        return """
+请为下面这张歌单写一段介绍。
+
+歌单名称：$playlistName
+主题：$theme
+收录曲目（共 ${songs.size} 首）：
+$songLines
+
+要求：
+1. 60～120 字，分成 2～4 个自然段，段间用换行分隔。
+2. 点出这张歌单的音乐脉络或情绪线索，不要逐首复述曲目。
+3. 语言平实，不要营销腔，不要感叹号。
+
+直接输出正文。
+        """.trimIndent()
     }
 
     private suspend fun callApi(

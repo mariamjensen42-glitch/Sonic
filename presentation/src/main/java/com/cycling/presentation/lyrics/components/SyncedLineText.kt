@@ -3,6 +3,7 @@ package com.cycling.presentation.lyrics.components
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -10,7 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
+import com.cycling.core.ui.theme.SonSpacing
 import com.cycling.domain.lyrics.model.synced.SyncedLine
 
 @Composable
@@ -24,7 +25,7 @@ fun SyncedLineText(
     Column(
         modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp, horizontal = 16.dp),
+            .padding(vertical = SonSpacing.small, horizontal = SonSpacing.medium),
         horizontalAlignment = if (isLineRtl) Alignment.End else Alignment.Start
     ) {
         Text(
@@ -36,6 +37,7 @@ fun SyncedLineText(
         line.translation?.let {
             Text(
                 text = it,
+                style = MaterialTheme.typography.titleMedium,
                 color = textColor.copy(alpha = 0.6f),
                 textAlign = if (isLineRtl) TextAlign.End else TextAlign.Start
             )

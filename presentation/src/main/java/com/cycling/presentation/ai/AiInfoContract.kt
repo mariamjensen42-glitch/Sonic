@@ -2,7 +2,6 @@ package com.cycling.presentation.ai
 
 import com.cycling.domain.model.AiInfo
 import androidx.annotation.StringRes
-import com.cycling.domain.model.AiInfoType
 
 data class AiInfoUiState(
     val isLoading: Boolean = false,

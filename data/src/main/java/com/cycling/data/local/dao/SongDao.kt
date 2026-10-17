@@ -37,19 +37,81 @@ interface SongDao {
     fun getRecentlyPlayedSongs(): Flow<List<SongEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertSong(song: SongEntity)
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSongs(songs: List<SongEntity>)
 
-    @Update
-    suspend fun updateSong(song: SongEntity)
-
-    @Delete
-    suspend fun deleteSong(song: SongEntity)
+    /**
+     * Scanned-row upsert that deliberately leaves every user-owned column alone.
+     *
+     * Two reasons this is hand-written rather than `@Insert(REPLACE)`:
+     *
+     * 1. `INSERT OR REPLACE` deletes the conflicting row before inserting, and a delete on
+     *    `songs` fires the `ON DELETE CASCADE` on `playlist_songs` — so a rescan would empty
+     *    every playlist. A native UPSERT updates in place and fires nothing.
+     * 2. The columns omitted from `DO UPDATE SET` are exactly the ones the user owns, so their
+     *    preservation is enforced by SQL rather than by remembering to merge them in Kotlin.
+     *    `isFavorite`, `playCount`, `lastPlayedAt`, `rating`, `customAlbumArt` and `dateAdded`
+     *    are intentionally absent below.
+     *
+     * The parameters are scalars rather than a [SongEntity] because Room cannot bind the fields
+     * of an object parameter in a `@Query`.
+     */
+    @Query(
+        """
+        INSERT INTO songs (
+            id, title, artist, album, duration, path, albumId, artistId, dateAdded,
+            dateModified, size, mimeType, albumArt, isFavorite, playCount, lastPlayedAt,
+            bitrate, rating, customAlbumArt
+        ) VALUES (
+            :id, :title, :artist, :album, :duration, :path, :albumId, :artistId, :dateAdded,
+            :dateModified, :size, :mimeType, :albumArt, :isFavorite, :playCount, :lastPlayedAt,
+            :bitrate, :rating, :customAlbumArt
+        )
+        ON CONFLICT(id) DO UPDATE SET
+            title = excluded.title,
+            artist = excluded.artist,
+            album = excluded.album,
+            duration = excluded.duration,
+            path = excluded.path,
+            albumId = excluded.albumId,
+            artistId = excluded.artistId,
+            dateModified = excluded.dateModified,
+            size = excluded.size,
+            mimeType = excluded.mimeType,
+            albumArt = excluded.albumArt,
+            bitrate = excluded.bitrate
+        """
+    )
+    @Suppress("LongParameterList")
+    suspend fun upsertScannedSong(
+        id: Long,
+        title: String,
+        artist: String,
+        album: String,
+        duration: Long,
+        path: String,
+        albumId: Long,
+        artistId: Long,
+        dateAdded: Long,
+        dateModified: Long,
+        size: Long,
+        mimeType: String,
+        albumArt: String?,
+        isFavorite: Boolean,
+        playCount: Int,
+        lastPlayedAt: Long?,
+        bitrate: Int,
+        rating: Int,
+        customAlbumArt: String?
+    )
 
     @Query("DELETE FROM songs")
     suspend fun deleteAllSongs()
+
+    @Query("DELETE FROM songs WHERE id IN (:ids)")
+    suspend fun deleteSongsByIds(ids: List<Long>)
+
+    @Query("DELETE FROM songs WHERE path IN (:paths)")
+    suspend fun deleteSongsByPaths(paths: List<String>)
 
     @Query("SELECT COUNT(*) FROM songs")
     suspend fun getSongCount(): Int
@@ -57,11 +119,43 @@ interface SongDao {
     @Query("UPDATE songs SET isFavorite = :isFavorite WHERE id = :songId")
     suspend fun updateFavorite(songId: Long, isFavorite: Boolean)
 
+    @Query("UPDATE songs SET isFavorite = :isFavorite WHERE id IN (:songIds)")
+    suspend fun updateFavoriteBatch(songIds: List<Long>, isFavorite: Boolean)
+
+    @Query("UPDATE songs SET rating = :rating WHERE id = :songId")
+    suspend fun updateRating(songId: Long, rating: Int)
+
+    @Query("UPDATE songs SET customAlbumArt = :path WHERE id = :songId")
+    suspend fun updateCustomAlbumArt(songId: Long, path: String?)
+
+    @Query("SELECT * FROM songs WHERE rating > 0 ORDER BY rating DESC, title ASC")
+    fun getRatedSongs(): Flow<List<SongEntity>>
+
     @Query("UPDATE songs SET playCount = playCount + 1, lastPlayedAt = :lastPlayedAt WHERE id = :songId")
     suspend fun incrementPlayCount(songId: Long, lastPlayedAt: Long)
 
     @Query("UPDATE songs SET lastPlayedAt = :lastPlayedAt WHERE id = :songId")
     suspend fun updateLastPlayedAt(songId: Long, lastPlayedAt: Long)
+
+    /**
+     * Restores listening stats from a backup, never lowering what is already on this device.
+     *
+     * `MAX` rather than assignment: a restore is usually onto a fresh install (nothing to lose),
+     * but importing an older backup over a lived-in library must not erase later plays.
+     */
+    @Query(
+        """
+        UPDATE songs SET
+            playCount = MAX(playCount, :playCount),
+            lastPlayedAt = CASE
+                WHEN lastPlayedAt IS NULL THEN :lastPlayedAt
+                WHEN :lastPlayedAt IS NULL THEN lastPlayedAt
+                ELSE MAX(lastPlayedAt, :lastPlayedAt)
+            END
+        WHERE id = :songId
+        """
+    )
+    suspend fun restorePlayStats(songId: Long, playCount: Int, lastPlayedAt: Long?)
 
     @Query("SELECT * FROM songs WHERE bitrate = 0")
     suspend fun getSongsWithoutBitrate(): List<SongEntity>
@@ -73,12 +167,12 @@ interface SongDao {
     suspend fun updateSongInfo(songId: Long, title: String, artist: String, album: String)
 
     @Query("""
-        SELECT 
+        SELECT
             COUNT(*) as totalSongs,
-            SUM(CASE WHEN bitrate > 1411 THEN 1 ELSE 0 END) as hrCount,
-            SUM(CASE WHEN bitrate = 1411 THEN 1 ELSE 0 END) as sqCount,
-            SUM(CASE WHEN bitrate >= 320 AND bitrate < 1411 THEN 1 ELSE 0 END) as hqCount,
-            SUM(CASE WHEN bitrate < 320 OR bitrate = 0 THEN 1 ELSE 0 END) as othersCount
+            IFNULL(SUM(CASE WHEN bitrate > 1411 THEN 1 ELSE 0 END), 0) as hrCount,
+            IFNULL(SUM(CASE WHEN bitrate = 1411 THEN 1 ELSE 0 END), 0) as sqCount,
+            IFNULL(SUM(CASE WHEN bitrate >= 320 AND bitrate < 1411 THEN 1 ELSE 0 END), 0) as hqCount,
+            IFNULL(SUM(CASE WHEN bitrate < 320 OR bitrate = 0 THEN 1 ELSE 0 END), 0) as othersCount
         FROM songs
     """)
     suspend fun getLibraryStats(): LibraryStatsEntity

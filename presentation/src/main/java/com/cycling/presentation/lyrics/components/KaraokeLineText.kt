@@ -1,6 +1,7 @@
 package com.cycling.presentation.lyrics.components
 
-import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -9,26 +10,23 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.withTransform
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
@@ -38,9 +36,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.cycling.core.ui.theme.LocalSonExtendedColors
+import com.cycling.core.ui.theme.SonSpacing
 import com.cycling.domain.lyrics.model.karaoke.KaraokeAlignment
 import com.cycling.domain.lyrics.model.karaoke.KaraokeLine
-import com.cycling.domain.lyrics.model.karaoke.KaraokeSyllable
 import com.cycling.presentation.lyrics.utils.LayerPaint
 import com.cycling.presentation.lyrics.utils.easing.Bounce
 import com.cycling.presentation.lyrics.utils.easing.DipAndRise
@@ -49,13 +48,32 @@ import com.cycling.presentation.lyrics.utils.isPunctuation
 import com.cycling.presentation.lyrics.utils.isRtl
 import kotlin.math.roundToInt
 
+/** 未激活文字的不透明度，与渐变蒙版的未激活色保持一致 */
+private const val InactiveAlpha = 0.2f
+
+// 静态行不读帧时钟，直接用一个远早/远晚的时间戳让动画计算落在 0 / 1 两个端点。
+// 不用 Int.MIN_VALUE / Int.MAX_VALUE 是为了避免 currentTimeMs - start 溢出。
+private const val StaticBeforeStartTimeMs = -1_000_000_000
+private const val StaticAfterEndTimeMs = 1_000_000_000
+
+/**
+ * 一行歌词当前的渲染形态：
+ * - [BeforeStart] 还没开始唱，整行未激活色
+ * - [Animating] 正在推进，需要逐帧重绘 + 渐变蒙版
+ * - [AfterEnd] 已经唱完，整行激活色
+ *
+ * 后两者与时间无关，可以不带蒙版直接绘制，也不必逐帧重绘。
+ */
+enum class KaraokeLinePhase { BeforeStart, Animating, AfterEnd }
+
 private fun createLineGradientBrush(
     lineLayout: List<SyllableLayout>,
     currentTimeMs: Int,
-    isRtl: Boolean
+    isRtl: Boolean,
+    color: Color
 ): Brush {
-    val activeColor = Color.White
-    val inactiveColor = Color.White.copy(alpha = 0.2f)
+    val activeColor = color
+    val inactiveColor = color.copy(alpha = InactiveAlpha)
     val minFadeWidth = 100f
 
     if (lineLayout.isEmpty()) {
@@ -142,17 +160,28 @@ fun DrawScope.drawLyricsLine(
     lineLayouts: List<List<SyllableLayout>>,
     currentTimeMs: Int,
     color: Color,
-    blendMode: BlendMode,
     isRtl: Boolean,
-    showDebugRectangles: Boolean = false
+    phase: KaraokeLinePhase = KaraokeLinePhase.Animating
 ) {
+    if (phase != KaraokeLinePhase.Animating) {
+        // 静态行整行单色，不需要离屏蒙版（saveLayer）
+        val staticColor =
+            if (phase == KaraokeLinePhase.BeforeStart) color.copy(alpha = InactiveAlpha) else color
+        lineLayouts.forEach { rowLayouts ->
+            if (rowLayouts.isNotEmpty()) {
+                drawRowText(rowLayouts, staticColor, currentTimeMs)
+            }
+        }
+        return
+    }
+
     lineLayouts.forEach { rowLayouts ->
         if (rowLayouts.isEmpty()) return@forEach
 
         val lastSyllableEnd = rowLayouts.last().syllable.end
 
         if (currentTimeMs >= lastSyllableEnd) {
-            drawRowText(rowLayouts, color, blendMode, showDebugRectangles, currentTimeMs)
+            drawRowText(rowLayouts, color, currentTimeMs)
             return@forEach
         }
 
@@ -173,9 +202,9 @@ fun DrawScope.drawLyricsLine(
             )
             canvas.saveLayer(layerBounds, LayerPaint)
 
-            drawRowText(rowLayouts, color, blendMode, showDebugRectangles, currentTimeMs)
+            drawRowText(rowLayouts, color, currentTimeMs)
 
-            val progressBrush = createLineGradientBrush(rowLayouts, currentTimeMs, isRtl)
+            val progressBrush = createLineGradientBrush(rowLayouts, currentTimeMs, isRtl, color)
             drawRect(
                 brush = progressBrush,
                 topLeft = layerBounds.topLeft,
@@ -190,8 +219,6 @@ fun DrawScope.drawLyricsLine(
 private fun DrawScope.drawRowText(
     rowLayouts: List<SyllableLayout>,
     drawColor: Color,
-    blendMode: BlendMode,
-    showDebugRectangles: Boolean,
     currentTimeMs: Int,
 ) {
     rowLayouts.forEachIndexed { index, syllableLayout ->
@@ -229,11 +256,17 @@ private fun DrawScope.drawRowText(
                 val yPos = syllableLayout.position.y + charBox.top + floatOffset
 
                 val blurRadius = 10f * Bounce.transform(awesomeProgress)
-                val shadow = Shadow(
-                    color = drawColor.copy(0.4f),
-                    offset = Offset(0f, 0f),
-                    blurRadius = blurRadius
-                )
+                // 模糊半径为 0 时阴影完全被字形覆盖，直接跳过，
+                // 否则静态行降透明度后阴影会透出来
+                val shadow = if (blurRadius > 0f) {
+                    Shadow(
+                        color = drawColor.copy(0.4f),
+                        offset = Offset(0f, 0f),
+                        blurRadius = blurRadius
+                    )
+                } else {
+                    null
+                }
                 withTransform({ scale(scale = scale, pivot = syllableLayout.wordPivot) }) {
                     drawText(
                         textLayoutResult = singleCharLayoutResult,
@@ -241,14 +274,6 @@ private fun DrawScope.drawRowText(
                         topLeft = Offset(xPos, yPos),
                         shadow = shadow,
                     )
-                    if (showDebugRectangles) {
-                        drawRect(
-                            color = Color.Red, topLeft = Offset(xPos, yPos), size = Size(
-                                singleCharLayoutResult.size.width.toFloat(),
-                                singleCharLayoutResult.size.height.toFloat()
-                            ), style = Stroke(1f)
-                        )
-                    }
                 }
             }
         } else {
@@ -271,7 +296,7 @@ private fun DrawScope.drawRowText(
             val animationProgress = (timeSinceStart / animationFixedDuration).coerceIn(0f, 1f)
 
             val maxOffsetY = 4f
-            val floatCurveValue = CubicBezierEasing(0.0f, 0.0f, 0.2f, 1.0f).transform(1f - animationProgress)
+            val floatCurveValue = LinearOutSlowInEasing.transform(1f - animationProgress)
             val floatOffset = maxOffsetY * floatCurveValue
 
             val finalPosition = syllableLayout.position.copy(
@@ -283,14 +308,6 @@ private fun DrawScope.drawRowText(
                 color = drawColor,
                 topLeft = finalPosition,
             )
-            if (showDebugRectangles) {
-                drawRect(
-                    color = Color.Green, topLeft = finalPosition, size = Size(
-                        syllableLayout.textLayoutResult.size.width.toFloat(),
-                        syllableLayout.textLayoutResult.size.height.toFloat()
-                    ), style = Stroke(2f)
-                )
-            }
         }
     }
 }
@@ -299,14 +316,12 @@ private fun DrawScope.drawRowText(
 fun KaraokeLineText(
     line: KaraokeLine,
     currentTimeProvider: () -> Int,
+    phase: KaraokeLinePhase = KaraokeLinePhase.Animating,
     modifier: Modifier = Modifier,
     normalLineTextStyle: TextStyle = LocalTextStyle.current,
     accompanimentLineTextStyle: TextStyle = LocalTextStyle.current,
-    activeColor: Color = Color.White,
-    blendMode: BlendMode = BlendMode.SrcOver,
-    showDebugRectangles: Boolean = false,
+    activeColor: Color = Color.Unspecified,
     precalculatedLayouts: List<SyllableLayout>? = null,
-    isDuoView: Boolean = false,
     textMeasurer: TextMeasurer = rememberTextMeasurer()
 ) {
     val isLineRtl = remember(line.syllables) { line.syllables.any { it.content.isRtl() } }
@@ -326,11 +341,15 @@ fun KaraokeLineText(
         if (isRightAligned) Alignment.End else Alignment.Start
     }
 
+    // 已唱/未唱的刷色都来自主题角色，调用方不传就取"当前行高亮"色
+    val extended = LocalSonExtendedColors.current
+    val lyricsColor = if (activeColor == Color.Unspecified) extended.lyricsActive else activeColor
+
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp, horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+            .padding(vertical = SonSpacing.small, horizontal = SonSpacing.medium),
+        verticalArrangement = Arrangement.spacedBy(SonSpacing.extraSmall),
         horizontalAlignment = columnHorizontalAlignment
     ) {
         BoxWithConstraints {
@@ -354,27 +373,26 @@ fun KaraokeLineText(
                 }
             }
 
-            val initialLayouts by remember(precalculatedLayouts) {
-                derivedStateOf {
-                    precalculatedLayouts ?: measureSyllablesAndDetermineAnimation(
-                        syllables = processedSyllables,
-                        textMeasurer = textMeasurer,
-                        style = textStyle,
-                        isAccompanimentLine = line.isAccompaniment,
-                        spaceWidth = spaceWidth
-                    )
-                }
+            val initialLayouts = remember(
+                precalculatedLayouts, processedSyllables, textStyle, spaceWidth, textMeasurer,
+                line.isAccompaniment
+            ) {
+                precalculatedLayouts ?: measureSyllablesAndDetermineAnimation(
+                    syllables = processedSyllables,
+                    textMeasurer = textMeasurer,
+                    style = textStyle,
+                    isAccompanimentLine = line.isAccompaniment,
+                    spaceWidth = spaceWidth
+                )
             }
 
-            val wrappedLines by remember {
-                derivedStateOf {
-                    calculateBalancedLines(
-                        syllableLayouts = initialLayouts,
-                        availableWidthPx = availableWidthPx,
-                        textMeasurer = textMeasurer,
-                        style = textStyle
-                    )
-                }
+            val wrappedLines = remember(initialLayouts, availableWidthPx, textStyle, textMeasurer) {
+                calculateBalancedLines(
+                    syllableLayouts = initialLayouts,
+                    availableWidthPx = availableWidthPx,
+                    textMeasurer = textMeasurer,
+                    style = textStyle
+                )
             }
 
             val lineHeight = remember(textStyle) {
@@ -397,22 +415,36 @@ fun KaraokeLineText(
             }
 
             Canvas(modifier = Modifier.size(maxWidth, (totalHeight.roundToInt() + 8).toDp())) {
-                val time = currentTimeProvider()
+                val time = when (phase) {
+                    KaraokeLinePhase.BeforeStart -> StaticBeforeStartTimeMs
+                    KaraokeLinePhase.AfterEnd -> StaticAfterEndTimeMs
+                    KaraokeLinePhase.Animating -> currentTimeProvider()
+                }
                 drawLyricsLine(
                     lineLayouts = finalLineLayouts,
                     currentTimeMs = time,
-                    color = activeColor,
-                    blendMode = blendMode,
+                    color = lyricsColor,
                     isRtl = isLineRtl,
-                    showDebugRectangles = showDebugRectangles
+                    phase = phase
                 )
             }
         }
         // 去掉了 graphicsLayer 中的 blendMode
         line.translation?.let { translation ->
+            // 译文没有逐字时间轴，就跟着原文的高亮走：本行还没开始保持"非当前行"色，开始了就点亮
+            val translationColor by animateColorAsState(
+                targetValue = if (phase == KaraokeLinePhase.BeforeStart) {
+                    extended.lyricsInactive
+                } else {
+                    extended.lyricsActive
+                },
+                animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
+                label = "translationColor"
+            )
             Text(
                 text = translation,
-                color = activeColor.copy(0.4f),
+                style = MaterialTheme.typography.titleMedium,
+                color = translationColor,
                 textAlign = translationTextAlign
             )
         }

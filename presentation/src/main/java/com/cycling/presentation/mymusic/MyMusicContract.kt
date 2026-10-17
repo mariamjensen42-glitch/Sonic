@@ -4,14 +4,12 @@ import com.cycling.domain.model.Playlist
 import androidx.annotation.StringRes
 import com.cycling.domain.model.Song
 
-enum class MyMusicTab {
-    RECENTLY_PLAYED,
-    MOST_PLAYED,
-    PLAYLISTS
-}
-
 data class MyMusicUiState(
     val favoriteSongs: List<Song> = emptyList(),
+    val favoriteDescription: String = "",
+    val isFavoriteDescriptionExpanded: Boolean = false,
+    val isFavoriteDescriptionGenerating: Boolean = false,
+    val currentSongId: Long? = null,
     val playlists: List<Playlist> = emptyList(),
     val isLoading: Boolean = false,
     val showFavoriteSongs: Boolean = false,
@@ -35,6 +33,8 @@ enum class AiCreateMode { RANDOM, THEME }
 sealed interface MyMusicIntent {
     data object FavoriteSongsClick : MyMusicIntent
     data object BackToPlaylists : MyMusicIntent
+    data object ToggleFavoriteDescription : MyMusicIntent
+    data object ShuffleFavoriteSongs : MyMusicIntent
     data class SongClick(val song: Song) : MyMusicIntent
     data class ToggleFavorite(val song: Song) : MyMusicIntent
     data class PlaylistClick(val playlist: Playlist) : MyMusicIntent

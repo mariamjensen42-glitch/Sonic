@@ -7,13 +7,15 @@ espressoCore = "3.5.1"
 lifecycleRuntimeCompose = "2.8.7"
 activityCompose = "1.8.0"
 kotlin = "2.3.0"
-composeBom = "2026.01.00"
+composeBom = "2026.09.00"
+# Material 3 Expressive 的完整组件集（形变 LoadingIndicator、波浪进度、可点击 ListItem、
+# 按钮尺寸联动规格）只在 1.5.0-alpha* 提供，BOM 里钉的 1.4.0 没有。
+# 此处的显式版本会覆盖 BOM 对该构件的约束。
+composeMaterial3 = "1.5.0-alpha29"
 
 ksp = "2.3.8"
 
 room = "2.7.1"
-appcompat = "1.6.1"
-material = "1.10.0"
 palette = "1.0.0"
 
 hilt = "2.59.2"
@@ -26,8 +28,13 @@ kotlinxSerialization = "1.7.3"
 kotlinxCoroutines = "1.8.1"
 datastorePreferences = "1.1.1"
 composeMarkdown = "0.5.4"
+glance = "1.2.0"
 mockk = "1.13.12"
-turbine = "1.1.0"
+
+# benchmark（为将来的 macrobenchmark 模块保留的版本声明）
+benchmark = "1.5.0"
+androidxTestUiautomator = "2.3.0"
+androidxTestRunner = "1.6.2"
 
 
 [libraries]
@@ -43,7 +50,7 @@ androidx-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-toolin
 androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
 androidx-compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
 androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
-androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "composeMaterial3" }
 
 #room
 androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
@@ -66,15 +73,11 @@ androidx-lifecycle-runtime-compose = { group = "androidx.lifecycle", name = "lif
 #serialization
 kotlinx-serialization-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-core", version.ref = "kotlinxSerialization" }
 
-#material-icons-extended
-androidx-compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
-
 #palette
 androidx-palette = { group = "androidx.palette", name = "palette-ktx", version.ref = "palette" }
 
 #coroutines
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "kotlinxCoroutines" }
-kotlinx-coroutines-guava = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-guava", version.ref = "kotlinxCoroutines" }
 
 #datastore
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastorePreferences" }
@@ -84,13 +87,16 @@ androidx-media3-exoplayer = { group = "androidx.media3", name = "media3-exoplaye
 androidx-media3-session = { group = "androidx.media3", name = "media3-session", version.ref = "media3" }
 androidx-media3-datasource = { group = "androidx.media3", name = "media3-datasource", version.ref = "media3" }
 
+#glance（桌面小组件）
+androidx-glance-appwidget = { group = "androidx.glance", name = "glance-appwidget", version.ref = "glance" }
+androidx-glance-material3 = { group = "androidx.glance", name = "glance-material3", version.ref = "glance" }
+
 #coil3
 coil-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil" }
 coil-network-okhttp = { group = "io.coil-kt.coil3", name = "coil-network-okhttp", version.ref = "coil" }
 
 #okhttp
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version = "4.12.0" }
-okhttp-logging = { group = "com.squareup.okhttp3", name = "logging-interceptor", version = "4.12.0" }
 
 #kotlinx-serialization-json
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
@@ -101,6 +107,7 @@ compose-markdown = { group = "com.github.jeziellago", name = "compose-markdown",
 #mp3agic
 mp3agic = { group = "com.mpatric", name = "mp3agic", version = "0.9.1" }
 
+
 #timber
 timber = { group = "com.jakewharton.timber", name = "timber", version = "5.0.1" }
 
@@ -108,7 +115,11 @@ timber = { group = "com.jakewharton.timber", name = "timber", version = "5.0.1" 
 #testing
 mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "kotlinxCoroutines" }
-turbine = { group = "app.cash.turbine", name = "turbine", version.ref = "turbine" }
+
+#benchmark（:benchmark 模块的 macrobenchmark）
+androidx-benchmark-macro-junit4 = { group = "androidx.benchmark", name = "benchmark-macro-junit4", version.ref = "benchmark" }
+androidx-test-uiautomator = { group = "androidx.test.uiautomator", name = "uiautomator", version.ref = "androidxTestUiautomator" }
+androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "androidxTestRunner" }
 
 
 [plugins]
@@ -118,3 +129,5 @@ ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 android-library = { id = "com.android.library", version.ref = "agp" }
 hilt-android = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+android-test = { id = "com.android.test", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }

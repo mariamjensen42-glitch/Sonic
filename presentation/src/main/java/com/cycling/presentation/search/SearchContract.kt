@@ -3,6 +3,7 @@ package com.cycling.presentation.search
 import com.cycling.domain.model.Album
 import com.cycling.domain.model.Artist
 import androidx.annotation.StringRes
+import com.cycling.domain.model.LyricsMatch
 import com.cycling.domain.model.Song
 
 data class SearchUiState(
@@ -13,6 +14,8 @@ data class SearchUiState(
     val songs: List<Song> = emptyList(),
     val albums: List<Album> = emptyList(),
     val artists: List<Artist> = emptyList(),
+    /** Songs matched by their lyric text; the row shows a snippet instead of metadata. */
+    val lyricsMatches: List<LyricsMatch> = emptyList(),
     val selectedTab: SearchTab = SearchTab.ALL,
     val error: String? = null
 )
@@ -28,6 +31,7 @@ sealed interface SearchIntent {
     data object ClearHistory : SearchIntent
     data class TabSelected(val tab: SearchTab) : SearchIntent
     data class SongClicked(val song: Song) : SearchIntent
+    data class ToggleFavorite(val song: Song) : SearchIntent
     data class AlbumClicked(val album: Album) : SearchIntent
     data class ArtistClicked(val artist: Artist) : SearchIntent
     data object ClearSearch : SearchIntent

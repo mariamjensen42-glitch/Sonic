@@ -85,7 +85,7 @@ object WordByWordLrcParser : ILyricsParser {
             return null
         }
 
-        val syllables = parseSyllables(trimmedContent)
+        val syllables = parseSyllables(trimmedContent, lineStartTime)
 
         if (syllables.isEmpty()) {
             return KaraokeLine(
@@ -108,11 +108,26 @@ object WordByWordLrcParser : ILyricsParser {
         )
     }
 
-    private fun parseSyllables(content: String): List<KaraokeSyllable> {
+    private fun parseSyllables(content: String, lineStartTime: Int): List<KaraokeSyllable> {
         val syllables = mutableListOf<KaraokeSyllable>()
         val timeTags = timeTagRegex.findAll(content).toList()
 
         if (timeTags.isEmpty()) return emptyList()
+
+        // 这类文件写成 [行时间]首字[逐字时间]其余…… 第一个逐字标签之前的文字属于行首音节。
+        // 漏掉它既会让行首字消失，也会让行开始时间被算成第一个逐字标签的时间，
+        // 于是同一时间戳的译文行配不上对，译文就永远不会被当作 translation。
+        val leadingText = content.substring(0, timeTags.first().range.first)
+        if (leadingText.isNotBlank()) {
+            val leadingEnd = timeTags.first().groupValues[1].parseAsTime()
+            syllables.add(
+                KaraokeSyllable(
+                    content = leadingText,
+                    start = lineStartTime,
+                    end = maxOf(lineStartTime, leadingEnd)
+                )
+            )
+        }
 
         for (i in timeTags.indices) {
             val currentMatch = timeTags[i]

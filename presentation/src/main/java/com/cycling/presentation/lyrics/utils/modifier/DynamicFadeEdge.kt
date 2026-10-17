@@ -8,14 +8,22 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import com.cycling.presentation.lyrics.utils.LayerPaint
+import com.cycling.core.ui.theme.SonLayout
+import com.cycling.core.ui.theme.SonSpacing
 
+/**
+ * 列表首尾的渐隐遮罩：内容滚到视口边缘时淡出，暗示"后面还有"。
+ *
+ * 遮罩用 `DstIn` 擦除，只关心 alpha，因此 [maskColor] 只需是一个**不透明**的主题色 ——
+ * 调用方传入当前页底色即可，不要写死黑色。
+ */
 fun Modifier.dynamicFadingEdge(
     listState: LazyListState,
     index: Int,
-    topFadeHeight: Dp = 20.dp,
-    bottomFadeHeight: Dp = 100.dp
+    maskColor: Color,
+    topFadeHeight: Dp = SonSpacing.large,
+    bottomFadeHeight: Dp = SonLayout.bottomBarClearance
 ): Modifier = this.drawWithContent {
     val layoutInfo = listState.layoutInfo
     val visibleItems = layoutInfo.visibleItemsInfo
@@ -57,7 +65,7 @@ fun Modifier.dynamicFadingEdge(
         drawRect(
             brush = Brush.verticalGradient(
                 0f to Color.Transparent,
-                1f to Color.Black,
+                1f to maskColor,
                 startY = gradientStart,
                 endY = gradientEnd
             ),
@@ -71,7 +79,7 @@ fun Modifier.dynamicFadingEdge(
 
         drawRect(
             brush = Brush.verticalGradient(
-                0f to Color.Black,
+                0f to maskColor,
                 1f to Color.Transparent,
                 startY = gradientStart,
                 endY = gradientEnd

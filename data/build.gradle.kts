@@ -7,7 +7,11 @@ plugins {
 
 android {
     namespace = "com.cycling.data"
-    compileSdk = 36
+    // material3 1.5.0-alpha29 与 Compose 1.13.0-alpha01 的 AAR 要求 minCompileSdk = 37。
+    // 显式带上 minor：37 只有带点目录（android-37.0/37.1/37.2），
+    // 写全版本号才能保证解析到已安装的平台。
+    compileSdk = 37
+    compileSdkMinor = 1
 
     defaultConfig {
         minSdk = 30
@@ -29,6 +33,12 @@ android {
     }
 }
 
+// Exported Room schemas are checked in: the 1→2 migration is the first upgrade path that has to
+// preserve user data, so the generated JSON is the reference the migration SQL is verified against.
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 dependencies {
     implementation(project(":domain"))
     
@@ -42,7 +52,6 @@ dependencies {
     ksp(libs.androidx.hilt.compiler)
     
     implementation(libs.kotlinx.coroutines.core)
-    implementation(libs.kotlinx.coroutines.guava)
     implementation(libs.androidx.datastore.preferences)
 
     implementation(libs.androidx.media3.exoplayer)
@@ -50,7 +59,6 @@ dependencies {
     implementation(libs.androidx.media3.datasource)
 
     implementation(libs.okhttp)
-    implementation(libs.okhttp.logging)
     implementation(libs.kotlinx.serialization.json)
 
     implementation(libs.mp3agic)
@@ -62,7 +70,7 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
-    testImplementation(libs.turbine)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+    androidTestImplementation(libs.kotlinx.coroutines.test)
 }

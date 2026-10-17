@@ -1,13 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
-    <group android:translateX="22" android:translateY="22">
-        <path android:fillColor="#5B9BD5" android:pathData="M8,8h48v48h-48z" />
-        <path android:fillColor="#4472C4" android:pathData="M8,8h48v8h-48z" />
-        <path android:fillColor="#FFFFFF" android:pathData="M16,24h8v8h-8zM40,24h8v8h-8z" />
-        <path android:fillColor="#2D2D2D" android:pathData="M18,26h4v4h-4zM42,26h4v4h-4z" />
-        <path android:fillColor="#FFFFFF" android:pathData="M24,36h16v8h-16z" />
-        <path android:fillColor="#FFB900" android:pathData="M26,38h4v4h-4zM34,38h4v4h-4z" />
-        <path android:fillColor="#4472C4" android:pathData="M12,16h4v4h-4zM48,16h4v4h-4z" />
-        <path android:fillColor="#4472C4" android:pathData="M16,48h8v8h-8zM40,48h8v8h-8z" />
-    </group>
+<!-- Sonic 启动图标前景：五段声波。单色实心，可直接复用作 monochrome 图层 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M29,49 a3,3 0 0 1 6,0 v10 a3,3 0 0 1 -6,0 z M40,43 a3,3 0 0 1 6,0 v22 a3,3 0 0 1 -6,0 z M51,37 a3,3 0 0 1 6,0 v34 a3,3 0 0 1 -6,0 z M62,43 a3,3 0 0 1 6,0 v22 a3,3 0 0 1 -6,0 z M73,49 a3,3 0 0 1 6,0 v10 a3,3 0 0 1 -6,0 z" />
 </vector>
