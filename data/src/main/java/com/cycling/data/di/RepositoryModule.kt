@@ -8,7 +8,6 @@ import com.cycling.data.repository.ExcludedFolderRepositoryImpl
 import com.cycling.data.repository.LyricsRepositoryImpl
 import com.cycling.data.repository.MusicScannerRepositoryImpl
 import com.cycling.data.repository.PlaylistRepositoryImpl
-import com.cycling.data.repository.ScanProgressRepositoryImpl
 import com.cycling.data.repository.SearchHistoryRepositoryImpl
 import com.cycling.data.repository.SettingsRepositoryImpl
 import com.cycling.data.repository.SongRepositoryImpl
@@ -21,7 +20,6 @@ import com.cycling.domain.repository.ExcludedFolderRepository
 import com.cycling.domain.repository.LyricsRepository
 import com.cycling.domain.repository.MusicScannerRepository
 import com.cycling.domain.repository.PlaylistRepository
-import com.cycling.domain.repository.ScanProgressRepository
 import com.cycling.domain.repository.SearchHistoryRepository
 import com.cycling.domain.repository.SettingsRepository
 import com.cycling.domain.repository.SongRepository
@@ -65,12 +63,6 @@ abstract class RepositoryModule {
     abstract fun bindMusicScannerRepository(
         musicScannerRepositoryImpl: MusicScannerRepositoryImpl
     ): MusicScannerRepository
-
-    @Binds
-    @Singleton
-    abstract fun bindScanProgressRepository(
-        scanProgressRepositoryImpl: ScanProgressRepositoryImpl
-    ): ScanProgressRepository
 
     @Binds
     @Singleton

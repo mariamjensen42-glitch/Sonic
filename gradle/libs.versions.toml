@@ -27,7 +27,6 @@ kotlinxCoroutines = "1.8.1"
 datastorePreferences = "1.1.1"
 composeMarkdown = "0.5.4"
 mockk = "1.13.12"
-turbine = "1.1.0"
 
 
 [libraries]
@@ -74,7 +73,6 @@ androidx-palette = { group = "androidx.palette", name = "palette-ktx", version.r
 
 #coroutines
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "kotlinxCoroutines" }
-kotlinx-coroutines-guava = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-guava", version.ref = "kotlinxCoroutines" }
 
 #datastore
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastorePreferences" }
@@ -108,7 +106,6 @@ timber = { group = "com.jakewharton.timber", name = "timber", version = "5.0.1" 
 #testing
 mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "kotlinxCoroutines" }
-turbine = { group = "app.cash.turbine", name = "turbine", version.ref = "turbine" }
 
 
 [plugins]

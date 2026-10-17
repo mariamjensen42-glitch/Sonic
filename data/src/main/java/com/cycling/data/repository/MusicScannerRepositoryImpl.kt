@@ -1,8 +1,10 @@
 package com.cycling.data.repository
 
 import com.cycling.data.local.scanner.MusicScanner
+import com.cycling.domain.model.ScanProgress
 import com.cycling.domain.model.ScanResult
 import com.cycling.domain.repository.MusicScannerRepository
+import kotlinx.coroutines.flow.Flow
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -11,6 +13,12 @@ import javax.inject.Singleton
 class MusicScannerRepositoryImpl @Inject constructor(
     private val musicScanner: MusicScanner
 ) : MusicScannerRepository {
+    override val scanProgress: Flow<ScanProgress> = musicScanner.scanProgress
+
+    override fun resetProgress() {
+        musicScanner.resetProgress()
+    }
+
     override suspend fun scanMusic(): Result<ScanResult> {
         Timber.d("scanMusic: starting scan")
         val startTime = System.currentTimeMillis()

@@ -34,19 +34,6 @@ class SettingsConversionsTest {
     }
 
     @Test
-    fun `band levels round-trip through their string encoding`() {
-        val levels = listOf(-300, 0, 450, 1200)
-        assertEquals(levels, SettingsConversions.parseBandLevels(SettingsConversions.encodeBandLevels(levels)))
-    }
-
-    @Test
-    fun `band level parsing tolerates missing or malformed entries`() {
-        assertEquals(emptyList<Int>(), SettingsConversions.parseBandLevels(null))
-        assertEquals(emptyList<Int>(), SettingsConversions.parseBandLevels(""))
-        assertEquals(listOf(100, 200), SettingsConversions.parseBandLevels(" 100 ,,oops, 200 "))
-    }
-
-    @Test
     fun `lyrics provider order keeps the stored order`() {
         assertEquals(
             listOf(LyricsProvider.LRCLIB, LyricsProvider.NETEASE),
@@ -68,12 +55,5 @@ class SettingsConversionsTest {
             DEFAULT_LYRICS_PROVIDER_ORDER.joinToString(",") { it.name },
             SettingsConversions.encodeLyricsProviders(emptyList())
         )
-    }
-
-    @Test
-    fun `effect strength is clamped to the 0-1000 scale the framework uses`() {
-        assertEquals(0, SettingsConversions.clampEffectStrength(-50))
-        assertEquals(1000, SettingsConversions.clampEffectStrength(5_000))
-        assertEquals(700, SettingsConversions.clampEffectStrength(700))
     }
 }

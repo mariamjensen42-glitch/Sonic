@@ -57,12 +57,12 @@ app → domain, app → data
   - `lyrics/` — 歌词子系统：`parser/`（`ILyricsParser` 接口 + LRC/TTML/Syllable 等实现）、`model/`、`exporter/`、`utils/`
 - **data** (`com.cycling.data`)：依赖 `:domain`，实现所有 repository。
   - `local/` — `database/`(`AppDatabase`)、`dao/`、`entity/`、`mediastore/`、`scanner/`、`lyrics/`、`metadata/`
-  - `api/` — DeepSeek 远程 API（`DeepSeekApiService` 接口 + Impl + `dto/`）
+  - `api/` — DeepSeek 远程 API（`DeepSeekApiService` 类 + `dto/`）
   - `player/` — `PlayerManager`、`PlayerService`（Media3 MediaSessionService）
   - `repository/` — `XxxRepositoryImpl`（`@Singleton`，`@Inject constructor`）
   - `mapper/` — Entity ↔ Domain Model 映射（`Mappers.kt`）
   - `store/` — DataStore 封装（`ApiKeyStore`、`AiInfoCacheStore`）
-  - `di/` — Hilt 模块（`RepositoryModule` 用 `@Binds`，`DatabaseModule`/`PlayerModule`/`AiModule` 用 `@Provides`）
+  - `di/` — Hilt 模块（`RepositoryModule` 用 `@Binds`，`DatabaseModule`/`PlayerModule` 用 `@Provides`）
 - **presentation** (`com.cycling.presentation` + `com.cycling.core.ui`)：依赖 `:domain`，含 Compose UI。
   - `presentation/<feature>/` — 每个功能一个包，内含 `XxxContract.kt`（UiState/Intent/Effect）、`XxxViewModel.kt`、`XxxScreen.kt`
   - `presentation/navigation/` — `Screen`/`LibraryDestination`/`SettingsDestination`（`sealed interface : NavKey`）、`AppNavGraph`、`Navigator`
