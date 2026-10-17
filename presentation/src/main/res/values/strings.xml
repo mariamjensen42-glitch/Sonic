@@ -457,4 +457,10 @@
     <string name="ai_loading">AI 正在分析...</string>
     <string name="ai_error">获取失败</string>
     <string name="ai_retry">重试</string>
+
+    <!-- Expressive 页面语法的共用文案 -->
+    <string name="mymusic_section_playlists">歌单</string>
+    <string name="mymusic_subtitle_library">%1$d 个歌单</string>
+    <string name="albums_count">%1$d 张专辑</string>
+    <string name="artists_count">%1$d 位歌手</string>
 </resources>

@@ -10,32 +10,29 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
-import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MediumFlexibleTopAppBar
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -46,12 +43,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cycling.core.ui.components.M3SymbolIcon
 import com.cycling.core.ui.components.SymbolIconName
 import com.cycling.core.ui.theme.SonLayout
-import com.cycling.core.ui.theme.SonSizes
 import com.cycling.core.ui.theme.SonSpacing
 import com.cycling.domain.model.FolderItem
 import com.cycling.domain.model.FolderRoot
 import com.cycling.domain.model.Song
 import com.cycling.presentation.R
+import com.cycling.presentation.components.SonEmptyState
+import com.cycling.presentation.components.SonLoadingState
 import com.cycling.presentation.components.SongListItem
 import com.cycling.presentation.components.formatDuration
 
@@ -64,6 +62,7 @@ fun FolderScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
     // SAF 选目录：权限由用户逐棵授予并持久化，浏览全程不需要任何存储权限
     val folderPickerLauncher = rememberLauncherForActivityResult(
@@ -91,14 +90,21 @@ fun FolderScreen(
     }
 
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
-            TopAppBar(
+            MediumFlexibleTopAppBar(
                 title = {
                     Text(
                         text = uiState.title,
-                        style = MaterialTheme.typography.titleLarge,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
+                    )
+                },
+                subtitle = {
+                    Text(
+                        text = stringResource(R.string.folder_song_count, uiState.songs.size),
+                        maxLines = 1
                     )
                 },
                 navigationIcon = {
@@ -132,8 +138,11 @@ fun FolderScreen(
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
-                )
+                    scrolledContainerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    subtitleContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                ),
+                scrollBehavior = scrollBehavior
             )
         }
     ) { paddingValues ->
@@ -149,35 +158,35 @@ fun FolderScreen(
             Box(
                 modifier = Modifier.fillMaxSize()
             ) {
-                if (uiState.isLoading) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        LoadingIndicator()
+                when {
+                    uiState.isLoading -> SonLoadingState()
+                    uiState.atSafRootList -> {
+                        if (uiState.roots.isEmpty()) {
+                            SonEmptyState(
+                                icon = SymbolIconName.Folder,
+                                title = stringResource(R.string.folder_roots_empty_title),
+                                subtitle = stringResource(R.string.folder_roots_empty_subtitle)
+                            )
+                        } else {
+                            RootList(
+                                roots = uiState.roots,
+                                bottomPadding = bottomPadding,
+                                onRootClick = { root ->
+                                    viewModel.handleIntent(FolderIntent.NavigateToFolder(root.uri, ""))
+                                }
+                            )
+                        }
                     }
-                } else if (uiState.atSafRootList) {
-                    if (uiState.roots.isEmpty()) {
-                        EmptyFolderState(
-                            title = stringResource(R.string.folder_roots_empty_title),
-                            subtitle = stringResource(R.string.folder_roots_empty_subtitle)
-                        )
-                    } else {
-                        RootList(
-                            roots = uiState.roots,
-                            bottomPadding = bottomPadding,
-                            onRootClick = { root ->
-                                viewModel.handleIntent(FolderIntent.NavigateToFolder(root.uri, ""))
-                            }
-                        )
-                    }
-                } else if (uiState.folders.isEmpty() && uiState.songs.isEmpty()) {
-                    EmptyFolderState(
+                    uiState.folders.isEmpty() && uiState.songs.isEmpty() -> SonEmptyState(
+                        icon = SymbolIconName.Folder,
                         title = stringResource(R.string.folder_empty_title),
                         subtitle = stringResource(R.string.folder_empty_subtitle)
                     )
-                } else {
-                    FolderContentList(uiState = uiState, viewModel = viewModel, bottomPadding = bottomPadding)
+                    else -> FolderContentList(
+                        uiState = uiState,
+                        viewModel = viewModel,
+                        bottomPadding = bottomPadding
+                    )
                 }
             }
         }
@@ -279,43 +288,14 @@ private fun FolderContentList(
         items(uiState.songs, key = { it.id }) { song ->
             SongListItem(
                 song = song,
-                showDivider = true,
+                // quiet surface：文件夹列表同样不画分割线。
+                showDivider = false,
                 subtitle = "${song.artist} · ${formatDuration(song.duration)}",
                 showDuration = false,
                 showMoreButton = false,
                 onClick = {
                     viewModel.handleIntent(FolderIntent.SongClick(song))
                 }
-            )
-        }
-    }
-}
-
-@Composable
-private fun EmptyFolderState(title: String, subtitle: String) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            M3SymbolIcon(
-                name = SymbolIconName.Folder,
-                filled = false,
-                contentDescription = null,
-                modifier = Modifier.size(SonSizes.iconExtraLarge),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(SonSpacing.medium))
-            Text(
-                text = title,
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(modifier = Modifier.height(SonSpacing.small))
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }

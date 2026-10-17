@@ -16,17 +16,22 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -37,6 +42,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LargeFloatingActionButton
@@ -71,6 +77,7 @@ import androidx.compose.ui.zIndex
 import com.cycling.core.ui.components.M3SymbolIcon
 import com.cycling.core.ui.components.SymbolIconName
 import com.cycling.core.ui.components.M3Artwork
+import com.cycling.core.ui.theme.SonColorFieldBackground
 import com.cycling.core.ui.theme.SonLayout
 import com.cycling.core.ui.theme.SonSizes
 import com.cycling.core.ui.theme.SonSpacing
@@ -86,6 +93,9 @@ import kotlin.math.roundToInt
 
 /** 队列列表的最大高度：再高就把底部抽屉撑满，失去"抽屉"的层次。 */
 private val QueueListMaxHeight = 400.dp
+
+/** 顶栏高度：一个 48dp 触摸目标 + 上下各 4dp 内边距。色面要按它算 hero 的下沿。 */
+private val PlayerTopBarHeight = SonSizes.minTouchTarget + SonSpacing.extraSmall * 2
 
 @Composable
 fun PlayerScreen(
@@ -106,12 +116,22 @@ fun PlayerScreen(
         0f
     }
 
-    // 页面底色即 surface（已由封面种子色着色），不再叠静态灰带。
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
+            // 页面底色即 surface（已由封面种子色着色），不再叠静态灰带。
             .background(MaterialTheme.colorScheme.surface)
     ) {
+        // 封面是方形、左右各留一个屏幕边距。hero 区 = 状态栏 + 顶栏 + 上留白 + 封面，
+        // 色面的纵向层刚好在封面下沿归零，标题、进度、运输控件全部落在 surface 上。
+        val coverSide = (maxWidth - SonLayout.screenMargin * 2).coerceAtLeast(0.dp)
+        val statusBarInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+        val heroBottom = statusBarInset + PlayerTopBarHeight + SonSpacing.medium + coverSide
+        SonColorFieldBackground(
+            heroBottom = heroBottom,
+            modifier = Modifier.align(Alignment.TopCenter)
+        )
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -123,8 +143,7 @@ fun PlayerScreen(
             PlayerTopBar(
                 onNavigateBack = onNavigateBack,
                 onNavigateToLyrics = onNavigateToLyrics,
-                onToggleQueue = { showQueue = true },
-                onOpenPlaybackSettings = { onIntent(PlayerIntent.TogglePlaybackSettings) }
+                onToggleQueue = { showQueue = true }
             )
 
             M3Artwork(
@@ -141,7 +160,8 @@ fun PlayerScreen(
             PlayerInfo(
                 currentSong = currentSong,
                 isFavorite = uiState.isFavorite,
-                onToggleFavorite = { onIntent(PlayerIntent.ToggleFavorite) }
+                onToggleFavorite = { onIntent(PlayerIntent.ToggleFavorite) },
+                onOpenPlaybackSettings = { onIntent(PlayerIntent.TogglePlaybackSettings) }
             )
 
             PlayerProgress(
@@ -173,9 +193,9 @@ fun PlayerScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(SonSpacing.medium))
+            Spacer(modifier = Modifier.height(SonSpacing.large))
 
-            PlayerFullControls(
+            PlayerTransportToolbar(
                 isPlaying = uiState.isPlaying,
                 shuffleMode = uiState.shuffleMode,
                 repeatMode = uiState.repeatMode,
@@ -185,6 +205,8 @@ fun PlayerScreen(
                 onToggleShuffle = { onIntent(PlayerIntent.ToggleShuffleMode) },
                 onToggleRepeat = { onIntent(PlayerIntent.ToggleRepeatMode) }
             )
+
+            Spacer(modifier = Modifier.height(SonSpacing.large))
         }
     }
 
@@ -396,12 +418,17 @@ private fun formatTimerRemaining(remainingMs: Long): String {
 
 // ── 顶部栏 ────────────────────────────────────────────────────────────────
 
+/**
+ * 顶栏只放"去哪"：关闭 / 歌词 / 队列。
+ *
+ * 收藏与播放设置属于"这首歌本身"，收在标题行右侧的动作簇里 —— 右上角不再是从左到右
+ * 四个图标排成一排，视线在标题、动作、返回之间只需两跳。
+ */
 @Composable
 private fun PlayerTopBar(
     onNavigateBack: () -> Unit,
     onNavigateToLyrics: () -> Unit,
-    onToggleQueue: () -> Unit,
-    onOpenPlaybackSettings: () -> Unit
+    onToggleQueue: () -> Unit
 ) {
     val navIconColors = IconButtonDefaults.iconButtonColors(
         contentColor = MaterialTheme.colorScheme.onSurface
@@ -415,7 +442,8 @@ private fun PlayerTopBar(
         horizontalArrangement = Arrangement.SpaceBetween,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = SonSpacing.small, vertical = SonSpacing.extraSmall)
+            .height(PlayerTopBarHeight)
+            .padding(horizontal = SonSpacing.small)
     ) {
         IconButton(onClick = onNavigateBack, colors = navIconColors) {
             M3SymbolIcon(
@@ -430,13 +458,6 @@ private fun PlayerTopBar(
             color = MaterialTheme.colorScheme.onSurface
         )
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onOpenPlaybackSettings, colors = actionIconColors) {
-                M3SymbolIcon(
-                    name = SymbolIconName.Tune,
-                    filled = true,
-                    contentDescription = stringResource(R.string.player_settings_desc)
-                )
-            }
             IconButton(onClick = onNavigateToLyrics, colors = actionIconColors) {
                 M3SymbolIcon(
                     name = SymbolIconName.Lyrics,
@@ -446,7 +467,7 @@ private fun PlayerTopBar(
             }
             IconButton(onClick = onToggleQueue, colors = actionIconColors) {
                 M3SymbolIcon(
-                    name = SymbolIconName.MoreVert,
+                    name = SymbolIconName.QueueMusic,
                     filled = true,
                     contentDescription = stringResource(R.string.player_queue_desc)
                 )
@@ -461,7 +482,8 @@ private fun PlayerTopBar(
 private fun PlayerInfo(
     currentSong: Song?,
     isFavorite: Boolean,
-    onToggleFavorite: () -> Unit
+    onToggleFavorite: () -> Unit,
+    onOpenPlaybackSettings: () -> Unit
 ) {
     Row(
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -473,39 +495,55 @@ private fun PlayerInfo(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = currentSong?.title ?: "",
-                style = MaterialTheme.typography.headlineSmallEmphasized,
+                // 播放页的标题时刻：headline 级强调变体，而不是把 body 放大。
+                style = MaterialTheme.typography.headlineMediumEmphasized,
                 color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = currentSong?.artist ?: "",
-                style = MaterialTheme.typography.titleMedium,
+                // 歌手名降到 label 级，靠字距与标题拉开层级。
+                style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
         }
 
-        IconButton(
-            onClick = onToggleFavorite,
-            colors = IconButtonDefaults.iconButtonColors(
-                contentColor = if (isFavorite) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                }
-            )
-        ) {
-            M3SymbolIcon(
-                name = SymbolIconName.Favorite,
-                filled = isFavorite,
-                contentDescription = if (isFavorite) {
-                    stringResource(R.string.player_unfavorite_desc)
-                } else {
-                    stringResource(R.string.player_favorite_desc)
-                }
-            )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(
+                onClick = onToggleFavorite,
+                colors = IconButtonDefaults.iconButtonColors(
+                    contentColor = if (isFavorite) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+            ) {
+                M3SymbolIcon(
+                    name = SymbolIconName.Favorite,
+                    filled = isFavorite,
+                    contentDescription = if (isFavorite) {
+                        stringResource(R.string.player_unfavorite_desc)
+                    } else {
+                        stringResource(R.string.player_favorite_desc)
+                    }
+                )
+            }
+            IconButton(
+                onClick = onOpenPlaybackSettings,
+                colors = IconButtonDefaults.iconButtonColors(
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            ) {
+                M3SymbolIcon(
+                    name = SymbolIconName.Tune,
+                    filled = true,
+                    contentDescription = stringResource(R.string.player_settings_desc)
+                )
+            }
         }
     }
 }
@@ -560,10 +598,20 @@ private fun PlayerProgress(
     }
 }
 
-// ── 播放控制 ──────────────────────────────────────────────────────────────
+// ── 运输控件 ──────────────────────────────────────────────────────────────
 
+/**
+ * 浮动运输 toolbar：官方 `HorizontalFloatingToolbar` 的胶囊容器里放
+ * shuffle → prev → play → next → repeat。
+ *
+ * 播放键仍是 96dp 的 `LargeFloatingActionButton`，按住时圆角 28dp → 圆
+ * （[rememberPressShapeMorph]），松手回弹；它被放在内容中间而不是 FAB 槽位，因为
+ * 组件的 FAB 槽位只能贴在两端，而运输控件的顺序是固定的。
+ *
+ * 运输区落在屏幕下半部，单手拇指可达；底栏与迷你播放器都不在这一屏出现。
+ */
 @Composable
-private fun PlayerFullControls(
+private fun PlayerTransportToolbar(
     isPlaying: Boolean,
     shuffleMode: Boolean,
     repeatMode: RepeatMode,
@@ -577,12 +625,12 @@ private fun PlayerFullControls(
     val playInteractionSource = remember { MutableInteractionSource() }
     val playShape = rememberPressShapeMorph(playInteractionSource)
 
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
+    HorizontalFloatingToolbar(
+        expanded = true,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = SonLayout.screenMargin)
+            .padding(horizontal = SonSpacing.small),
+        contentPadding = PaddingValues(SonSpacing.extraSmall)
     ) {
         IconButton(
             onClick = onToggleShuffle,

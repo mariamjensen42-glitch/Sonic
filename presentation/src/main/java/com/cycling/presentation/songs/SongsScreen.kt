@@ -7,13 +7,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -30,11 +28,12 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MediumFlexibleTopAppBar
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -43,9 +42,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -59,6 +58,8 @@ import com.cycling.domain.model.SortOrder
 import com.cycling.presentation.R
 import com.cycling.presentation.components.MenuItem
 import com.cycling.presentation.components.PlaylistPickerDialog
+import com.cycling.presentation.components.SonEmptyState
+import com.cycling.presentation.components.SonLoadingState
 import com.cycling.presentation.components.SongListItem
 import com.cycling.presentation.components.formatDuration
 import com.cycling.presentation.permissions.MediaLibraryPermission
@@ -81,6 +82,7 @@ fun SongsScreen(
     var showSortMenu by remember { mutableStateOf(false) }
     var expandedSongId by remember { mutableStateOf<Long?>(null) }
     val scrollState = rememberLazyListState()
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
     // 空列表上的按钮要区分"没权限"和"没歌"：没权限时先去要权限，要到手就直接扫，
     // 否则用户按下去只会得到一个依然空着的列表。
@@ -119,8 +121,10 @@ fun SongsScreen(
     }
 
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
-            TopAppBar(
+            MediumFlexibleTopAppBar(
                 title = {
                     Text(
                         text = if (uiState.selectionMode) {
@@ -128,9 +132,13 @@ fun SongsScreen(
                         } else {
                             stringResource(R.string.songs_title)
                         },
-                        style = MaterialTheme.typography.titleLarge,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        maxLines = 1
+                    )
+                },
+                subtitle = {
+                    Text(
+                        text = stringResource(R.string.songs_count, sortedSongs.size),
+                        maxLines = 1
                     )
                 },
                 navigationIcon = {
@@ -216,14 +224,17 @@ fun SongsScreen(
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
-                )
+                    scrolledContainerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    subtitleContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                ),
+                scrollBehavior = scrollBehavior
             )
         }
     ) { paddingValues ->
         Box(modifier = Modifier.padding(paddingValues)) {
             if (uiState.isLoading) {
-                LoadingState()
+                SonLoadingState()
             } else if (sortedSongs.isEmpty()) {
                 EmptySongsState(
                     isScanning = uiState.isScanning,
@@ -241,22 +252,12 @@ fun SongsScreen(
                                 if (uiState.selectionMode) SelectionBarHeight else 0.dp
                         )
                     ) {
-                        item {
-                            Text(
-                                text = stringResource(R.string.songs_count, sortedSongs.size),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(
-                                    horizontal = SonSpacing.medium,
-                                    vertical = SonSpacing.small
-                                )
-                            )
-                        }
-                        itemsIndexed(sortedSongs, key = { _, song -> song.id }) { index, song ->
+                        itemsIndexed(sortedSongs, key = { _, song -> song.id }) { _, song ->
                             SongListItem(
                                 song = song,
                                 isCurrentSong = song.id == uiState.currentSongId,
-                                showDivider = index < sortedSongs.size - 1,
+                                // quiet surface：列表不再画分割线，行与行之间交给留白。
+                                showDivider = false,
                                 subtitle = "${song.artist} · ${formatDuration(song.duration)}",
                                 showDuration = false,
                                 showMoreButton = !uiState.selectionMode,
@@ -409,57 +410,41 @@ private fun SongSelectionBar(
 }
 
 @Composable
-private fun LoadingState() {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        LoadingIndicator()
-    }
-}
-
-@Composable
 private fun EmptySongsState(
     isScanning: Boolean,
     hasMediaPermission: Boolean,
     onScan: () -> Unit,
     onRequestPermission: () -> Unit
 ) {
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        M3SymbolIcon(
-            name = SymbolIconName.MusicNote,
-            filled = false,
-            contentDescription = null,
-            modifier = Modifier.size(SonSizes.iconExtraLarge),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(modifier = Modifier.height(SonSpacing.medium))
-        Text(
-            text = stringResource(R.string.songs_empty_title),
-            style = MaterialTheme.typography.headlineSmall,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Spacer(modifier = Modifier.height(SonSpacing.small))
-        Text(
-            text = stringResource(R.string.songs_empty_subtitle),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(modifier = Modifier.height(SonSpacing.large))
-        when {
-            isScanning -> LoadingIndicator()
-            hasMediaPermission -> Button(onClick = onScan) {
-                Text(text = stringResource(R.string.scan_start))
+    // 动作位只有一个，但按权限/扫描状态换形态：显式标注类型，避免 when 分支的
+    // lambda 被推断成普通函数类型。
+    val action: (@Composable () -> Unit)? = when {
+        // 扫描中：动作位换成加载指示器，避免用户重复点同一个按钮。
+        isScanning -> {
+            { LoadingIndicator() }
+        }
+        hasMediaPermission -> {
+            {
+                Button(onClick = onScan) {
+                    Text(text = stringResource(R.string.scan_start))
+                }
             }
-            else -> Button(onClick = onRequestPermission) {
-                Text(text = stringResource(R.string.grant_permission))
+        }
+        else -> {
+            {
+                Button(onClick = onRequestPermission) {
+                    Text(text = stringResource(R.string.grant_permission))
+                }
             }
         }
     }
+
+    SonEmptyState(
+        icon = SymbolIconName.MusicNote,
+        title = stringResource(R.string.songs_empty_title),
+        subtitle = stringResource(R.string.songs_empty_subtitle),
+        action = action
+    )
 }
 
 private fun sortSongs(songs: List<Song>, sortOrder: SortOrder, ascending: Boolean): List<Song> {

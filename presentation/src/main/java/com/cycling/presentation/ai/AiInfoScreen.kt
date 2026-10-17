@@ -13,18 +13,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MediumFlexibleTopAppBar
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -37,10 +34,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cycling.core.ui.components.M3SymbolIcon
 import com.cycling.core.ui.components.SymbolIconName
+import com.cycling.core.ui.theme.SonLayout
 import com.cycling.core.ui.theme.SonSizes
 import com.cycling.core.ui.theme.SonSpacing
 import com.cycling.domain.model.AiInfo
 import com.cycling.presentation.R
+import com.cycling.presentation.components.SonEmptyState
 import dev.jeziellago.compose.markdowntext.MarkdownText
 
 @Composable
@@ -63,12 +62,20 @@ fun AiInfoScreen(
     }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
-            TopAppBar(
+            // 阅读页的标题时刻：AI 解读是标题，被解读的对象是副标题。
+            MediumFlexibleTopAppBar(
                 title = {
                     Text(
                         text = stringResource(R.string.ai_title),
-                        style = MaterialTheme.typography.titleLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                },
+                subtitle = {
+                    Text(
+                        text = if (artist.isBlank()) name else "$name · $artist",
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -88,12 +95,16 @@ fun AiInfoScreen(
                         filled = true,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(SonSizes.iconSmall)
+                        modifier = Modifier
+                            .padding(end = SonSpacing.medium)
+                            .size(SonSizes.iconSmall)
                     )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
+                    scrolledContainerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    subtitleContentColor = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             )
         }
@@ -102,7 +113,7 @@ fun AiInfoScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(horizontal = SonSpacing.medium)
+                .padding(horizontal = SonLayout.screenMargin)
         ) {
             when {
                 !uiState.hasApiKey -> {
@@ -134,46 +145,19 @@ fun AiInfoScreen(
 private fun ApiKeyRequiredContent(
     onNavigateToApiKeyConfig: () -> Unit
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(SonSpacing.extraLarge),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            M3SymbolIcon(
-                name = SymbolIconName.AutoAwesome,
-                filled = true,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(SonSizes.iconExtraLarge)
-            )
-            Spacer(modifier = Modifier.height(SonSpacing.medium))
-            Text(
-                text = stringResource(R.string.ai_need_api_key_title),
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(modifier = Modifier.height(SonSpacing.small))
-            Text(
-                text = stringResource(R.string.ai_need_api_key_desc),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(SonSpacing.large))
-            Button(onClick = onNavigateToApiKeyConfig) {
-                Text(text = stringResource(R.string.ai_go_to_settings))
-            }
-        }
-    }
+    SonEmptyState(
+        icon = SymbolIconName.AutoAwesome,
+        title = stringResource(R.string.ai_need_api_key_title),
+        subtitle = stringResource(R.string.ai_need_api_key_desc),
+        actionLabel = stringResource(R.string.ai_go_to_settings),
+        onAction = onNavigateToApiKeyConfig
+    )
 }
 
 @Composable
 private fun LoadingContent() {
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(SonSpacing.extraLarge),
+        modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -193,25 +177,11 @@ private fun ErrorContent(
     error: String,
     onRetry: () -> Unit
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(SonSpacing.extraLarge),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = stringResource(R.string.ai_error),
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.error
-            )
-            Spacer(modifier = Modifier.height(SonSpacing.small))
-            Text(
-                text = error,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(SonSpacing.large))
+    SonEmptyState(
+        icon = SymbolIconName.Error,
+        title = stringResource(R.string.ai_error),
+        subtitle = error,
+        action = {
             OutlinedButton(onClick = onRetry) {
                 M3SymbolIcon(
                     name = SymbolIconName.Refresh,
@@ -223,9 +193,13 @@ private fun ErrorContent(
                 Text(text = stringResource(R.string.ai_retry))
             }
         }
-    }
+    )
 }
 
+/**
+ * 阅读面：不再用两层卡片把正文包起来。标题走 headline 强调变体，正文直接落在 surface 上，
+ * 靠字阶与留白分层；这是本屏的 quiet surface，色面由顶栏的封面主题提供。
+ */
 @Composable
 private fun InfoContent(
     info: AiInfo
@@ -235,42 +209,25 @@ private fun InfoContent(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = SonSpacing.mediumSmall)
             .verticalScroll(scrollState)
     ) {
-        // 标题卡：抬升以与正文区分层级
-        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(SonSpacing.medium)) {
-                M3SymbolIcon(
-                    name = SymbolIconName.AutoAwesome,
-                    filled = true,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(SonSizes.iconSmall)
-                )
-                Spacer(modifier = Modifier.height(SonSpacing.small))
-                Text(
-                    text = info.title,
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-        }
+        Spacer(modifier = Modifier.height(SonSpacing.large))
+
+        Text(
+            text = info.title,
+            style = MaterialTheme.typography.headlineMediumEmphasized,
+            color = MaterialTheme.colorScheme.onSurface
+        )
 
         Spacer(modifier = Modifier.height(SonSpacing.medium))
 
-        // 正文用填充卡承载；Markdown 自绘的引用/代码块样式由库决定，此处只统一文字色
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Box(modifier = Modifier.padding(SonSpacing.medium)) {
-                MarkdownText(
-                    markdown = info.content,
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                )
-            }
-        }
+        MarkdownText(
+            markdown = info.content,
+            style = MaterialTheme.typography.bodyLarge.copy(
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        )
 
-        Spacer(modifier = Modifier.height(SonSpacing.extraLarge))
+        Spacer(modifier = Modifier.height(SonSpacing.extraExtraLarge))
     }
 }

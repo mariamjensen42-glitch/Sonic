@@ -41,6 +41,7 @@
 - CollectionDetail 的 hero 是通栏方形：光晕主要被封面遮住，可见部分在 top bar 与封面下沿；下沿的 fade 允许最多 12dp 进入动作区，**不进入首行歌曲**。样张里的 210px → 222px 就是这条 12dp。**#18 采用字段表的纵向峰值 0.46（亮）/ 0.30（暗）作为这 12dp 的起点**，与 1.3 的字段表一致；prototype 的 0.58/0.42 不采用。色面画在 hero list item 内，surface 只填 hero 区，不遮/不染下面的动作区与歌曲。
 - top bar / 状态栏位于光晕内；保持 top bar 透明，图标用 onSurface / onSurfaceVariant，不额外加 scrim。暗色顶栏会被染成深色封面调，亮色顶栏会被染成浅容器调；两套都要在真机上复看状态栏图标。
 - **#18 记录的上栏例外**：CollectionDetail 的 top bar 直接压在封面上，折叠前图标/标题用 onArtwork，surface band 变实后过渡到 onSurface / onSurfaceVariant。这是对上面 onSurface/onSurfaceVariant 规则的唯一例外，原因是封面颜色任意、onSurface 在深色封面上不可读；页面仍只从 MaterialTheme.colorScheme / LocalSonExtendedColors 取色。
+- **#10 修订（2026-10-18）**：只有顶部那点渐变 scrim 不够 —— 白图标落在亮封面上（浅色封面、大面积高光）实测看不清。压在图上的每个顶栏动作因此垫一层 **artworkScrim 圆形托底，alpha 0.60**（纯白封面与纯黑封面两端都留得住 4.5:1）；托底随折叠进度**先于** surface band 退场（按 2 倍速率在 50% 归零），滚到实底顶栏后只剩普通 IconButton。我的音乐页收藏 hero 的返回按钮同一规则。
 - 禁止 blur / RenderEffect / 大范围 graphicsLayer 模糊；光晕是渐变，不是毛玻璃。
 - 禁止硬边：C 的 32dp 圆角整块是被否方案，不在 B 里复活。
 

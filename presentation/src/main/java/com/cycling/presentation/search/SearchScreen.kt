@@ -5,10 +5,13 @@ package com.cycling.presentation.search
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -341,15 +344,34 @@ fun SearchScreen(
 
                 if (nothingFound) {
                     item {
-                        Box(
+                        // 空态与列表族的模板同构（图标 + 强调标题 + 一行解释），
+                        // 但放在 LazyColumn 里，所以不套整屏的那个组合。
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = SonSpacing.extraExtraLarge),
-                            contentAlignment = Alignment.Center
+                                .padding(
+                                    horizontal = SonLayout.screenMargin,
+                                    vertical = SonSpacing.extraExtraLarge
+                                ),
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
+                            M3SymbolIcon(
+                                name = SymbolIconName.Search,
+                                filled = false,
+                                contentDescription = null,
+                                modifier = Modifier.size(SonSizes.iconExtraLarge),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(SonSpacing.medium))
                             Text(
                                 text = stringResource(R.string.search_no_results),
-                                style = MaterialTheme.typography.bodyLarge,
+                                style = MaterialTheme.typography.titleMediumEmphasized,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.height(SonSpacing.extraSmall))
+                            Text(
+                                text = stringResource(R.string.search_placeholder),
+                                style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }

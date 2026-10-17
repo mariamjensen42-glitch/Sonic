@@ -237,16 +237,23 @@ fun CollectionDetailScreen(
                 topBar = {
                     // 顶栏保持透明；底色由内容层顶部的 surface band 提供。
                     // 折叠中的 cover 在列表内滚动，不改变顶栏的形状与对齐。
+                    val extended = LocalSonExtendedColors.current
                     val navigationIconColor = lerp(
-                        LocalSonExtendedColors.current.onArtwork,
+                        extended.onArtwork,
                         MaterialTheme.colorScheme.onSurface,
                         collapse.value
                     )
                     val actionIconColor = lerp(
-                        LocalSonExtendedColors.current.onArtwork,
+                        extended.onArtwork,
                         MaterialTheme.colorScheme.onSurfaceVariant,
                         collapse.value
                     )
+                    // 图标压在任何封面上都要能看清：每个动作下面垫一层圆形 scrim。
+                    // 0.60 是对着「纯白封面」与「纯黑封面」两端都能留住 4.5:1 的浓度；
+                    // 它必须先于 surface band 退干净（band 在 62.5% 折叠时不透明，
+                    // 这里按 2 倍速率在 50% 归零），否则会留下一个落在实底顶栏上的深色圆点。
+                    val iconScrimAlpha = 0.60f * (1f - collapse.value * 2f).coerceIn(0f, 1f)
+                    val iconContainerColor = extended.artworkScrim.copy(alpha = iconScrimAlpha)
                     CenterAlignedTopAppBar(
                         title = {
                             val headerAlpha = collapse.headerAlpha()
@@ -296,7 +303,8 @@ fun CollectionDetailScreen(
                                     )
                                     else -> backContentDescription
                                 },
-                                contentColor = navigationIconColor
+                                contentColor = navigationIconColor,
+                                containerColor = iconContainerColor
                             )
                         },
                         actions = {
@@ -322,7 +330,8 @@ fun CollectionDetailScreen(
                                                 R.string.songs_select_all_desc
                                             }
                                         ),
-                                        contentColor = actionIconColor
+                                        contentColor = actionIconColor,
+                                        containerColor = iconContainerColor
                                     )
                                 }
                                 reorderMode -> {
@@ -332,7 +341,8 @@ fun CollectionDetailScreen(
                                         contentDescription = stringResource(
                                             R.string.collection_detail_reorder_done_desc
                                         ),
-                                        contentColor = actionIconColor
+                                        contentColor = actionIconColor,
+                                        containerColor = iconContainerColor
                                     )
                                 }
                                 songs.isNotEmpty() -> {
@@ -343,7 +353,8 @@ fun CollectionDetailScreen(
                                             contentDescription = stringResource(
                                                 R.string.playlist_detail_export_m3u
                                             ),
-                                            contentColor = actionIconColor
+                                            contentColor = actionIconColor,
+                                            containerColor = iconContainerColor
                                         )
                                     }
                                     DetailTopBarAction(
@@ -352,7 +363,8 @@ fun CollectionDetailScreen(
                                         },
                                         icon = SymbolIconName.Checklist,
                                         contentDescription = stringResource(R.string.songs_select_desc),
-                                        contentColor = actionIconColor
+                                        contentColor = actionIconColor,
+                                        containerColor = iconContainerColor
                                     )
                                     if (canReorder) {
                                         DetailTopBarAction(
@@ -361,7 +373,8 @@ fun CollectionDetailScreen(
                                             contentDescription = stringResource(
                                                 R.string.collection_detail_reorder_desc
                                             ),
-                                            contentColor = actionIconColor
+                                            contentColor = actionIconColor,
+                                            containerColor = iconContainerColor
                                         )
                                     }
                                 }
@@ -620,20 +633,26 @@ fun CollectCollectionDetailEffects(
 }
 
 /**
- * 顶栏动作按钮：顶栏保持透明，图标颜色由调用方按折叠进度传入。
- * 压在封面上时是 onArtwork，滚到 surface 后是 onSurface / onSurfaceVariant；
- * 不再加第二层 scrim 浮标（hero 顶部 scrim 已经负责可读性）。
+ * 顶栏动作按钮：顶栏容器保持透明，图标与托底颜色由调用方按折叠进度传入。
+ *
+ * 压在封面上时图标是 `onArtwork`（白），**必须**配一层圆形 scrim 托底 —— 封面亮度不可控，
+ * 白图标落在亮封面上就看不见了（顶部那点渐变 scrim 不够）。滚到 surface 之后托底 alpha
+ * 归零、图标过渡到 onSurface / onSurfaceVariant，剩下的只是一个普通 IconButton。
  */
 @Composable
 fun DetailTopBarAction(
     onClick: () -> Unit,
     icon: SymbolIconName,
     contentDescription: String?,
-    contentColor: Color
+    contentColor: Color,
+    containerColor: Color = Color.Transparent
 ) {
     IconButton(
         onClick = onClick,
-        colors = IconButtonDefaults.iconButtonColors(contentColor = contentColor)
+        colors = IconButtonDefaults.iconButtonColors(
+            containerColor = containerColor,
+            contentColor = contentColor
+        )
     ) {
         M3SymbolIcon(name = icon, filled = true, contentDescription = contentDescription)
     }

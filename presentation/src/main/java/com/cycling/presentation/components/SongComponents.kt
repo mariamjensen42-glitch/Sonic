@@ -36,13 +36,16 @@ import com.cycling.presentation.R
  *
  * 结构完全交给 [ListItem]：内边距、最小高度、按压形变、文字层级都由组件规范决定，
  * 这里只负责把领域模型的字段映射到插槽上。
+ *
+ * 默认**不画分割线**（quiet surface：行与行之间交给留白与封面）；需要表格感的地方
+ * 显式传 `showDivider = true`。
  */
 @Composable
 fun SongListItem(
     song: Song,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
-    showDivider: Boolean = true,
+    showDivider: Boolean = false,
     showDuration: Boolean = true,
     showMoreButton: Boolean = false,
     isCurrentSong: Boolean = false,

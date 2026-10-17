@@ -6,14 +6,30 @@ Material 3”，而是**有没有 expressive moment，以及 quiet surface 是�
 
 ## 现状结论
 
-主题层已经 expressive：`MaterialExpressiveTheme`、`MotionScheme.expressive()`、Emphasized 字号、
-封面取色都在。缺的是**页面级的使用**：字体族仍是 `FontFamily.Default`，列表普遍带分割线，动作区
-是标准按钮，除 `LoadingIndicator` / `WavyProgressIndicator` 外没有新的 Expressive 组件。
+主题层与共享底座已经 expressive：`MaterialExpressiveTheme`、`MotionScheme.expressive()`、Emphasized 字号、
+Roboto Flex + Material Symbols、封面取色、`SonColorField` / `SonShapeMorph`、导航层弹簧转场都在。
+
+2026-10-18 起按票直接落了代码（跳过原型/方案文档这一轮）：首页与播放页两张试点、音乐库、列表族
+（歌曲/专辑/歌手/文件夹/搜索）、内容族（歌曲详情/AI 解读）都换成了同一套页面语法；设置页按 #14 的
+取舍**保持安静**，只跟随字阶与间距，不做色面/形变。
 
 > 字体/图标选型已定：**C（Roboto Flex 全局 Latin + Material Symbols Rounded，中文回退系统）**。
 > 决策与落地清单见 `docs/design/type-and-icons.md`，ADR 见 `docs/adr/0002-type-and-icons.md`。
 > 已由 #15 落地：字体换成 Roboto Flex 子集，图标换成 Material Symbols Rounded + `M3SymbolIcon`，
 > `material-icons-extended` 已移除；实测与偏差见 `docs/design/type-and-icons.md` 的「落地结果」。
+
+## 页面语法（代码里的唯一事实）
+
+各屏共用一套可复用的组合，新增页面照抄这三件即可，不要再手写字号/间距：
+
+| 语法 | 实现 | 用在哪 |
+| --- | --- | --- |
+| 标题时刻 | `LargeFlexibleTopAppBar`（tab root / 页面首屏）或 `MediumFlexibleTopAppBar`（列表族、内容族） | 首页、音乐库、歌曲、专辑、歌手、文件夹、AI 解读 |
+| 分区标题 | `SonSectionHeader`（`titleLargeEmphasized` + 可选「查看全部」） | 首页、音乐库 |
+| 空态 / 载入态 | `SonEmptyState` / `SonLoadingState` | 首页、歌曲、专辑、歌手、文件夹、AI 解读 |
+
+三条硬规则：色面只有 hero 光晕（`primaryContainer`）与受限动作簇（`secondaryContainer`）；
+形变只有播放键按压与 hero 折叠；正文列表一律无分割线。
 
 ## 六条验收标记
 
@@ -30,13 +46,25 @@ Material 3”，而是**有没有 expressive moment，以及 quiet surface 是�
 
 | 屏幕 | 现在的构图 | 主要缺口 | 优先级 |
 | --- | --- | --- | --- |
-| 歌单 / 专辑 / 歌手详情（`CollectionDetailScreen`） | 沉浸式方形 hero + 三个动作按钮 + 介绍 + 72dp 列表 | hero 标题只有 28sp；列表有分割线；动作区是三个独立控件；正文没有色面 | P0（试点 1） |
-| 首页（`HomeScreen`） | 问候语 + 搜索/设置 + 三组等权卡片网格 | 没有 hero；标题层级平；无 FAB / 色面；横向卡片只是普通 M3 | P0（试点 2） |
-| 播放页（`PlayerScreen`） | 封面 + 标题/收藏 + 波浪进度 + 大圆角播放键 | 运输控件仍是标准图标；没有浮动 toolbar；标题偏小；封面外没有色面 | P0（试点 3） |
-| 音乐库（`MyMusicScreen`） | 两行入口 + 歌单列表 | 入口是标准 ListItem；没有 hero / 色面；与首页语言不一致 | P1 |
-| 全部歌曲 / 搜索 / 文件夹 / 专辑 / 歌手 | 标准列表 + 顶栏 + 多选 | 分割线与 72dp 行是默认 M3；没有 expressive moment | P1 |
-| 设置 | 分组列表 + Switch | 功能优先，可保持安静；只在标题/分组间距上跟随 | P2 |
-| 歌曲详情 / AI 解读 / 歌词 | 表单或沉浸式文本 | 歌词已经是全 App 最接近 Expressive 的一屏；歌曲详情偏表单 | P2 |
+| 歌单 / 专辑 / 歌手详情（`CollectionDetailScreen`） | 沉浸式方形 hero + 色面光晕 + tonal 动作簇 + 介绍 + 72dp 无分割线列表 | 整屏转场已交给 `NavDisplay` 的空间弹簧；真机明暗截图待补 | P0（试点 1，代码已落） |
+| 首页（`HomeScreen`） | `LargeFlexibleTopAppBar` 问候语 + 非对称最近播放 hero（大卡 + 两行）+ `ButtonGroup` 快速入口 + 安静分区横滑 | 真机明暗截图待补 | P0（试点 2，代码已落） |
+| 播放页（`PlayerScreen`） | 封面背后的 `primaryContainer` 光晕 + `HorizontalFloatingToolbar` 运输簇 + 96dp 播放键按压形变 + `headlineMediumEmphasized` 标题 | 真机明暗截图待补 | P0（试点 3，代码已落） |
+| 音乐库（`MyMusicScreen`） | `LargeFlexibleTopAppBar`（歌单计数副标题）+ 两个入口行 + 歌单分区 + 无分割线 | 只有一处色面（入口图标托底），按 #14 的“工具型页面”取舍 | P1（代码已落） |
+| 全部歌曲 / 搜索 / 文件夹 / 专辑 / 歌手 | `MediumFlexibleTopAppBar` + 计数副标题 + 无分割线列表 + 统一空态 | 搜索仍是吸顶输入框（保留），没有自己的 moment | P1（代码已落） |
+| 设置 | 分组卡片 + `ListItem` + Switch/滑块 | 按 #14 保持安静：不加大标题、不改扫读性；卡内分割线保留 | P2（有意不改） |
+| 歌曲详情 / AI 解读 / 歌词 | 歌曲详情加了封面光晕 + `headlineMediumEmphasized`；AI 解读去掉两层卡片变成 surface 阅读面；歌词未改（已是最接近 Expressive 的一屏） | 歌词的色面与转场仍留白 | P2（代码已落） |
+
+## 落地状态（2026-10-18）
+
+代码已按上表落地；`docs/design/screens/<screen>/` 里的明暗截图与六条勾选仍需在真机上补
+（本轮的 agent 只做静态检查，不跑构建、不连设备）。
+
+- 首页：`LargeFlexibleTopAppBar` 承担第 1 条；hero 光晕承担第 2 条；`ButtonGroup` 承担第 3、5 条
+  （被按项横向扩张是官方组件内部形变）；`NavDisplay` 的空间弹簧承担第 4 条；分区无分割线承担第 6 条。
+- 播放页：光晕承担第 2 条；96dp 播放键的 `rememberPressShapeMorph` 承担第 3 条；浮动运输 toolbar 承担第 5 条；
+  `headlineMediumEmphasized` 标题 + surface 正文承担第 1、6 条；第 4 条由导航层的 push/pop 弹簧承担。
+- 音乐库 / 列表族 / 内容族：第 1、6 条稳定；第 5 条由 `MediumFlexibleTopAppBar`、分段按钮、`LoadingIndicator` 承担；
+  第 2、3 条按屏取舍（工具型页面不硬塞色面）。
 
 ## 试点计划
 
@@ -48,21 +76,28 @@ Material 3”，而是**有没有 expressive moment，以及 quiet surface 是�
 - hero 用封面派生的 primaryContainer 光晕，到封面下沿收干净；正文从 surface 开始；动作簇用 secondaryContainer 补一块受限色面（见 [color-field-shape-morph.md](color-field-shape-morph.md)）。
 - 拖拽排序保留“编辑态才出现行尾把手”，并把抬起行做成带背景与阴影的浮层。
 
-试运行截图见本轮对话；六条标记目前 1、2、3、5、6 达成，第 4 条由 `MotionScheme.expressive()` 的组件级弹簧承担，整屏转场的弹簧留到首页/播放页试点时统一。色面与 morph 部分待 #18 按 #6 规则复核。
+六条标记 1、2、3、5、6 由本屏代码承担；第 4 条（整屏转场）在 #16 之后由导航层统一提供：
+`NavDisplay` 的 push/pop 是「位移 + 淡入淡出」的空间弹簧（`defaultSpatialSpec` / `defaultEffectsSpec`），
+不再挂在本屏。剩余工作只有真机明暗截图与勾选。
 
-### 试点 2：首页
+### 试点 2：首页 — 已落地（2026-10-18）
 
-- `LargeFlexibleTopAppBar` 承载问候语与时间；搜索/设置降为 actions。
-- 「最近播放」改成左大右小的非对称 hero 行，而不是三张等权卡片。
-- 引入一个 FAB menu（AI 生成歌单 / 随机播放 / 扫描），放在迷你播放器与底栏之上；底部留白沿用 `SonLayout`。
-- 分区标题升到 `titleLargeEmphasized`，卡片圆角与色面跟着详情页的语法走。
+- `LargeFlexibleTopAppBar` 承载问候语（display 级）与副标题；搜索/设置降为 actions，滚动时收成 64dp。
+- 「最近播放」改成左大右小的非对称 hero：大卡封面随宽度取 58%，右侧两行紧凑条目；色面是这一屏
+  唯一的 `primaryContainer` 光晕，到大卡下沿归零。光晕跟着**页面主题**（当前播放封面或品牌色），
+  不为 hero 单独换一套封面配色 —— 色面会画一层自己的 surface，换色会在 hero 区留下一块可见的矩形。
+- **没有引入 FAB menu**：#5（导航外壳）已定「标准 `NavigationBar` + 无 FAB」，且 FAB menu 会与迷你
+  播放器抢右下角。快速入口改成官方 `ButtonGroup`（全部歌曲 / 专辑 / 歌手），按下时被按项横向扩张。
+- 分区标题统一走 `SonSectionHeader`（`titleLargeEmphasized` + 「查看全部」）；卡片圆角与色面跟着详情页语法走。
 
-### 试点 3：播放页
+### 试点 3：播放页 — 已落地（2026-10-18）
 
-- 封面背后加同色系 hero 光晕（B 规则，见 [color-field-shape-morph.md](color-field-shape-morph.md)），封面本身保持大圆角。
-- 运输控件改成浮动 toolbar（shuffle / prev / play / next / repeat），播放键做 shape morph。
-- 标题升到 `headlineSmallEmphasized`，歌手名用 label 级字距。
-- 歌词入口、收藏、更多收进一个轻量 toolbar，减少右上角图标堆叠。
+- 封面背后是封面派生的 `primaryContainer` 光晕（B 规则，见 [color-field-shape-morph.md](color-field-shape-morph.md)），
+  到封面下沿归零，标题以下全部落在 surface；封面本身保持大圆角。
+- 运输控件改成官方 `HorizontalFloatingToolbar`：shuffle → prev → play → next → repeat；播放键仍是 96dp
+  `LargeFloatingActionButton`，按压时 28dp 圆角 → 圆（`SonShapeMorph`）。
+- 标题升到 `headlineMediumEmphasized`，歌手名降到 `labelLarge` 字距。
+- 顶栏从四个图标收成「关闭 / 歌词 / 队列」；收藏与播放设置收进标题行右侧的动作簇，右上角不再堆图标。
 
 ## 技术约定
 

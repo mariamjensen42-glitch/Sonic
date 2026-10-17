@@ -36,7 +36,7 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
@@ -49,9 +49,9 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -65,6 +65,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -89,6 +90,8 @@ import com.cycling.presentation.R
 import com.cycling.presentation.components.CollectionActions
 import com.cycling.presentation.components.CollectionHero
 import com.cycling.presentation.components.PlaylistDescription
+import com.cycling.presentation.components.SonEmptyState
+import com.cycling.presentation.components.SonSectionHeader
 import com.cycling.presentation.components.SongListItem
 import com.cycling.presentation.player.rememberArtworkTheme
 
@@ -107,6 +110,8 @@ fun MyMusicScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showCreateDialog by remember { mutableStateOf(false) }
+    // 音乐库是工具型页面：标题时刻只由 large flexible 顶栏承担，内容区保持安静。
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
     val context = LocalContext.current
 
@@ -150,11 +155,18 @@ fun MyMusicScreen(
             .background(MaterialTheme.colorScheme.surface)
     ) {
         if (!uiState.showFavoriteSongs) {
-            TopAppBar(
+            // 标题时刻：display 级「音乐库」+ 一行歌单数量；搜索与新建降为 actions。
+            LargeFlexibleTopAppBar(
                 title = {
                     Text(
                         text = stringResource(R.string.mymusic_title_library),
-                        style = MaterialTheme.typography.titleLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                },
+                subtitle = {
+                    Text(
+                        text = stringResource(R.string.mymusic_subtitle_library, uiState.playlists.size),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -177,9 +189,12 @@ fun MyMusicScreen(
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
+                    scrolledContainerColor = MaterialTheme.colorScheme.surface,
                     titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    subtitleContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                ),
+                scrollBehavior = scrollBehavior
             )
         }
 
@@ -208,7 +223,8 @@ fun MyMusicScreen(
                 onPlaylistClick = { viewModel.handleIntent(MyMusicIntent.PlaylistClick(it)) },
                 onRename = { viewModel.handleIntent(MyMusicIntent.ShowRenameDialog(it)) },
                 onDelete = { viewModel.handleIntent(MyMusicIntent.DeletePlaylist(it)) },
-                bottomPadding = bottomPadding
+                bottomPadding = bottomPadding,
+                contentModifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection)
             )
         }
     }
@@ -235,7 +251,7 @@ private fun FavoritesContent(
 ) {
     when {
         isLoading -> LoadingBox()
-        songs.isEmpty() -> EmptyState(
+        songs.isEmpty() -> SonEmptyState(
             icon = SymbolIconName.Favorite,
             title = stringResource(R.string.mymusic_empty_favorites_title),
             subtitle = stringResource(R.string.mymusic_empty_favorites_subtitle)
@@ -300,7 +316,9 @@ private fun FavoritesContent(
                                     FilledTonalIconButton(
                                         onClick = onNavigateBack,
                                         colors = IconButtonDefaults.filledTonalIconButtonColors(
-                                            containerColor = extended.artworkScrim.copy(alpha = 0.42f),
+                                            // 同 CollectionDetail：压在封面上的图标要有 0.60 的托底，
+                                            // 亮封面上的白图标才看得清。
+                                            containerColor = extended.artworkScrim.copy(alpha = 0.60f),
                                             contentColor = extended.onArtwork
                                         )
                                     ) {
@@ -362,8 +380,6 @@ private fun FavoritesContent(
                                 )
                             }
 
-                            item(key = "favorites-divider") { HorizontalDivider() }
-
                             item(key = "favorites-description") {
                                 PlaylistDescription(
                                     description = description,
@@ -382,6 +398,8 @@ private fun FavoritesContent(
                                     song = song,
                                     subtitle = song.artist,
                                     isCurrentSong = song.id == currentSongId,
+                                    // quiet surface：收藏列表同样不画分割线。
+                                    showDivider = false,
                                     onClick = { onSongClick(song) },
                                     trailingContent = {
                                         IconButton(
@@ -456,35 +474,6 @@ private fun LoadingBox() {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { LoadingIndicator() }
 }
 
-@Composable
-private fun EmptyState(icon: SymbolIconName, title: String, subtitle: String) {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(
-            modifier = Modifier.padding(SonSpacing.large),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            M3SymbolIcon(
-                name = icon,
-                contentDescription = null,
-                modifier = Modifier.size(SonSizes.iconExtraLarge),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.height(SonSpacing.medium))
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMediumEmphasized,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(Modifier.height(SonSpacing.small))
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
 // ════════════════════════════════════════════════════════
 // 播放列表
 // ════════════════════════════════════════════════════════
@@ -498,30 +487,35 @@ private fun PlaylistsContent(
     onPlaylistClick: (Playlist) -> Unit,
     onRename: (Playlist) -> Unit,
     onDelete: (Playlist) -> Unit,
-    bottomPadding: Dp
+    bottomPadding: Dp,
+    contentModifier: Modifier = Modifier
 ) {
     when {
         isLoading -> LoadingBox()
         playlists.isEmpty() -> LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .then(contentModifier),
             contentPadding = PaddingValues(
-                top = SonLayout.contentTopPadding,
                 bottom = SonLayout.bottomBarClearance + bottomPadding
             )
         ) {
             item { AllSongsItem(onClick = onAllSongsClick) }
             item { FavoriteSongsItem(onClick = onFavoriteSongsClick) }
+            item { SonSectionHeader(title = stringResource(R.string.mymusic_section_playlists)) }
             item { EmptyPlaylistsHint() }
         }
         else -> LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .then(contentModifier),
             contentPadding = PaddingValues(
-                top = SonLayout.contentTopPadding,
                 bottom = SonLayout.bottomBarClearance + bottomPadding
             )
         ) {
             item { AllSongsItem(onClick = onAllSongsClick) }
             item { FavoriteSongsItem(onClick = onFavoriteSongsClick) }
+            item { SonSectionHeader(title = stringResource(R.string.mymusic_section_playlists)) }
             items(playlists, key = { it.id }) { playlist ->
                 PlaylistItem(
                     playlist = playlist,
@@ -593,7 +587,7 @@ private fun LibraryShortcutItem(
         content = {
             Text(
                 text = title,
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.titleMediumEmphasized,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1
             )

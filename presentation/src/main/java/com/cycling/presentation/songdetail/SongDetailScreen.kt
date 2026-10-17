@@ -54,6 +54,7 @@ import com.cycling.core.ui.components.M3SymbolIcon
 import com.cycling.core.ui.components.SymbolIconName
 import com.cycling.core.ui.components.M3Artwork
 import com.cycling.core.ui.theme.SonSizes
+import com.cycling.core.ui.theme.SonColorFieldBackground
 import com.cycling.core.ui.theme.SonLayout
 import com.cycling.core.ui.theme.SonSpacing
 import com.cycling.domain.model.AudioMetadata
@@ -241,13 +242,21 @@ private fun ViewModeContent(
     onAddToPlaylist: () -> Unit,
     onEditLyrics: () -> Unit
 ) {
-    SongHeader(
-        song = song,
-        isFavorite = uiState.isFavorite,
-        onPlay = onPlay,
-        onFavorite = onFavorite,
-        onAddToPlaylist = onAddToPlaylist
-    )
+    // 头部色面：封面背后一层 primaryContainer 光晕，到封面下沿收干净；
+    // 标题以下（歌词、文件属性）全部落在 surface 上，信息密度不受影响。
+    Box(modifier = Modifier.fillMaxWidth()) {
+        SonColorFieldBackground(
+            heroBottom = SonSizes.headerArtwork + SonSpacing.extraLarge + SonSpacing.medium,
+            modifier = Modifier.align(Alignment.TopCenter)
+        )
+        SongHeader(
+            song = song,
+            isFavorite = uiState.isFavorite,
+            onPlay = onPlay,
+            onFavorite = onFavorite,
+            onAddToPlaylist = onAddToPlaylist
+        )
+    }
 
     Spacer(modifier = Modifier.height(SonSpacing.large))
 

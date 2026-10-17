@@ -3,14 +3,9 @@
 package com.cycling.presentation.artists
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -18,19 +13,18 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MediumFlexibleTopAppBar
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -42,6 +36,8 @@ import com.cycling.core.ui.theme.SonLayout
 import com.cycling.core.ui.theme.SonSizes
 import com.cycling.core.ui.theme.SonSpacing
 import com.cycling.presentation.R
+import com.cycling.presentation.components.SonEmptyState
+import com.cycling.presentation.components.SonLoadingState
 
 @Composable
 fun ArtistsScreen(
@@ -52,6 +48,7 @@ fun ArtistsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val gridState = rememberLazyGridState()
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
     LaunchedEffect(Unit) {
         viewModel.uiEffect.collect { effect ->
@@ -62,14 +59,20 @@ fun ArtistsScreen(
     }
 
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
-            TopAppBar(
+            MediumFlexibleTopAppBar(
                 title = {
                     Text(
                         text = stringResource(R.string.artists_title),
-                        style = MaterialTheme.typography.titleLarge,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        maxLines = 1
+                    )
+                },
+                subtitle = {
+                    Text(
+                        text = stringResource(R.string.artists_count, uiState.artists.size),
+                        maxLines = 1
                     )
                 },
                 navigationIcon = {
@@ -83,75 +86,46 @@ fun ArtistsScreen(
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
-                )
+                    scrolledContainerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    subtitleContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                ),
+                scrollBehavior = scrollBehavior
             )
         }
     ) { paddingValues ->
-        Box(modifier = Modifier.padding(paddingValues)) {
-            if (uiState.isLoading) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    LoadingIndicator()
-                }
-            } else if (uiState.artists.isEmpty()) {
-                EmptyArtistsState()
-            } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = SonSizes.artistCardSize + SonSpacing.large),
-                    modifier = Modifier.fillMaxSize(),
-                    state = gridState,
-                    contentPadding = PaddingValues(
-                        start = SonLayout.screenMargin,
-                        end = SonLayout.screenMargin,
-                        top = SonLayout.contentTopPadding,
-                        bottom = SonLayout.bottomBarClearance + bottomPadding
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(SonLayout.gridGap),
-                    horizontalArrangement = Arrangement.spacedBy(SonLayout.gridGap)
-                ) {
-                    items(uiState.artists, key = { it.id }) { artist ->
-                        M3ArtistCard(
-                            name = artist.name,
-                            artwork = artist.artistArt,
-                            onClick = { viewModel.handleIntent(ArtistsIntent.ArtistClick(artist)) },
-                            size = null
-                        )
-                    }
+        when {
+            uiState.isLoading -> SonLoadingState(modifier = Modifier.padding(paddingValues))
+            uiState.artists.isEmpty() -> SonEmptyState(
+                icon = SymbolIconName.Person,
+                title = stringResource(R.string.artists_empty_title),
+                subtitle = stringResource(R.string.artists_empty_subtitle),
+                modifier = Modifier.padding(paddingValues)
+            )
+            else -> LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = SonSizes.artistCardSize + SonSpacing.large),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues),
+                state = gridState,
+                contentPadding = PaddingValues(
+                    start = SonLayout.screenMargin,
+                    end = SonLayout.screenMargin,
+                    top = SonLayout.contentTopPadding,
+                    bottom = SonLayout.bottomBarClearance + bottomPadding
+                ),
+                verticalArrangement = Arrangement.spacedBy(SonLayout.gridGap),
+                horizontalArrangement = Arrangement.spacedBy(SonLayout.gridGap)
+            ) {
+                items(uiState.artists, key = { it.id }) { artist ->
+                    M3ArtistCard(
+                        name = artist.name,
+                        artwork = artist.artistArt,
+                        onClick = { viewModel.handleIntent(ArtistsIntent.ArtistClick(artist)) },
+                        size = null
+                    )
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun EmptyArtistsState() {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            M3SymbolIcon(
-                name = SymbolIconName.Person,
-                filled = false,
-                contentDescription = null,
-                modifier = Modifier.size(SonSizes.iconExtraLarge),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(SonSpacing.medium))
-            Text(
-                text = stringResource(R.string.artists_empty_title),
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(modifier = Modifier.height(SonSpacing.small))
-            Text(
-                text = stringResource(R.string.artists_empty_subtitle),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
     }
 }
