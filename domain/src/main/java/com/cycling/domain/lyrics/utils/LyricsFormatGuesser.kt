@@ -39,6 +39,12 @@ class LyricsFormatGuesser {
             LyricsFormat(
                 "LYRICIFY_SYLLABLE"
             ) { it.contains("[a-zA-Z]+\\s*\\(\\d+,\\d+\\)".toRegex()) })
+
+        // 必须带逐字标签才算 YRC：Lyricify Lines 的行首 [start,end] 长得一样，却没有逐字标签。
+        registerFormat(
+            LyricsFormat(
+                "YRC"
+            ) { it.contains("\\[\\d+,\\d+]\\s*\\(\\d+,\\d+,\\d+\\)".toRegex()) })
     }
 
     fun registerFormat(format: LyricsFormat) {

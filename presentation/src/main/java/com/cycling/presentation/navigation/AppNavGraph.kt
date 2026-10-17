@@ -3,16 +3,23 @@ package com.cycling.presentation.navigation
 import android.widget.Toast
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation3.runtime.EntryProviderScope
@@ -24,13 +31,10 @@ import com.cycling.presentation.ai.AiInfoScreen
 import com.cycling.presentation.albumdetail.AlbumDetailScreen
 import com.cycling.presentation.albumdetail.AlbumDetailViewModel
 import com.cycling.presentation.albums.AlbumsScreen
-import com.cycling.presentation.albums.AlbumsViewModel
 import com.cycling.presentation.artistdetail.ArtistDetailScreen
 import com.cycling.presentation.artistdetail.ArtistDetailViewModel
 import com.cycling.presentation.artists.ArtistsScreen
-import com.cycling.presentation.artists.ArtistsViewModel
 import com.cycling.presentation.folder.FolderScreen
-import com.cycling.presentation.folder.FolderViewModel
 import com.cycling.presentation.home.HomeScreen
 import com.cycling.presentation.home.HomeViewModel
 import com.cycling.presentation.lyrics.LyricsScreen
@@ -43,19 +47,35 @@ import com.cycling.presentation.playlistdetail.PlaylistDetailViewModel
 import com.cycling.presentation.search.SearchScreen
 import com.cycling.presentation.search.SearchViewModel
 import com.cycling.presentation.settings.SettingsScreen
-import com.cycling.presentation.settings.SettingsViewModel
 import com.cycling.presentation.songdetail.SongDetailScreen
 import com.cycling.presentation.songdetail.SongDetailViewModel
 import com.cycling.presentation.songs.SongsScreen
 import com.cycling.presentation.songs.SongsViewModel
 
+/**
+ * 主壳导航图。
+ *
+ * [bottomContentPadding] 只传给 Home / 音乐库两个 tab root：迷你播放器可见时由 MainScreen 传
+ * `SonLayout.miniPlayerClearance`，避免最后一行被迷你播放器盖住。pushed screens 的底栏已经由
+ * [NavigationState] 隐藏，不需要这份额外留白。
+ */
 @Composable
 fun AppNavGraph(
     playerViewModel: PlayerViewModel,
     navigator: Navigator,
-    navigationState: NavigationState
+    navigationState: NavigationState,
+    bottomContentPadding: Dp = 0.dp
 ) {
     val context = LocalContext.current
+    val motionScheme = MaterialTheme.motionScheme
+    val tabRoutes = navigationState.topLevelRoutes
+
+    // 设置里关掉「点击播放时进入播放页」后，各处点歌起播都不再跳转；迷你播放器的点击是显式
+    // 打开播放页，走 MainActivity 那边的 navigate，不受这个开关管。
+    val openPlayerOnPlay = playerViewModel.openPlayerOnPlay.collectAsStateWithLifecycle()
+    fun navigateToPlayer() {
+        if (openPlayerOnPlay.value) navigator.navigate(Screen.Player)
+    }
 
     LaunchedEffect(Unit) {
         playerViewModel.uiEffect.collect { effect ->
@@ -82,10 +102,11 @@ fun AppNavGraph(
                 onNavigateToArtistDetail = { artistId ->
                     navigator.navigate(LibraryDestination.ArtistDetail(artistId))
                 },
-                onNavigateToPlayer = { navigator.navigate(Screen.Player) },
+                onNavigateToPlayer = { navigateToPlayer() },
                 onNavigateToMyMusic = { navigator.navigate(LibraryDestination.MyMusic) },
                 onNavigateToSearch = { navigator.navigate(Screen.Search) },
-                onNavigateToFolders = { navigator.navigate(LibraryDestination.Folders) }
+                onNavigateToFolders = { navigator.navigate(LibraryDestination.Folders) },
+                bottomPadding = bottomContentPadding
             )
         }
 
@@ -93,8 +114,14 @@ fun AppNavGraph(
             val searchViewModel = hiltViewModel<SearchViewModel>()
             SearchScreen(
                 viewModel = searchViewModel,
-                onNavigateToPlayer = { songId -> navigator.navigate(Screen.Player) },
-                onNavigateBack = { navigator.goBack() }
+                onNavigateToPlayer = { navigateToPlayer() },
+                onNavigateBack = { navigator.goBack() },
+                onNavigateToAlbumDetail = { albumId ->
+                    navigator.navigate(LibraryDestination.AlbumDetail(albumId))
+                },
+                onNavigateToArtistDetail = { artistId ->
+                    navigator.navigate(LibraryDestination.ArtistDetail(artistId))
+                }
             )
         }
 
@@ -103,10 +130,13 @@ fun AppNavGraph(
             MyMusicScreen(
                 viewModel = myMusicViewModel,
                 onNavigateBack = { },  // top-level tab, no back
-                onNavigateToPlayer = { navigator.navigate(Screen.Player) },
+                onNavigateToPlayer = { navigateToPlayer() },
                 onNavigateToPlaylistDetail = { playlistId ->
                     navigator.navigate(LibraryDestination.PlaylistDetail(playlistId))
-                }
+                },
+                onNavigateToSearch = { navigator.navigate(Screen.Search) },
+                onNavigateToSongs = { navigator.navigate(LibraryDestination.Songs) },
+                bottomPadding = bottomContentPadding
             )
         }
 
@@ -116,7 +146,7 @@ fun AppNavGraph(
                 put(NavDisplay.TransitionKey) {
                     slideInVertically(
                         initialOffsetY = { it },
-                        animationSpec = tween(350)
+                        animationSpec = motionScheme.defaultSpatialSpec()
                     ) togetherWith ExitTransition.KeepUntilTransitionsFinished
                 }
                 // Slide down to bottom when going back
@@ -124,14 +154,14 @@ fun AppNavGraph(
                     EnterTransition.None togetherWith
                         slideOutVertically(
                             targetOffsetY = { it },
-                            animationSpec = tween(350)
+                            animationSpec = motionScheme.defaultSpatialSpec()
                         )
                 }
                 put(NavDisplay.PredictivePopTransitionKey) {
                     EnterTransition.None togetherWith
                         slideOutVertically(
                             targetOffsetY = { it },
-                            animationSpec = tween(350)
+                            animationSpec = motionScheme.defaultSpatialSpec()
                         )
                 }
             }
@@ -161,7 +191,7 @@ fun AppNavGraph(
             SongDetailScreen(
                 viewModel = viewModel,
                 onNavigateBack = { navigator.goBack() },
-                onNavigateToPlayer = { navigator.navigate(Screen.Player) }
+                onNavigateToPlayer = { navigateToPlayer() }
             )
         }
 
@@ -175,20 +205,62 @@ fun AppNavGraph(
             )
         }
 
-        libraryEntries(navigator, playerViewModel)
+        libraryEntries(navigator, playerViewModel) { navigateToPlayer() }
         settingsEntries(navigator)
     }
+
+    fun isTabRoute(key: Any): Boolean = tabRoutes.any { it == key }
 
     NavDisplay(
         modifier = Modifier.fillMaxSize(),
         entries = navigationState.toEntries(entryProvider),
-        onBack = { navigator.goBack() }
+        onBack = { navigator.goBack() },
+        // push：从右侧推入，上一屏反向退出四分之一并淡出
+        transitionSpec = {
+            if (isTabRoute(initialState.key) && isTabRoute(targetState.key)) {
+                // tab 之间不加位移：转场语法归 #7，这里只保证不被横向滑动带跑
+                fadeIn(animationSpec = motionScheme.defaultEffectsSpec()) togetherWith
+                    fadeOut(animationSpec = motionScheme.defaultEffectsSpec())
+            } else {
+                (
+                    slideInHorizontally(animationSpec = motionScheme.defaultSpatialSpec()) { it } +
+                        fadeIn(animationSpec = motionScheme.defaultEffectsSpec())
+                    ) togetherWith (
+                    slideOutHorizontally(animationSpec = motionScheme.defaultSpatialSpec()) { -it / 4 } +
+                        fadeOut(animationSpec = motionScheme.defaultEffectsSpec())
+                    )
+            }
+        },
+        // pop：方向相反；tab 根之间同样不加位移
+        popTransitionSpec = {
+            if (isTabRoute(initialState.key) && isTabRoute(targetState.key)) {
+                fadeIn(animationSpec = motionScheme.defaultEffectsSpec()) togetherWith
+                    fadeOut(animationSpec = motionScheme.defaultEffectsSpec())
+            } else {
+                (
+                    slideInHorizontally(animationSpec = motionScheme.defaultSpatialSpec()) { -it / 4 } +
+                        fadeIn(animationSpec = motionScheme.defaultEffectsSpec())
+                    ) togetherWith (
+                    slideOutHorizontally(animationSpec = motionScheme.defaultSpatialSpec()) { it } +
+                        fadeOut(animationSpec = motionScheme.defaultEffectsSpec())
+                    )
+            }
+        },
+        // predictive back：保留库的缩放收束形态，只换 spec
+        predictivePopTransitionSpec = {
+            fadeIn(animationSpec = motionScheme.defaultEffectsSpec()) togetherWith
+                scaleOut(
+                    targetScale = 0.7f,
+                    animationSpec = motionScheme.defaultSpatialSpec()
+                )
+        }
     )
 }
 
 private fun EntryProviderScope<NavKey>.libraryEntries(
     navigator: Navigator,
-    playerViewModel: com.cycling.presentation.player.PlayerViewModel
+    playerViewModel: com.cycling.presentation.player.PlayerViewModel,
+    navigateToPlayer: () -> Unit
 ) {
     entry<LibraryDestination.Songs> { _ ->
         val songsViewModel: SongsViewModel = hiltViewModel()
@@ -203,7 +275,7 @@ private fun EntryProviderScope<NavKey>.libraryEntries(
                 playerViewModel.handleIntent(
                     com.cycling.presentation.player.PlayerIntent.PlaySong(song, queue)
                 )
-                navigator.navigate(Screen.Player)
+                navigateToPlayer()
             },
             onNavigateToSongDetail = { songId ->
                 navigator.navigate(Screen.SongDetail(songId))
@@ -235,10 +307,12 @@ private fun EntryProviderScope<NavKey>.libraryEntries(
         MyMusicScreen(
             viewModel = hiltViewModel(),
             onNavigateBack = { navigator.goBack() },
-            onNavigateToPlayer = { navigator.navigate(Screen.Player) },
+            onNavigateToPlayer = { navigateToPlayer() },
             onNavigateToPlaylistDetail = { playlistId ->
                 navigator.navigate(LibraryDestination.PlaylistDetail(playlistId))
-            }
+            },
+            onNavigateToSearch = { navigator.navigate(Screen.Search) },
+            onNavigateToSongs = { navigator.navigate(LibraryDestination.Songs) }
         )
     }
 
@@ -249,12 +323,12 @@ private fun EntryProviderScope<NavKey>.libraryEntries(
             onNavigateToPlayer = { songId, songs ->
                 playerViewModel.handleIntent(
                     com.cycling.presentation.player.PlayerIntent.PlaySong(
-                        songs.find { it.id == songId } ?: return@FolderScreen,
-                        songs
+                            songs.find { it.id == songId } ?: return@FolderScreen,
+                            songs
+                        )
                     )
-                )
-                navigator.navigate(Screen.Player)
-            }
+                    navigateToPlayer()
+                }
         )
     }
 
@@ -262,13 +336,28 @@ private fun EntryProviderScope<NavKey>.libraryEntries(
         val viewModel = hiltViewModel<AlbumDetailViewModel, AlbumDetailViewModel.Factory>(
             creationCallback = { factory -> factory.create(key) }
         )
+        val albumState by viewModel.uiState.collectAsStateWithLifecycle()
         AlbumDetailScreen(
             viewModel = viewModel,
             onNavigateBack = { navigator.goBack() },
-            onNavigateToPlayer = { navigator.navigate(Screen.Player) },
-            onNavigateToApiKeyConfig = { navigator.navigate(SettingsDestination.Main) },
-            onNavigateToAiInfo = { type, name, artist ->
-                navigator.navigate(Screen.AiInfo(type, name, artist))
+            onNavigateToPlayer = { songId ->
+                val queue = albumState.songs
+                val song = queue.find { it.id == songId } ?: return@AlbumDetailScreen
+                playerViewModel.handleIntent(
+                    com.cycling.presentation.player.PlayerIntent.PlaySong(song, queue)
+                )
+                navigateToPlayer()
+            },
+            // 随机播放：队列已在上游打乱，这里直接以首曲起播并开启随机模式。
+            onPlayShuffled = { queue ->
+                val first = queue.firstOrNull() ?: return@AlbumDetailScreen
+                playerViewModel.handleIntent(
+                    com.cycling.presentation.player.PlayerIntent.PlaySong(first, queue)
+                )
+                playerViewModel.handleIntent(
+                    com.cycling.presentation.player.PlayerIntent.ToggleShuffleMode
+                )
+                navigateToPlayer()
             }
         )
     }
@@ -277,13 +366,28 @@ private fun EntryProviderScope<NavKey>.libraryEntries(
         val viewModel = hiltViewModel<ArtistDetailViewModel, ArtistDetailViewModel.Factory>(
             creationCallback = { factory -> factory.create(key) }
         )
+        val artistState by viewModel.uiState.collectAsStateWithLifecycle()
         ArtistDetailScreen(
             viewModel = viewModel,
             onNavigateBack = { navigator.goBack() },
-            onNavigateToPlayer = { navigator.navigate(Screen.Player) },
-            onNavigateToApiKeyConfig = { navigator.navigate(SettingsDestination.Main) },
-            onNavigateToAiInfo = { type, name, artist ->
-                navigator.navigate(Screen.AiInfo(type, name, artist))
+            onNavigateToPlayer = { songId ->
+                val queue = artistState.songs
+                val song = queue.find { it.id == songId } ?: return@ArtistDetailScreen
+                playerViewModel.handleIntent(
+                    com.cycling.presentation.player.PlayerIntent.PlaySong(song, queue)
+                )
+                navigateToPlayer()
+            },
+            // 随机播放：队列已在上游打乱，这里直接以首曲起播并开启随机模式。
+            onPlayShuffled = { queue ->
+                val first = queue.firstOrNull() ?: return@ArtistDetailScreen
+                playerViewModel.handleIntent(
+                    com.cycling.presentation.player.PlayerIntent.PlaySong(first, queue)
+                )
+                playerViewModel.handleIntent(
+                    com.cycling.presentation.player.PlayerIntent.ToggleShuffleMode
+                )
+                navigateToPlayer()
             }
         )
     }
@@ -302,7 +406,18 @@ private fun EntryProviderScope<NavKey>.libraryEntries(
                 playerViewModel.handleIntent(
                     com.cycling.presentation.player.PlayerIntent.PlaySong(song, queue)
                 )
-                navigator.navigate(Screen.Player)
+                navigateToPlayer()
+            },
+            // 随机播放：队列已在上游打乱，这里直接以首曲起播并开启随机模式。
+            onPlayShuffled = { queue ->
+                val first = queue.firstOrNull() ?: return@PlaylistDetailScreen
+                playerViewModel.handleIntent(
+                    com.cycling.presentation.player.PlayerIntent.PlaySong(first, queue)
+                )
+                playerViewModel.handleIntent(
+                    com.cycling.presentation.player.PlayerIntent.ToggleShuffleMode
+                )
+                navigateToPlayer()
             }
         )
     }

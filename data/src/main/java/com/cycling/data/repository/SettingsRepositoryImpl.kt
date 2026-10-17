@@ -10,7 +10,6 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.cycling.domain.model.LyricsProvider
-import com.cycling.domain.model.ThemeMode
 import com.cycling.domain.repository.SettingsRepository
 import com.cycling.domain.repository.SettingsRepository.Companion.DEFAULT_AUDIO_FADE_DURATION_MS
 import com.cycling.domain.repository.SettingsRepository.Companion.DEFAULT_SLEEP_TIMER_PRESET_MINUTES
@@ -35,15 +34,6 @@ private val Context.settingsDataStore: DataStore<Preferences> by preferencesData
 class SettingsRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context
 ) : SettingsRepository {
-
-    override val themeMode: Flow<ThemeMode> =
-        context.settingsDataStore.data.map { prefs ->
-            SettingsConversions.parseEnum(prefs[THEME_MODE_KEY], ThemeMode.SYSTEM)
-        }
-
-    override suspend fun setThemeMode(mode: ThemeMode) {
-        context.settingsDataStore.edit { it[THEME_MODE_KEY] = mode.name }
-    }
 
     override val playbackSpeed: Flow<Float> =
         context.settingsDataStore.data.map { prefs ->
@@ -101,6 +91,20 @@ class SettingsRepositoryImpl @Inject constructor(
         context.settingsDataStore.edit { it[ONLINE_LYRICS_KEY] = enabled }
     }
 
+    override val openPlayerOnPlay: Flow<Boolean> =
+        context.settingsDataStore.data.map { it[OPEN_PLAYER_ON_PLAY_KEY] ?: true }
+
+    override suspend fun setOpenPlayerOnPlay(enabled: Boolean) {
+        context.settingsDataStore.edit { it[OPEN_PLAYER_ON_PLAY_KEY] = enabled }
+    }
+
+    override val autoContinueEnabled: Flow<Boolean> =
+        context.settingsDataStore.data.map { it[AUTO_CONTINUE_KEY] ?: true }
+
+    override suspend fun setAutoContinueEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { it[AUTO_CONTINUE_KEY] = enabled }
+    }
+
     override val lyricsProviderOrder: Flow<List<LyricsProvider>> =
         context.settingsDataStore.data.map { prefs ->
             SettingsConversions.parseLyricsProviders(prefs[LYRICS_PROVIDERS_KEY])
@@ -114,7 +118,6 @@ class SettingsRepositoryImpl @Inject constructor(
     }
 
     companion object {
-        private val THEME_MODE_KEY = stringPreferencesKey("theme_mode")
         private val PLAYBACK_SPEED_KEY = stringPreferencesKey("playback_speed")
         private val SKIP_SILENCE_KEY = booleanPreferencesKey("skip_silence")
         private val REMEMBER_POSITION_KEY = booleanPreferencesKey("remember_playback_position")
@@ -123,6 +126,8 @@ class SettingsRepositoryImpl @Inject constructor(
 
         private val SLEEP_TIMER_PRESET_KEY = intPreferencesKey("sleep_timer_preset_minutes")
         private val ONLINE_LYRICS_KEY = booleanPreferencesKey("online_lyrics_enabled")
+        private val OPEN_PLAYER_ON_PLAY_KEY = booleanPreferencesKey("open_player_on_play")
+        private val AUTO_CONTINUE_KEY = booleanPreferencesKey("auto_continue_enabled")
         private val LYRICS_PROVIDERS_KEY = stringPreferencesKey("lyrics_providers")
     }
 }

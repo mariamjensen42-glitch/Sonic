@@ -1,7 +1,7 @@
 package com.cycling.data.repository
 
 import com.cycling.domain.model.LyricsProvider
-import com.cycling.domain.model.ThemeMode
+import com.cycling.domain.model.SortOrder
 import com.cycling.domain.repository.SettingsRepository.Companion.DEFAULT_LYRICS_PROVIDER_ORDER
 import com.cycling.domain.repository.SettingsRepository.Companion.DEFAULT_PLAYBACK_SPEED
 import com.cycling.domain.repository.SettingsRepository.Companion.MAX_PLAYBACK_SPEED
@@ -13,10 +13,10 @@ class SettingsConversionsTest {
 
     @Test
     fun `enum parsing falls back when the stored name is unknown or missing`() {
-        assertEquals(ThemeMode.SYSTEM, SettingsConversions.parseEnum(null, ThemeMode.SYSTEM))
-        assertEquals(ThemeMode.SYSTEM, SettingsConversions.parseEnum("", ThemeMode.SYSTEM))
-        assertEquals(ThemeMode.SYSTEM, SettingsConversions.parseEnum("SEPIA", ThemeMode.SYSTEM))
-        assertEquals(ThemeMode.DARK, SettingsConversions.parseEnum("DARK", ThemeMode.SYSTEM))
+        assertEquals(SortOrder.TITLE, SettingsConversions.parseEnum(null, SortOrder.TITLE))
+        assertEquals(SortOrder.TITLE, SettingsConversions.parseEnum("", SortOrder.TITLE))
+        assertEquals(SortOrder.TITLE, SettingsConversions.parseEnum("SEPIA", SortOrder.TITLE))
+        assertEquals(SortOrder.ARTIST, SettingsConversions.parseEnum("ARTIST", SortOrder.TITLE))
     }
 
     @Test

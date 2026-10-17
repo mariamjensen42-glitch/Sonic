@@ -1,7 +1,7 @@
 package com.cycling.presentation.lyrics.components
 
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
@@ -21,21 +21,22 @@ import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
+import com.cycling.core.ui.theme.LocalSonExtendedColors
+import com.cycling.core.ui.theme.SonSpacing
 import com.cycling.domain.lyrics.model.karaoke.KaraokeAlignment
 import kotlin.math.PI
 import kotlin.math.cos
-import kotlin.math.sin
 
 data class KaraokeBreathingDotsDefaults(
     val number: Int = 3,
-    val size: Dp = 16.dp,
-    val margin: Dp = 12.dp,
+    val size: Dp = SonSpacing.medium,
+    val margin: Dp = SonSpacing.mediumSmall,
     val enterDurationMs: Int = 3000,
     val preExitStillDuration: Int = 200,
     val preExitDipAndRiseDuration: Int = 3000,
     val exitDurationMs: Int = 200,
-    val breathingDotsColor: Color = Color.White
+    /** 留空表示跟随主题的"非当前行"色。 */
+    val breathingDotsColor: Color = Color.Unspecified
 )
 
 @Composable
@@ -47,6 +48,11 @@ fun KaraokeBreathingDots(
     modifier: Modifier = Modifier,
     defaults: KaraokeBreathingDotsDefaults = KaraokeBreathingDotsDefaults(),
 ) {
+    val extended = LocalSonExtendedColors.current
+    val dotColor =
+        if (defaults.breathingDotsColor == Color.Unspecified) extended.lyricsInactive
+        else defaults.breathingDotsColor
+
     Box(modifier) {
         val size = with(LocalDensity.current) { defaults.size.toPx() }
         val margin = with(LocalDensity.current) { defaults.margin.toPx() }
@@ -61,7 +67,7 @@ fun KaraokeBreathingDots(
                         else -> Alignment.TopStart
                     }
                 )
-                .padding(vertical = 8.dp, horizontal = 16.dp)
+                .padding(vertical = SonSpacing.small, horizontal = SonSpacing.medium)
                 .size(
                     width = defaults.size * defaults.number + defaults.margin * (defaults.number - 1),
                     height = defaults.size
@@ -70,10 +76,6 @@ fun KaraokeBreathingDots(
             if (totalWidth <= 0f) return@Canvas
 
             val currentTime = currentTimeProvider().toFloat()
-            val breathingAmplitude = 0.1f
-            val breathingCenter = 0.9f
-            val breathingTrough = breathingCenter - breathingAmplitude
-
             val enterDuration = defaults.enterDurationMs.toFloat()
             val exitDuration = defaults.exitDurationMs.toFloat()
             val preExitStillDuration = defaults.preExitStillDuration.toFloat()
@@ -103,7 +105,7 @@ fun KaraokeBreathingDots(
                 when {
                     currentTime < breathingStartTime -> {
                         val progress = (currentTime - startTimeMs) / enterDuration
-                        alpha = FastOutSlowInEasing.transform(progress)
+                        alpha = LinearOutSlowInEasing.transform(progress)
                         scale = alpha * 0.8f
                         revealProgress = alpha
                     }
@@ -135,7 +137,7 @@ fun KaraokeBreathingDots(
 
                     else -> {
                         val progress = ((endTimeMs - currentTime) / exitDuration).coerceIn(0f, 1f)
-                        val eased = FastOutSlowInEasing.transform(progress)
+                        val eased = LinearOutSlowInEasing.transform(progress)
                         alpha = eased
                         scale = eased
                         revealProgress = 1f
@@ -165,30 +167,31 @@ fun KaraokeBreathingDots(
                         }
 
                         drawCircle(
-                            color = defaults.breathingDotsColor.copy(alpha = dotAlpha * alpha),
+                            color = dotColor.copy(alpha = dotAlpha * alpha),
                             radius = size / 2,
                             center = Offset(size / 2 + (size + margin) * index, size / 2)
                         )
                     }
                 }
 
+                // 逐个点亮：右侧用 DstIn 遮罩擦掉尚未揭晓的部分。
+                // 遮罩只看 alpha，所以"保留"端用完全不透明的主题色即可，不能写死黑色
                 val softEdgeWidth = 0.5f
                 val revealPosition = revealProgress * (1f + softEdgeWidth)
                 val startFade = (revealPosition - softEdgeWidth).coerceIn(0f, 1f)
                 val endFade = revealPosition.coerceIn(0f, 1f)
 
-                if (defaults.breathingDotsColor != Color.Black) {
-                    val brush = Brush.horizontalGradient(
+                drawRect(
+                    brush = Brush.horizontalGradient(
                         colorStops = arrayOf(
-                            0f to Color.Black,
-                            startFade to Color.Black,
+                            0f to dotColor,
+                            startFade to dotColor,
                             endFade to Color.Transparent,
                             1f to Color.Transparent
                         )
-                    )
-
-                    drawRect(brush = brush, blendMode = BlendMode.DstIn)
-                }
+                    ),
+                    blendMode = BlendMode.DstIn
+                )
                 canvas.restore()
             }
         }

@@ -1,5 +1,7 @@
 package com.cycling.domain.usecase
 
+import com.cycling.domain.model.Lyrics
+import com.cycling.domain.model.SongFixture
 import com.cycling.domain.repository.LyricsRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -22,26 +24,24 @@ class GetLyricsUseCaseTest {
 
     @Test
     fun `invoke returns lyrics from repository`() = runTest {
-        val songPath = "/storage/emulated/0/Music/test.mp3"
-        val expectedLyrics = mockk<com.cycling.domain.model.Lyrics>()
-        
-        coEvery { lyricsRepository.getLyrics(songPath) } returns expectedLyrics
+        val song = SongFixture.create()
+        val expectedLyrics = mockk<Lyrics>()
 
-        val result = getLyricsUseCase(songPath)
+        coEvery { lyricsRepository.getLyrics(song) } returns expectedLyrics
+
+        val result = getLyricsUseCase(song)
 
         assertEquals(expectedLyrics, result)
-        coVerify { lyricsRepository.getLyrics(songPath) }
+        coVerify { lyricsRepository.getLyrics(song) }
     }
 
     @Test
-    fun `invoke calls repository with correct path`() = runTest {
-        val songPath = "/storage/emulated/0/Music/another_song.mp3"
-        val expectedLyrics = mockk<com.cycling.domain.model.Lyrics>()
-        
-        coEvery { lyricsRepository.getLyrics(songPath) } returns expectedLyrics
+    fun `invoke passes the whole song so online providers can match on metadata`() = runTest {
+        val song = SongFixture.create(title = "Another Song", artist = "Someone Else")
+        coEvery { lyricsRepository.getLyrics(song) } returns mockk()
 
-        getLyricsUseCase(songPath)
+        getLyricsUseCase(song)
 
-        coVerify(exactly = 1) { lyricsRepository.getLyrics(songPath) }
+        coVerify(exactly = 1) { lyricsRepository.getLyrics(song) }
     }
 }

@@ -4,12 +4,16 @@ import androidx.room.Database
 import androidx.room.RoomDatabase
 import com.cycling.data.local.dao.AiInfoCacheDao
 import com.cycling.data.local.dao.LyricsCacheDao
+import com.cycling.data.local.dao.LyricsIndexDao
+import com.cycling.data.local.dao.LyricsOverrideDao
 import com.cycling.data.local.dao.PlaylistDao
 import com.cycling.data.local.dao.SearchHistoryDao
 import com.cycling.data.local.dao.SongDao
 import com.cycling.data.local.dao.SongStateDao
 import com.cycling.data.local.entity.AiInfoCacheEntity
 import com.cycling.data.local.entity.LyricsCacheEntity
+import com.cycling.data.local.entity.LyricsIndexEntity
+import com.cycling.data.local.entity.LyricsOverrideEntity
 import com.cycling.data.local.entity.PlaylistEntity
 import com.cycling.data.local.entity.PlaylistSongEntity
 import com.cycling.data.local.entity.SearchHistoryEntity
@@ -24,9 +28,11 @@ import com.cycling.data.local.entity.SongStateEntity
         AiInfoCacheEntity::class,
         SearchHistoryEntity::class,
         SongStateEntity::class,
-        LyricsCacheEntity::class
+        LyricsCacheEntity::class,
+        LyricsOverrideEntity::class,
+        LyricsIndexEntity::class
     ],
-    version = 2,
+    version = 5,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -36,4 +42,6 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun searchHistoryDao(): SearchHistoryDao
     abstract fun songStateDao(): SongStateDao
     abstract fun lyricsCacheDao(): LyricsCacheDao
+    abstract fun lyricsOverrideDao(): LyricsOverrideDao
+    abstract fun lyricsIndexDao(): LyricsIndexDao
 }

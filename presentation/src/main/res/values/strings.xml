@@ -1,27 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Widget -->
+    <string name="widget_label">Sonic 播放控件</string>
+    <string name="widget_empty_title">Sonic</string>
+    <string name="widget_empty_subtitle">点按随机播放全部</string>
+
     <!-- Tag Editor (existing) -->
-    <string name="tag_editor_title">编辑标签</string>
-    <string name="tag_editor_song_not_found">歌曲未找到</string>
-    <string name="tag_editor_title_label">标题</string>
-    <string name="tag_editor_title_placeholder">输入歌曲标题</string>
-    <string name="tag_editor_artist_label">艺术家</string>
-    <string name="tag_editor_artist_placeholder">输入艺术家名称</string>
-    <string name="tag_editor_album_label">专辑</string>
-    <string name="tag_editor_album_placeholder">输入专辑名称</string>
-    <string name="tag_editor_year_label">年份</string>
-    <string name="tag_editor_year_placeholder">输入年份</string>
-    <string name="tag_editor_genre_label">流派</string>
-    <string name="tag_editor_genre_placeholder">输入流派</string>
-    <string name="tag_editor_composer_label">作曲</string>
-    <string name="tag_editor_composer_placeholder">输入作曲者</string>
-    <string name="tag_editor_save">保存</string>
-    <string name="tag_editor_saving">保存中...</string>
-    <string name="tag_editor_cancel">取消</string>
-    <string name="tag_editor_discard_title">放弃更改？</string>
-    <string name="tag_editor_discard_message">您有未保存的更改，确定要放弃吗？</string>
-    <string name="tag_editor_discard">放弃</string>
-    <string name="tag_editor_keep_editing">继续编辑</string>
 
     <!-- Player -->
     <string name="player_queue_title">播放队列</string>
@@ -29,6 +13,8 @@
     <string name="player_empty_queue">播放队列为空</string>
     <string name="player_close">关闭</string>
     <string name="player_now_playing">正在播放</string>
+    <string name="player_settings_desc">播放设置</string>
+    <string name="player_playback_settings_title">播放设置</string>
     <string name="player_queue_desc">播放队列</string>
     <string name="player_favorite_desc">收藏</string>
     <string name="player_unfavorite_desc">取消收藏</string>
@@ -43,26 +29,60 @@
     <string name="player_toggle_lyrics">歌词</string>
     <string name="player_lyrics_unavailable">暂无歌词</string>
     <string name="lyrics_back_desc">返回</string>
+    <string name="lyrics_fetch_desc">重新获取歌词</string>
+    <string name="lyrics_offset_title">歌词偏移</string>
+    <string name="lyrics_offset_hint">正值让歌词延后，负值让歌词提前</string>
+    <string name="lyrics_offset_earlier">提前 0.5s</string>
+    <string name="lyrics_offset_later">延后 0.5s</string>
+    <string name="lyrics_offset_reset">重置</string>
+
+    <!-- Lyrics versions -->
+    <string name="lyrics_candidates_desc">选择歌词</string>
+    <string name="lyrics_candidates_title">选择歌词</string>
+    <string name="lyrics_candidates_hint">点选一个版本即可替换当前歌词</string>
+    <string name="lyrics_candidates_empty">没有找到其他版本</string>
+    <string name="lyrics_candidate_word_by_word">逐字</string>
+    <string name="lyrics_candidate_line_level">行级</string>
+    <string name="lyrics_candidate_current">当前使用</string>
+    <string name="lyrics_candidate_selected">已切换歌词版本</string>
 
     <!-- Player ViewModel -->
     <string name="player_added_to_queue">已添加到播放队列</string>
     <string name="player_play_next">已设为下一首播放</string>
     <string name="player_added_to_favorites">已添加到喜欢</string>
     <string name="player_removed_from_favorites">已从喜欢移除</string>
+    <string name="player_lyrics_refreshed">歌词已更新</string>
+    <string name="player_lyrics_refreshed_word_by_word">已更新为逐字歌词</string>
 
     <!-- Playlist Detail -->
     <string name="playlist_detail_unknown">未知播放列表</string>
-    <string name="playlist_detail_song_count">%d 首歌曲</string>
-    <string name="playlist_detail_play_all">播放全部</string>
     <string name="playlist_detail_empty">播放列表为空</string>
     <string name="playlist_detail_more_desc">更多选项</string>
     <string name="playlist_detail_remove">从播放列表移除</string>
     <string name="playlist_detail_back_desc">返回</string>
     <string name="playlist_detail_removed_toast">已从播放列表移除</string>
+    <string name="playlist_detail_batch_remove">移出歌单</string>
+    <string name="playlist_detail_batch_removed">已移出 %1$d 首</string>
+    <string name="playlist_detail_export_m3u">导出为 M3U 歌单</string>
+    <string name="playlist_detail_exported">已导出 %1$d 首歌</string>
+    <string name="playlist_detail_export_failed">导出失败，请检查文件是否可写</string>
+    <string name="playlist_detail_more">更多</string>
+    <string name="playlist_detail_collapse">收起</string>
+    <string name="playlist_detail_desc_loading">正在生成歌单介绍…</string>
+    <string name="playlist_detail_desc_failed">介绍生成失败</string>
+
+    <!-- Collection Detail（歌单 / 专辑 / 歌手详情页共用外壳） -->
+    <string name="collection_detail_play_all">播放全部</string>
+    <string name="collection_detail_shuffle_desc">随机播放</string>
+    <string name="collection_detail_add_desc">添加到歌单</string>
+    <string name="collection_detail_song_count">%d 首歌曲</string>
+    <string name="collection_detail_exit_selection_desc">退出多选</string>
+    <string name="collection_detail_added_toast">已添加到歌单</string>
+    <string name="collection_detail_reorder_desc">排序</string>
+    <string name="collection_detail_reorder_done_desc">完成排序</string>
+    <string name="collection_detail_exit_reorder_desc">退出排序</string>
 
     <!-- Components -->
-    <string name="components_play_all">播放全部</string>
-    <string name="components_shuffle">随机播放</string>
     <string name="components_more_desc">更多选项</string>
 
     <!-- Playlist Picker -->
@@ -83,8 +103,6 @@
     <string name="home_favorite_songs">收藏歌曲</string>
     <string name="home_recently_added">最近添加</string>
     <string name="home_most_played">常播歌曲</string>
-    <string name="home_discover">发现音乐</string>
-    <string name="home_user_name">用户</string>
     <string name="home_greeting_morning">上午好</string>
     <string name="home_greeting_afternoon">下午好</string>
     <string name="home_greeting_evening">晚上好</string>
@@ -95,20 +113,30 @@
 
     <!-- Search -->
     <string name="search_title">搜索</string>
-    <string name="search_no_results">未找到相关歌曲</string>
+    <string name="search_no_results">未找到相关内容</string>
+    <string name="search_lyrics_section">歌词中命中</string>
     <string name="search_icon_desc">搜索</string>
     <string name="search_placeholder">你想听什么？</string>
+    <string name="search_history_title">搜索历史</string>
+    <string name="search_clear_history">清空</string>
+    <string name="search_tab_all">全部</string>
+    <string name="search_tab_songs">歌曲</string>
+    <string name="search_tab_albums">专辑</string>
+    <string name="search_tab_artists">艺人</string>
+    <string name="search_artist_song_count">%1$d 首歌</string>
+    <string name="search_back_desc">返回</string>
 
     <!-- My Music -->
     <string name="mymusic_back_desc">返回</string>
     <string name="mymusic_title_favorites">我喜欢</string>
     <string name="mymusic_title_library">音乐库</string>
     <string name="mymusic_search_desc">搜索</string>
-    <string name="mymusic_ai_create_desc">AI 创建歌单</string>
     <string name="mymusic_create_playlist_desc">创建播放列表</string>
     <string name="mymusic_empty_favorites_title">还没有喜欢的歌曲</string>
     <string name="mymusic_empty_favorites_subtitle">在播放器中点击心形图标来收藏歌曲</string>
     <string name="mymusic_unfavorite_desc">取消收藏</string>
+    <string name="mymusic_all_songs_label">全部歌曲</string>
+    <string name="mymusic_all_songs_subtitle">本地曲库中的全部曲目</string>
     <string name="mymusic_favorites_label">我喜欢</string>
     <string name="mymusic_favorites_subtitle">收藏的歌曲</string>
     <string name="mymusic_empty_playlists">暂无播放列表</string>
@@ -154,12 +182,10 @@
     <string name="mymusic_vm_playlist_deleted">播放列表已删除</string>
     <string name="mymusic_vm_playlist_renamed">播放列表已重命名</string>
     <string name="mymusic_vm_no_songs_available">没有可用的歌曲</string>
-    <string name="mymusic_vm_random_playlist">随机歌单</string>
     <string name="mymusic_vm_enter_theme">请输入主题</string>
     <string name="mymusic_vm_no_matching_songs">未找到匹配的歌曲</string>
     <string name="mymusic_vm_generate_failed">生成失败</string>
     <string name="mymusic_vm_no_songs_to_add">没有可添加的歌曲</string>
-    <string name="mymusic_vm_ai_playlist">AI歌单</string>
     <string name="mymusic_vm_playlist_created_success">歌单已创建</string>
     <string name="mymusic_vm_create_failed">创建歌单失败</string>
 
@@ -179,23 +205,31 @@
     <string name="songs_sort_album">按专辑</string>
     <string name="songs_sort_duration">按时长</string>
     <string name="songs_sort_date">按添加日期</string>
+    <string name="songs_select_desc">多选</string>
+    <string name="songs_exit_selection_desc">退出多选</string>
+    <string name="songs_select_all_desc">全选</string>
+    <string name="songs_clear_selection_desc">取消全选</string>
+    <string name="songs_selected_count">已选 %1$d 首</string>
+    <string name="songs_batch_add_to_playlist">加入歌单</string>
+    <string name="songs_batch_favorite">收藏</string>
+    <string name="songs_batch_unfavorite">取消收藏</string>
+    <string name="songs_batch_added_to_playlist">已把 %1$d 首加入歌单</string>
+    <string name="songs_batch_favorited">已收藏 %1$d 首</string>
+    <string name="songs_batch_unfavorited">已取消收藏 %1$d 首</string>
 
     <!-- Songs ViewModel -->
-    <string name="songs_vm_added_to_playlist">已添加到播放列表</string>
-    <string name="songs_vm_created_and_added">已创建播放列表并添加歌曲</string>
+    <string name="playlist_added_to">已添加到播放列表</string>
+    <string name="playlist_created_and_added">已创建播放列表并添加歌曲</string>
 
     <!-- Album Detail -->
     <string name="album_detail_back_desc">返回</string>
     <string name="album_detail_unknown">未知专辑</string>
     <string name="album_detail_unknown_artist">未知歌手</string>
-    <string name="album_detail_info">专辑 · %d 首歌曲</string>
-    <string name="album_detail_play_all_desc">播放全部</string>
 
     <!-- Artist Detail -->
     <string name="artist_detail_back_desc">返回</string>
     <string name="artist_detail_unknown">未知歌手</string>
-    <string name="artist_detail_subtitle">为你推荐</string>
-    <string name="artist_detail_play_all_desc">播放全部</string>
+    <string name="artist_detail_info">歌手 · %d 首歌曲</string>
 
     <!-- Albums -->
     <string name="albums_title">专辑</string>
@@ -218,6 +252,11 @@
     <string name="folder_empty_subtitle">此文件夹中没有音乐文件</string>
     <string name="folder_song_count">%d 首歌曲</string>
     <string name="folder_vm_load_failed">加载文件夹失败</string>
+    <string name="folder_vm_add_root_failed">无法授权该文件夹</string>
+    <string name="folder_roots_empty_title">还没有浏览目录</string>
+    <string name="folder_roots_empty_subtitle">点右上角 + 选择要浏览的文件夹</string>
+    <string name="folder_source_library">媒体库</string>
+    <string name="folder_source_device">本机文件夹</string>
 
     <!-- Settings -->
     <string name="settings_cannot_get_path">无法获取文件夹路径</string>
@@ -235,6 +274,39 @@
     <string name="settings_exclude_folders">排除文件夹</string>
     <string name="settings_library_stats">音乐库统计</string>
     <string name="settings_section_playback">播放</string>
+    <string name="settings_playback_speed">播放速度</string>
+    <string name="settings_skip_silence">跳过静音</string>
+    <string name="settings_skip_silence_subtitle">自动跳过曲目里的静音片段</string>
+    <string name="settings_sleep_timer">睡眠定时器</string>
+    <string name="settings_sleep_timer_off">未开启</string>
+    <string name="settings_sleep_timer_remaining">剩余 %1$s</string>
+    <string name="sleep_timer_minutes">%1$d 分钟</string>
+    <string name="sleep_timer_cancel">关闭定时器</string>
+    <string name="settings_replay_gain">音量均衡</string>
+    <string name="settings_replay_gain_subtitle">按曲目响度标签统一音量，避免切歌时忽大忽小</string>
+    <string name="settings_audio_fade">淡入淡出</string>
+    <string name="settings_audio_fade_off">关闭</string>
+    <string name="settings_audio_fade_value">%1$d 毫秒</string>
+    <string name="settings_remember_position">记住播放位置</string>
+    <string name="settings_remember_position_subtitle">下次打开时从上次听到的位置继续</string>
+    <string name="settings_open_player_on_play">点击播放时进入播放页</string>
+    <string name="settings_open_player_on_play_subtitle">关闭后，点击歌曲仅开始播放，不再跳转到播放页</string>
+    <string name="settings_auto_continue">智能续播</string>
+    <string name="settings_auto_continue_subtitle">队列播完后，自动接上同歌手、同专辑等风格相近的歌</string>
+    <string name="settings_section_backup">备份与恢复</string>
+    <string name="settings_export_backup">导出备份</string>
+    <string name="settings_export_backup_subtitle">把歌单、收藏和播放次数写成一个 JSON 文件</string>
+    <string name="settings_import_backup">从备份恢复</string>
+    <string name="settings_import_backup_subtitle">按文件路径找回歌单、收藏和播放次数</string>
+    <string name="settings_import_m3u">导入 M3U 歌单</string>
+    <string name="settings_import_m3u_subtitle">把播放器导出的 .m3u/.m3u8 变成一张歌单</string>
+    <string name="settings_transfer_in_progress">正在处理…</string>
+    <string name="settings_vm_backup_exported">已导出 %1$d 首歌的数据</string>
+    <string name="settings_vm_backup_restored">已恢复 %1$d 首歌曲的数据</string>
+    <string name="settings_vm_m3u_imported">已导入 %1$d 首歌</string>
+    <string name="settings_vm_transfer_failed">操作失败，请检查文件是否可写</string>
+    <string name="settings_dialog_done">完成</string>
+    <string name="settings_section_ai">AI</string>
     <string name="settings_deepseek_config">DeepSeek API 配置</string>
     <string name="settings_api_configured">已配置</string>
     <string name="settings_api_not_configured">未配置</string>
@@ -243,13 +315,13 @@
     <string name="settings_version_value">1.0.0</string>
     <string name="settings_permission_title">需要存储权限</string>
     <string name="settings_permission_subtitle">扫描本地音乐需要访问您的存储空间</string>
-    <string name="settings_grant_permission">授予权限</string>
+    <string name="grant_permission">授予权限</string>
     <string name="settings_rescan">重新扫描</string>
-    <string name="settings_scan_failed">扫描失败</string>
+    <string name="scan_failed">扫描失败</string>
     <string name="settings_retry">重试</string>
     <string name="settings_scan_empty_title">扫描本地音乐</string>
     <string name="settings_scan_empty_subtitle">扫描您的设备上的音乐文件</string>
-    <string name="settings_start_scan">开始扫描</string>
+    <string name="scan_start">开始扫描</string>
     <string name="settings_scan_complete">扫描完成</string>
     <string name="settings_songs_found">发现歌曲</string>
     <string name="settings_albums_found">发现专辑</string>
@@ -288,6 +360,16 @@
     <string name="settings_quality_others">Others</string>
     <string name="settings_quality_others_desc">其他 &lt; 320 kbps 或未知</string>
     <string name="settings_quality_count">%d 首</string>
+
+    <!-- Online lyrics -->
+    <string name="settings_section_lyrics">歌词</string>
+    <string name="settings_online_lyrics">在线获取歌词</string>
+    <string name="settings_online_lyrics_subtitle">本地文件没有歌词时从网络下载，并缓存到设备</string>
+    <string name="settings_lyrics_provider_order">来源优先级</string>
+    <string name="settings_lyrics_provider_netease">网易云音乐</string>
+    <string name="settings_lyrics_provider_lrclib">LRCLIB</string>
+    <string name="settings_lyrics_provider_move_up">上移</string>
+    <string name="settings_lyrics_provider_move_down">下移</string>
 
     <!-- Settings ViewModel -->
     <string name="settings_vm_permission_needed">需要存储权限才能扫描音乐文件</string>
@@ -346,16 +428,24 @@
     <string name="song_detail_section_path">文件路径</string>
     <string name="song_detail_copy_desc">复制</string>
     <string name="song_detail_copy">复制</string>
+    <string name="song_detail_section_lyrics">歌词</string>
+    <string name="song_detail_lyrics_empty">暂无歌词</string>
+    <string name="song_detail_lyrics_add">添加歌词</string>
+    <string name="song_detail_lyrics_expand">展开全部</string>
+    <string name="song_detail_lyrics_collapse">收起</string>
+    <string name="song_detail_lyrics_label">歌词</string>
+    <string name="song_detail_lyrics_placeholder">每行一句歌词；带 LRC 时间轴时播放页可跟随，如 [00:12.34]歌词</string>
+    <string name="song_detail_lyrics_hint">留空并保存会清除自定义歌词，恢复自动获取</string>
 
     <!-- Song Detail ViewModel -->
     <string name="song_detail_vm_path_copied">路径已复制到剪贴板</string>
     <string name="song_detail_vm_update_failed">更新歌曲信息失败</string>
     <string name="song_detail_vm_save_success">保存成功</string>
     <string name="song_detail_vm_save_failed">保存标签失败</string>
+    <string name="song_detail_vm_lyrics_save_failed">保存歌词失败</string>
 
     <!-- Bottom Navigation -->
     <string name="nav_home">首页</string>
-    <string name="nav_search">搜索</string>
     <string name="nav_library">音乐库</string>
 
     <!-- AI Info -->

@@ -4,6 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -18,13 +19,25 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import kotlin.math.atan2
-import kotlin.math.cos
-import kotlin.math.sin
 
 data class PieChartData(
     val value: Float,
     val color: Color,
     val label: String
+)
+
+/**
+ * 默认饼图调色板。全部取自主题色彩角色，随明暗主题自适应；
+ * 调用方按需取色，不再硬编码一组十六进制色。
+ */
+@Composable
+fun defaultPieChartColors(): List<Color> = listOf(
+    MaterialTheme.colorScheme.primary,
+    MaterialTheme.colorScheme.secondary,
+    MaterialTheme.colorScheme.tertiary,
+    MaterialTheme.colorScheme.primaryContainer,
+    MaterialTheme.colorScheme.secondaryContainer,
+    MaterialTheme.colorScheme.tertiaryContainer
 )
 
 @Composable
@@ -39,13 +52,14 @@ fun PieChart(
     
     val total = data.sumOf { it.value.toDouble() }.toFloat()
     if (total <= 0f) {
+        val trackColor = MaterialTheme.colorScheme.surfaceVariant
         Box(
             modifier = modifier,
             contentAlignment = Alignment.Center
         ) {
             Canvas(modifier = Modifier.size(200.dp)) {
                 drawCircle(
-                    color = Color.Gray.copy(alpha = 0.3f),
+                    color = trackColor,
                     radius = size.minDimension / 2 - 20.dp.toPx(),
                     style = Stroke(width = 40.dp.toPx())
                 )

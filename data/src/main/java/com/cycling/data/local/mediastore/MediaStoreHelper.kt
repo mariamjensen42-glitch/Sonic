@@ -151,42 +151,6 @@ class MediaStoreHelper @Inject constructor(
         return null
     }
 
-    fun querySongsByAlbum(albumId: Long): List<Song> {
-        val songs = mutableListOf<Song>()
-        val projection = arrayOf(
-            MediaStore.Audio.Media._ID,
-            MediaStore.Audio.Media.TITLE,
-            MediaStore.Audio.Media.ARTIST,
-            MediaStore.Audio.Media.ALBUM,
-            MediaStore.Audio.Media.DURATION,
-            MediaStore.Audio.Media.DATA,
-            MediaStore.Audio.Media.ALBUM_ID,
-            MediaStore.Audio.Media.ARTIST_ID,
-            MediaStore.Audio.Media.DATE_ADDED,
-            MediaStore.Audio.Media.DATE_MODIFIED,
-            MediaStore.Audio.Media.SIZE,
-            MediaStore.Audio.Media.MIME_TYPE
-        )
-
-        val selection = "${MediaStore.Audio.Media.IS_MUSIC} = ? AND ${MediaStore.Audio.Media.DURATION} > ? AND ${MediaStore.Audio.Media.ALBUM_ID} = ?"
-        val selectionArgs = arrayOf("1", MIN_DURATION.toString(), albumId.toString())
-        val sortOrder = "${MediaStore.Audio.Media.TRACK} ASC"
-
-        context.contentResolver.query(
-            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-            projection,
-            selection,
-            selectionArgs,
-            sortOrder
-        )?.use { cursor ->
-            while (cursor.moveToNext()) {
-                songs.add(cursor.toSong())
-            }
-        }
-
-        return songs
-    }
-
     fun querySongsByArtist(artistId: Long): List<Song> {
         val songs = mutableListOf<Song>()
         val projection = arrayOf(

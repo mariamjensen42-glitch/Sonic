@@ -9,5 +9,6 @@ data class AiInfo(
 enum class AiInfoType {
     SONG,
     ARTIST,
-    ALBUM
+    ALBUM,
+    PLAYLIST_DESCRIPTION
 }

@@ -1,583 +1,638 @@
 package com.cycling.data.player
 
-import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.media.MediaMetadataRetriever
-import android.net.Uri
-import android.os.Build
-import android.provider.MediaStore
-import android.util.LruCache
-import android.util.Size
-import androidx.annotation.OptIn
-import androidx.media3.common.MediaItem
-import androidx.media3.common.MediaMetadata
-import androidx.media3.common.Player
-import androidx.media3.common.util.UnstableApi
-import androidx.media3.session.MediaController
-import androidx.media3.session.SessionToken
+import com.cycling.data.di.PlayerDispatcher
+import com.cycling.data.player.engine.EngineState
+import com.cycling.data.player.engine.PlaybackEngine
+import com.cycling.data.player.engine.PlaybackEvent
+import com.cycling.data.player.engine.QueueItem
+import com.cycling.data.player.engine.TransitionReason
 import com.cycling.data.store.PlaybackStateStore
 import com.cycling.domain.model.PlayerState
 import com.cycling.domain.model.RepeatMode
 import com.cycling.domain.model.Song
+import com.cycling.domain.repository.AudioMetadataRepository
 import com.cycling.domain.repository.PlayerRepository
+import com.cycling.domain.repository.SettingsRepository
 import com.cycling.domain.repository.SongRepository
-import com.google.common.util.concurrent.ListenableFuture
-import dagger.hilt.android.qualifiers.ApplicationContext
+import com.cycling.domain.usecase.GetContinuationSongsUseCase
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import kotlin.math.abs
+import kotlin.math.pow
 import timber.log.Timber
-import java.io.ByteArrayOutputStream
 import javax.inject.Inject
 import javax.inject.Singleton
-import androidx.core.net.toUri
 
+/**
+ * Owns the playback queue and the public [PlayerState].
+ *
+ * The queue itself lives inside ExoPlayer now, reached through [PlaybackEngine] — this class no
+ * longer keeps a parallel `MutableList` with its own index bookkeeping, which is what used to
+ * make shuffle repeat tracks, `skipToPrevious` fight the 3-second rule, and gapless playback
+ * impossible.
+ *
+ * Everything here runs on [dispatcher] and holds no Android types, so the queue and state logic
+ * is unit-testable against a fake engine.
+ */
 @Singleton
-@OptIn(UnstableApi::class)
 class PlayerManager @Inject constructor(
-    @ApplicationContext private val context: Context,
+    private val engine: PlaybackEngine,
     private val songRepository: SongRepository,
-    private val playbackStateStore: PlaybackStateStore
+    private val audioMetadataRepository: AudioMetadataRepository,
+    private val playbackStateStore: PlaybackStateStore,
+    private val settingsRepository: SettingsRepository,
+    private val getContinuationSongs: GetContinuationSongsUseCase,
+    private val playbackServiceController: PlaybackServiceController,
+    @PlayerDispatcher private val dispatcher: CoroutineDispatcher
 ) : PlayerRepository {
+
     private val _playerState = MutableStateFlow(PlayerState())
     override val playerState: StateFlow<PlayerState> = _playerState.asStateFlow()
 
     private val supervisorJob = SupervisorJob()
-    private val scope = CoroutineScope(supervisorJob + Dispatchers.Main)
+    private val scope = CoroutineScope(supervisorJob + dispatcher)
 
-    private var playbackQueue: MutableList<Song> = mutableListOf()
-    private var currentIndex: Int = -1
-    private var hasCountedPlay: Boolean = false
+    private val _sleepTimerRemainingMs = MutableStateFlow<Long?>(null)
+    override val sleepTimerRemainingMs: StateFlow<Long?> = _sleepTimerRemainingMs.asStateFlow()
+
+    /**
+     * Resolves queue ids back to full songs.
+     *
+     * `EngineState` carries ids only, because a `MediaItem` cannot hold a `Song` without dragging
+     * app types into the timeline that media3 then marshals over Binder. This map is also what
+     * `setSongFavorite` mutates, and it must stay in sync: the queue is rebuilt from it on every
+     * engine change, so a stale entry silently reverts the heart icon.
+     */
+    private val songLookup = mutableMapOf<Long, Song>()
+
+    private var progressLoopJob: Job? = null
+    private var sleepTimerJob: Job? = null
+    private var fadeJob: Job? = null
     private var currentSongId: Long? = null
+    private var hasCountedPlay = false
+    private var lastPersistedPosition = -1L
+    private var lastTransitionId: Long? = null
+    private var lastIsPlaying: Boolean? = null
+    private var hadNonEmptyQueue = false
+    private var restored = false
 
-    private val albumArtCache = LruCache<String, ByteArray>(50)
-    private var progressLoopJob: kotlinx.coroutines.Job? = null
+    /** 队列播完后自动续播的开关。默认开，见 [SettingsRepository.autoContinueEnabled]。 */
+    private var autoContinueEnabled = true
 
-    private var mediaController: MediaController? = null
-    private var controllerFuture: ListenableFuture<MediaController>? = null
+    /** 一次 Ended 只允许发起一次续播查询；换曲后复位，避免查询失败时 Ended 反复触发。 */
+    private var continuationInFlight = false
 
-    private val playerListener = object : Player.Listener {
-        override fun onIsPlayingChanged(isPlaying: Boolean) {
-            Timber.d("Player state changed: isPlaying=$isPlaying")
-            _playerState.update { it.copy(isPlaying = isPlaying) }
-            if (isPlaying) startProgressUpdateLoop() else stopProgressUpdateLoop()
-        }
+    /** 音量均衡开关。关着的时候 [baseVolume] 恒为满音量。 */
+    private var replayGainEnabled = false
 
-        override fun onPlaybackStateChanged(playbackState: Int) {
-            Timber.d("Playback state changed: $playbackState")
-            if (playbackState == Player.STATE_ENDED) {
-                onSongEnded()
+    /** 淡入淡出时长；0 表示不做渐变，音量直接到位。 */
+    private var fadeDurationMs = 0L
+
+    /** 「记住播放位置」开关。关掉之后既不再存进度，恢复时也从 0 开始。 */
+    private var rememberPosition = true
+
+    /**
+     * 当前曲目应有的音量，由 ReplayGain 决定。
+     *
+     * 与实际下发值分开：淡入淡出乘的是一个 0..1 的渐变系数，两者相乘才是 [engine] 收到的音量。
+     * 合在一起的话，淡出结束时会把 ReplayGain 的结果一起抹掉。
+     */
+    private var baseVolume = FULL_VOLUME
+
+    private var fadeFactor = FULL_VOLUME
+
+    /** 每换一首歌自增，用来丢弃上一首还没读完的 ReplayGain 结果。 */
+    private var volumeToken = 0
+
+    init {
+        scope.launch { engine.state.collect(::onEngineState) }
+        scope.launch { engine.events.collect(::onEngineEvent) }
+        // Playback preferences are pushed to the engine rather than read at build time, so a
+        // change takes effect immediately and a stored value is applied on every cold start.
+        scope.launch { settingsRepository.playbackSpeed.collect(engine::setSpeed) }
+        scope.launch { settingsRepository.skipSilence.collect(engine::setSkipSilence) }
+        scope.launch {
+            settingsRepository.replayGainEnabled.collect { enabled ->
+                replayGainEnabled = enabled
+                applyTrackVolume(engine.state.value.currentId)
             }
-            updatePlaybackPosition()
         }
-
-        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-            Timber.d("Media item transition: ${mediaItem?.mediaMetadata?.title}, reason=$reason")
-            updatePlaybackPosition()
-            resetPlayCountFlag()
+        scope.launch { settingsRepository.audioFadeDurationMs.collect { fadeDurationMs = it } }
+        scope.launch {
+            settingsRepository.rememberPlaybackPosition.collect { enabled -> rememberPosition = enabled }
+        }
+        scope.launch {
+            settingsRepository.autoContinueEnabled.collect { enabled -> autoContinueEnabled = enabled }
         }
     }
 
-    suspend fun connect(): Boolean {
-        return try {
-            if (mediaController != null) return true
+    /**
+     * Restores the queue and position saved by the last session.
+     *
+     * Does not start the playback service itself. Starting it is what happens on the way into
+     * `play()`, and there are only three doors into playback — here, [playSong] and [playPause] —
+     * so a launch with nothing to play leaves the service alone instead of arming a foreground
+     * deadline it cannot meet. See [PlaybackServiceController.start].
+     */
+    suspend fun connect(): Boolean = try {
+        // 读一次而不是等收集器：恢复要决定"从哪一秒开始"，而收集器的首次发射没有顺序保证，
+        // 慢一拍就会先按默认值把进度恢复出来。
+        rememberPosition = settingsRepository.rememberPlaybackPosition.first()
+        restorePlaybackState()
+        true
+    } catch (e: Exception) {
+        Timber.e(e, "connect: failed to restore playback state")
+        false
+    }
 
-            Timber.d("Connecting to PlayerService...")
-            PlayerService.start(context)
+    // region engine -> state
 
-            val sessionToken = SessionToken(context, android.content.ComponentName(context, PlayerService::class.java))
-            controllerFuture = MediaController.Builder(context, sessionToken).buildAsync()
-            mediaController = controllerFuture?.await()
-            mediaController?.addListener(playerListener)
+    private fun onEngineState(engineState: EngineState) {
+        if (engineState.queueIds.isEmpty()) {
+            // Only treat an empty queue as "playback ended" if we had one — otherwise this fires
+            // during startup, before restorePlaybackState has rebuilt anything, and would wipe
+            // the very state it is about to restore.
+            if (hadNonEmptyQueue) {
+                hadNonEmptyQueue = false
+                lastTransitionId = null
+                currentSongId = null
+                _playerState.value = PlayerState()
+            }
+            return
+        }
+        hadNonEmptyQueue = true
 
-            startProgressUpdateLoop()
-            restorePlaybackState()
-            Timber.d("Connected to PlayerService successfully")
-            true
+        if (engineState.isPlaying != lastIsPlaying) {
+            lastIsPlaying = engineState.isPlaying
+            if (engineState.isPlaying) startProgressLoop() else stopProgressLoop()
+            scope.launch { playbackStateStore.saveWasPlaying(engineState.isPlaying) }
+        }
+
+        val position = engine.currentPositionMs()
+        _playerState.update { previous ->
+            previous.copy(
+                currentSong = engineState.currentId?.let(songLookup::get),
+                playbackQueue = engineState.queueIds.map { id ->
+                    songLookup[id] ?: unknownSong(id)
+                },
+                queueIndex = engineState.currentIndex,
+                isPlaying = engineState.isPlaying,
+                playbackPosition = position,
+                duration = engineState.durationMs,
+                repeatMode = engineState.repeatMode,
+                shuffleMode = engineState.shuffleEnabled
+            )
+        }
+        currentSongId = _playerState.value.currentSong?.id
+    }
+
+    private fun onEngineEvent(event: PlaybackEvent) {
+        when (event) {
+            is PlaybackEvent.ItemChanged -> onItemChanged(event)
+            PlaybackEvent.Ended -> {
+                Timber.d("onEngineEvent: playback ended")
+                _playerState.update { it.copy(isPlaying = false) }
+                scope.launch { continueQueueIfEnabled() }
+            }
+        }
+    }
+
+    private fun onItemChanged(event: PlaybackEvent.ItemChanged) {
+        val id = event.id
+        val isDifferentItem = id != lastTransitionId
+        lastTransitionId = id
+
+        // A playlist edit can fire a transition without the current song changing — for example
+        // when an item is inserted ahead of it. Counting that as a new play would inflate play
+        // counts and re-stamp lastPlayedAt.
+        val beginsNewPlay = when (event.reason) {
+            TransitionReason.PLAYLIST_CHANGED, TransitionReason.UNKNOWN -> isDifferentItem
+            else -> true
+        }
+        if (!beginsNewPlay) return
+
+        hasCountedPlay = false
+        lastPersistedPosition = -1L
+        currentSongId = id
+        continuationInFlight = false
+        id?.let { songId ->
+            scope.launch(Dispatchers.IO) { songRepository.updateLastPlayedAt(songId) }
+        }
+        if (isDifferentItem) {
+            scope.launch { persistQueuePosition() }
+        }
+        applyTrackVolume(id)
+        // 暂停状态下换曲（恢复会话、或队列被改写）不该有声音渐入，只在真的在播时做。
+        if (engine.state.value.playWhenReady) fadeIn()
+    }
+
+    /**
+     * 队列自然播完后的续播。
+     *
+     * 只在 repeat OFF 且确实停在最后一首时触发。续播不是重建播放队列，而是把新歌**追加**到原队列
+     * 后面并从第一首新歌开始播 —— 用户仍能往回翻到刚才听过的部分。曲库被排除完时返回空列表，
+     * 到此为止，不会自转。
+     */
+    private suspend fun continueQueueIfEnabled() {
+        if (!autoContinueEnabled || continuationInFlight) return
+        val engineState = engine.state.value
+        if (engineState.repeatMode != RepeatMode.OFF) return
+        if (engineState.queueIds.isEmpty()) return
+        if (engineState.currentIndex != engineState.queueIds.lastIndex) return
+
+        val seed = _playerState.value.currentSong ?: return
+        continuationInFlight = true
+
+        val continuation = try {
+            getContinuationSongs(seed, engineState.queueIds.toSet(), CONTINUATION_SIZE)
         } catch (e: Exception) {
-            Timber.e(e, "Failed to connect to PlayerService")
-            false
+            Timber.w(e, "continueQueue: could not pick follow-up songs for ${seed.id}")
+            emptyList()
+        }
+        if (continuation.isEmpty()) {
+            Timber.d("continueQueue: library exhausted, stopping at ${seed.id}")
+            return
+        }
+
+        registerSongs(continuation)
+        val existing = engineState.queueIds.mapNotNull(songLookup::get)
+        val newQueue = existing + continuation
+        engine.setQueue(newQueue.map(::toQueueItem), existing.size)
+        playbackServiceController.start()
+        engine.play()
+        fadeIn()
+        Timber.d("continueQueue: appended ${continuation.size} songs after ${seed.id}")
+    }
+
+    private fun startProgressLoop() {
+        if (progressLoopJob?.isActive == true) return
+        progressLoopJob = scope.launch {
+            while (isActive) {
+                val position = engine.currentPositionMs()
+                val engineState = engine.state.value
+                _playerState.update { it.copy(playbackPosition = position) }
+                checkPlayProgress(position, engineState.durationMs)
+                if (rememberPosition &&
+                    position > 0 &&
+                    abs(position - lastPersistedPosition) >= POSITION_PERSIST_INTERVAL_MS
+                ) {
+                    lastPersistedPosition = position
+                    launch { playbackStateStore.savePlaybackPosition(position) }
+                }
+                delay(PROGRESS_INTERVAL_MS)
+            }
         }
     }
+
+    private fun stopProgressLoop() {
+        progressLoopJob?.cancel()
+        progressLoopJob = null
+    }
+
+    private fun checkPlayProgress(position: Long, duration: Long) {
+        if (hasCountedPlay || duration <= 0 || position <= 0) return
+        if (position.toFloat() / duration.toFloat() < PLAY_COUNT_THRESHOLD) return
+
+        val songId = currentSongId ?: return
+        hasCountedPlay = true
+        scope.launch(Dispatchers.IO) { songRepository.incrementPlayCount(songId) }
+    }
+
+    private suspend fun persistQueuePosition() {
+        val engineState = engine.state.value
+        playbackStateStore.saveQueue(engineState.queueIds, engineState.currentIndex)
+    }
+
+    // endregion
 
     private suspend fun restorePlaybackState() {
-        val savedState = playbackStateStore.getSavedState() ?: return
-        Timber.d("restorePlaybackState: restoring queue of ${savedState.queueSongIds.size} songs, index=${savedState.currentIndex}")
+        if (restored) return
+        restored = true
 
-        val songs = savedState.queueSongIds.mapNotNull { id ->
-            songRepository.getSongById(id)
-        }
+        val saved = playbackStateStore.getSavedState() ?: return
+        val songs = saved.queueSongIds.mapNotNull { songRepository.getSongById(it) }
         if (songs.isEmpty()) {
             Timber.d("restorePlaybackState: no songs found, clearing saved state")
             playbackStateStore.clear()
             return
         }
 
-        val validIndex = savedState.currentIndex.coerceIn(0, songs.size - 1)
-        playbackQueue = songs.toMutableList()
-        currentIndex = validIndex
-        _playerState.update {
-            it.copy(
-                repeatMode = savedState.repeatMode,
-                shuffleMode = savedState.shuffleMode
-            )
-        }
+        val index = saved.currentIndex.coerceIn(0, songs.lastIndex)
+        registerSongs(songs)
 
-        val song = songs[validIndex]
-        val player = mediaController ?: return
-        val mediaItem = createMediaItem(song)
-        player.setMediaItem(mediaItem)
-        player.prepare()
-        if (savedState.playbackPosition > 0) {
-            player.seekTo(savedState.playbackPosition)
+        // Shuffle has to be set before the timeline, because media3 regenerates the shuffle order
+        // whenever the queue changes and the order itself is not persisted.
+        engine.setRepeatMode(saved.repeatMode)
+        engine.setShuffleEnabled(saved.shuffleMode)
+        val startPosition = if (rememberPosition) saved.playbackPosition else 0L
+        engine.setQueue(songs.map(::toQueueItem), index, startPosition)
+        if (saved.wasPlaying) {
+            playbackServiceController.start()
+            engine.play()
+            fadeIn()
         }
-        if (savedState.wasPlaying) {
-            player.playWhenReady = true
-        }
-
-        currentSongId = song.id
-        _playerState.update {
-            it.copy(
-                currentSong = song,
-                playbackQueue = playbackQueue.toList(),
-                queueIndex = validIndex,
-                playbackPosition = savedState.playbackPosition,
-                isPlaying = savedState.wasPlaying
-            )
-        }
-        Timber.d("restorePlaybackState: restored song='${song.title}' position=${savedState.playbackPosition} playing=${savedState.wasPlaying}")
+        Timber.d("restorePlaybackState: restored ${songs.size} songs at index=$index")
     }
 
-    private fun startProgressUpdateLoop() {
-        if (progressLoopJob?.isActive == true) return
-        progressLoopJob = scope.launch {
-            var lastSavedPosition = -1L
-            while (isActive) {
-                updatePlaybackPosition()
-                checkPlayProgress()
-                val pos = mediaController?.currentPosition ?: 0L
-                if (pos > 0 && kotlin.math.abs(pos - lastSavedPosition) >= 5000) {
-                    launch { playbackStateStore.savePlaybackPosition(pos) }
-                    lastSavedPosition = pos
-                }
-                kotlinx.coroutines.delay(1000)
-            }
-        }
+    private fun registerSongs(songs: List<Song>) {
+        songs.forEach { songLookup[it.id] = it }
     }
 
-    private fun stopProgressUpdateLoop() {
-        progressLoopJob?.cancel()
-        progressLoopJob = null
-    }
+    private fun toQueueItem(song: Song) = QueueItem(
+        id = song.id,
+        uri = song.path,
+        title = song.title,
+        artist = song.artist,
+        album = song.album,
+        artworkUri = song.albumArt
+    )
 
-    private fun resetPlayCountFlag() {
-        hasCountedPlay = false
-    }
+    private fun unknownSong(id: Long) = Song(
+        id = id,
+        title = "",
+        artist = "",
+        album = "",
+        duration = 0L,
+        path = "",
+        albumId = -1L,
+        artistId = -1L,
+        dateAdded = 0L,
+        dateModified = 0L,
+        size = 0L,
+        mimeType = ""
+    )
 
-    private fun checkPlayProgress() {
-        val player = mediaController ?: return
-        val duration = player.duration
-        val position = player.currentPosition
-
-        if (duration > 0 && position > 0 && !hasCountedPlay) {
-            val progress = position.toFloat() / duration.toFloat()
-            if (progress >= 0.5f) {
-                currentSongId?.let { songId ->
-                    scope.launch(Dispatchers.IO) {
-                        songRepository.incrementPlayCount(songId)
-                    }
-                    hasCountedPlay = true
-                }
-            }
-        }
-    }
-
-    private fun updatePlaybackPosition() {
-        val player = mediaController ?: return
-        _playerState.update {
-            it.copy(
-                playbackPosition = player.currentPosition,
-                duration = player.duration.takeIf { d -> d > 0 } ?: 0
-            )
-        }
-    }
-
-    private fun onSongEnded() {
-        when (_playerState.value.repeatMode) {
-            RepeatMode.ONE -> {
-                mediaController?.seekTo(0)
-                mediaController?.play()
-            }
-            RepeatMode.ALL -> {
-                skipToNextInternal(wrapAround = true)
-            }
-            RepeatMode.OFF -> {
-                if (currentIndex < playbackQueue.size - 1) {
-                    skipToNextInternal(wrapAround = false)
-                }
-            }
-        }
-    }
-
-    private suspend fun createMediaItem(song: Song): MediaItem {
-        val metadataBuilder = MediaMetadata.Builder()
-            .setTitle(song.title)
-            .setArtist(song.artist)
-            .setAlbumTitle(song.album)
-
-        song.albumArt?.let { artworkUri ->
-            val cacheKey = artworkUri
-            val cached = albumArtCache.get(cacheKey)
-            if (cached != null) {
-                metadataBuilder.setArtworkData(cached, MediaMetadata.PICTURE_TYPE_FRONT_COVER)
-            } else {
-                val artworkData = withContext(Dispatchers.IO) {
-                    try {
-                        val bitmap = loadAlbumArtBitmap(artworkUri, song.path)
-                        if (bitmap != null) {
-                            val data = bitmapToByteArray(bitmap)
-                            albumArtCache.put(cacheKey, data)
-                            data
-                        } else null
-                    } catch (e: Exception) {
-                        Timber.e(e, "createMediaItem: error loading artwork for ${song.title}")
-                        null
-                    }
-                }
-                if (artworkData != null) {
-                    metadataBuilder.setArtworkData(artworkData, MediaMetadata.PICTURE_TYPE_FRONT_COVER)
-                }
-            }
-        }
-
-        return MediaItem.Builder()
-            .setUri(song.path)
-            .setMediaMetadata(metadataBuilder.build())
-            .build()
-    }
-
-    private fun loadAlbumArtBitmap(uriString: String, songPath: String? = null): Bitmap? {
-        return try {
-            val uri = uriString.toUri()
-
-            // Try to load thumbnail using modern API (Android 10+)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                try {
-                    val thumbnail = context.contentResolver.loadThumbnail(
-                        uri,
-                        Size(512, 512),
-                        null
-                    )
-                    if (thumbnail != null) {
-                        return thumbnail
-                    }
-                } catch (e: Exception) {
-                    Timber.d("loadAlbumArtBitmap: thumbnail loading failed, falling back to embedded artwork")
-                }
-            }
-
-            // Fallback: try to open input stream (works on older Android versions)
-            try {
-                context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                    return BitmapFactory.decodeStream(inputStream)
-                }
-            } catch (e: Exception) {
-                Timber.d("loadAlbumArtBitmap: content resolver failed, trying embedded artwork")
-            }
-
-            // Final fallback: extract embedded artwork from audio file
-            songPath?.let { path ->
-                extractEmbeddedArtwork(path)
-            }
-        } catch (e: Exception) {
-            Timber.e(e, "loadAlbumArtBitmap: failed to load from $uriString")
-            null
-        }
-    }
-
-    private fun extractEmbeddedArtwork(filePath: String): Bitmap? {
-        return try {
-            val retriever = MediaMetadataRetriever()
-            retriever.setDataSource(filePath)
-            val art = retriever.embeddedPicture
-            retriever.release()
-            art?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
-        } catch (e: Exception) {
-            Timber.e(e, "extractEmbeddedArtwork: failed to extract artwork from $filePath")
-            null
-        }
-    }
-
-    private fun bitmapToByteArray(bitmap: Bitmap): ByteArray {
-        val maxSize = 512
-        val scaledBitmap = if (bitmap.width > maxSize || bitmap.height > maxSize) {
-            val scale = maxSize.toFloat() / maxOf(bitmap.width, bitmap.height)
-            Bitmap.createScaledBitmap(bitmap, (bitmap.width * scale).toInt(), (bitmap.height * scale).toInt(), true)
-        } else {
-            bitmap
-        }
-        
-        val outputStream = ByteArrayOutputStream()
-        scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 85, outputStream)
-        return outputStream.toByteArray()
-    }
+    // region PlayerRepository
 
     override fun playSong(song: Song, queue: List<Song>) {
         scope.launch {
-            val player = mediaController ?: return@launch
-
-            if (queue.isNotEmpty()) {
-                playbackQueue = queue.toMutableList()
-                currentIndex = queue.indexOf(song)
+            val items = if (queue.isNotEmpty()) {
+                queue
             } else {
-                if (!playbackQueue.contains(song)) {
-                    playbackQueue.add(song)
-                }
-                currentIndex = playbackQueue.indexOf(song)
+                // An empty queue means "play this song, keep whatever is already queued".
+                val existing = engine.state.value.queueIds.mapNotNull(songLookup::get)
+                if (existing.any { it.id == song.id }) existing else existing + song
             }
+            if (items.isEmpty()) return@launch
 
-            val mediaItem = createMediaItem(song)
-            player.setMediaItem(mediaItem)
-            player.prepare()
-            player.playWhenReady = true
+            registerSongs(items + song)
+            val startIndex = items.indexOfFirst { it.id == song.id }.coerceAtLeast(0)
 
-            currentSongId = song.id
-            hasCountedPlay = false
-
-            launch(Dispatchers.IO) {
-                songRepository.updateLastPlayedAt(song.id)
+            // Re-setting an identical queue would regenerate the shuffle order and lose the
+            // user's place in it, so only rebuild the timeline when it actually differs.
+            if (engine.state.value.queueIds == items.map { it.id }) {
+                engine.seekToIndex(startIndex)
+            } else {
+                engine.setQueue(items.map(::toQueueItem), startIndex)
             }
-
-            _playerState.update {
-                it.copy(
-                    currentSong = song,
-                    playbackQueue = playbackQueue.toList(),
-                    queueIndex = currentIndex,
-                    isPlaying = true
-                )
-            }
-
-            launch { playbackStateStore.saveQueue(playbackQueue.map { it.id }, currentIndex) }
+            playbackServiceController.start()
+            engine.play()
+            fadeIn()
         }
     }
 
     override fun playPause() {
-        val player = mediaController ?: return
-        if (player.isPlaying) {
-            Timber.d("playPause: pausing playback")
-            player.pause()
+        // 用 playWhenReady 而不是 isPlaying 判断：缓冲期间 isPlaying 是 false，但它并不是"暂停"，
+        // 那时按下的暂停键必须真的把播放意图关掉。
+        if (engine.state.value.playWhenReady) {
+            fadeOutThen { engine.pause() }
         } else {
-            Timber.d("playPause: resuming playback")
-            player.play()
-        }
-        scope.launch {
-            playbackStateStore.saveWasPlaying(player.isPlaying)
+            // Resuming is a fresh entry into playback: the queue may have been restored paused, in
+            // which case nothing has brought the service up yet. Pausing cannot need this — the only
+            // way to be playing at all is through a path below that already started the service.
+            playbackServiceController.start()
+            engine.play()
+            fadeIn()
         }
     }
 
     override fun seekTo(position: Long) {
-        val player = mediaController ?: return
-        Timber.d("seekTo: position=$position ms")
-        player.seekTo(position)
+        engine.seekTo(position)
         _playerState.update { it.copy(playbackPosition = position) }
     }
 
     override fun skipToNext() {
-        Timber.d("skipToNext: currentIndex=$currentIndex, queueSize=${playbackQueue.size}")
-        skipToNextInternal(wrapAround = _playerState.value.repeatMode == RepeatMode.ALL)
-    }
-
-    private fun skipToNextInternal(wrapAround: Boolean) {
-        if (playbackQueue.isEmpty()) return
-
-        val nextIndex = if (_playerState.value.shuffleMode) {
-            playbackQueue.indices.random()
-        } else {
-            currentIndex + 1
-        }
-
-        if (nextIndex < playbackQueue.size) {
-            playSongAtIndex(nextIndex)
-        } else if (wrapAround && nextIndex >= playbackQueue.size) {
-            playSongAtIndex(0)
-        }
+        engine.skipToNext()
     }
 
     override fun skipToPrevious() {
-        if (playbackQueue.isEmpty()) return
-
-        val prevIndex = if (_playerState.value.shuffleMode) {
-            playbackQueue.indices.random()
-        } else {
-            currentIndex - 1
-        }
-
-        if (prevIndex >= 0) {
-            playSongAtIndex(prevIndex)
-        } else if (_playerState.value.repeatMode == RepeatMode.ALL) {
-            playSongAtIndex(playbackQueue.size - 1)
-        }
-    }
-
-    private fun playSongAtIndex(index: Int) {
-        scope.launch {
-            val player = mediaController ?: return@launch
-            if (index !in playbackQueue.indices) return@launch
-
-            currentIndex = index
-            val song = playbackQueue[index]
-
-            val mediaItem = createMediaItem(song)
-            player.setMediaItem(mediaItem)
-            player.prepare()
-            player.playWhenReady = true
-
-            currentSongId = song.id
-            hasCountedPlay = false
-
-            launch(Dispatchers.IO) {
-                songRepository.updateLastPlayedAt(song.id)
-            }
-
-            _playerState.update {
-                it.copy(
-                    currentSong = song,
-                    queueIndex = index,
-                    isPlaying = true
-                )
-            }
-
-            launch { playbackStateStore.saveQueue(playbackQueue.map { it.id }, currentIndex) }
-        }
+        engine.skipToPrevious()
     }
 
     override fun setRepeatMode(repeatMode: RepeatMode) {
-        Timber.d("setRepeatMode: $repeatMode")
-        _playerState.update { it.copy(repeatMode = repeatMode) }
+        engine.setRepeatMode(repeatMode)
         scope.launch { playbackStateStore.saveRepeatMode(repeatMode) }
     }
 
     override fun setShuffleMode(shuffle: Boolean) {
-        Timber.d("setShuffleMode: $shuffle")
-        _playerState.update { it.copy(shuffleMode = shuffle) }
+        engine.setShuffleEnabled(shuffle)
         scope.launch { playbackStateStore.saveShuffleMode(shuffle) }
     }
 
     override fun addToQueue(song: Song) {
-        Timber.d("addToQueue: ${song.title}")
-        playbackQueue.add(song)
-        _playerState.update { it.copy(playbackQueue = playbackQueue.toList()) }
-        scope.launch { playbackStateStore.saveQueue(playbackQueue.map { it.id }, currentIndex) }
+        registerSongs(listOf(song))
+        engine.addToQueue(toQueueItem(song))
+        scope.launch { persistQueuePosition() }
     }
 
     override fun playNext(song: Song) {
-        Timber.d("playNext: ${song.title}, currentIndex=$currentIndex")
-        
-        if (playbackQueue.isEmpty() || currentIndex < 0) {
+        val currentIndex = engine.state.value.currentIndex
+        if (currentIndex < 0) {
             playSong(song)
             return
         }
-        
-        val insertIndex = currentIndex + 1
-        playbackQueue.add(insertIndex, song)
-        
-        _playerState.update { it.copy(playbackQueue = playbackQueue.toList()) }
-        scope.launch { playbackStateStore.saveQueue(playbackQueue.map { it.id }, currentIndex) }
+        registerSongs(listOf(song))
+        engine.insertNext(toQueueItem(song), currentIndex)
+        scope.launch { persistQueuePosition() }
     }
 
     override fun moveQueueItem(fromIndex: Int, toIndex: Int) {
-        if (fromIndex !in playbackQueue.indices || toIndex !in playbackQueue.indices) return
-        if (fromIndex == toIndex) return
-        
-        Timber.d("moveQueueItem: from=$fromIndex to=$toIndex, currentIndex=$currentIndex")
-        
-        val song = playbackQueue.removeAt(fromIndex)
-        playbackQueue.add(toIndex, song)
-        
-        when {
-            currentIndex == fromIndex -> {
-                currentIndex = toIndex
-            }
-            fromIndex < currentIndex && toIndex >= currentIndex -> {
-                currentIndex--
-            }
-            fromIndex > currentIndex && toIndex <= currentIndex -> {
-                currentIndex++
-            }
-        }
-        
-        _playerState.update { 
-            it.copy(
-                playbackQueue = playbackQueue.toList(),
-                queueIndex = currentIndex
-            )
-        }
-        scope.launch { playbackStateStore.saveQueue(playbackQueue.map { it.id }, currentIndex) }
+        engine.move(fromIndex, toIndex)
+        scope.launch { persistQueuePosition() }
     }
 
     override fun removeFromQueue(index: Int) {
-        if (index !in playbackQueue.indices) return
-
-        val player = mediaController ?: return
-        Timber.d("removeFromQueue: index=$index, currentIndex=$currentIndex")
-        playbackQueue.removeAt(index)
-        if (currentIndex > index) {
-            currentIndex--
-        } else if (currentIndex == index) {
-            if (playbackQueue.isNotEmpty()) {
-                playSongAtIndex(minOf(currentIndex, playbackQueue.size - 1))
-            } else {
-                Timber.d("removeFromQueue: queue is now empty, stopping playback")
-                player.stop()
-                _playerState.update { PlayerState() }
-                scope.launch { playbackStateStore.clear() }
-                return
-            }
-        }
-        _playerState.update { it.copy(playbackQueue = playbackQueue.toList()) }
-        scope.launch { playbackStateStore.saveQueue(playbackQueue.map { it.id }, currentIndex) }
+        engine.remove(index)
+        scope.launch { persistQueuePosition() }
     }
 
     override fun clearQueue() {
-        val player = mediaController ?: return
-        Timber.d("clearQueue: clearing queue with ${playbackQueue.size} items")
-        playbackQueue.clear()
-        currentIndex = -1
-        player.stop()
-        _playerState.update { PlayerState() }
+        engine.clear()
+        _playerState.value = PlayerState()
+        hadNonEmptyQueue = false
         scope.launch { playbackStateStore.clear() }
     }
 
     override fun getCurrentState(): PlayerState = _playerState.value
 
-    override fun setSongFavorite(songId: Long, isFavorite: Boolean) {
-        playbackQueue.indexOfFirst { it.id == songId }.takeIf { it >= 0 }?.let { index ->
-            playbackQueue[index] = playbackQueue[index].copy(isFavorite = isFavorite)
+    override fun setSleepTimer(minutes: Int) {
+        sleepTimerJob?.cancel()
+        if (minutes <= 0) {
+            _sleepTimerRemainingMs.value = null
+            return
         }
-        val current = _playerState.value.currentSong
-        if (current?.id == songId) {
-            _playerState.update { it.copy(currentSong = current.copy(isFavorite = isFavorite)) }
+
+        sleepTimerJob = scope.launch {
+            var remaining = minutes * 60_000L
+            _sleepTimerRemainingMs.value = remaining
+            while (remaining > 0) {
+                delay(SLEEP_TIMER_TICK_MS)
+                remaining -= SLEEP_TIMER_TICK_MS
+                _sleepTimerRemainingMs.value = remaining.coerceAtLeast(0L)
+            }
+            _sleepTimerRemainingMs.value = null
+            // 到点暂停而不是停止：醒来接着播，队列和进度都还在原处。同样走淡出，
+            // 睡着时被硬切一下比定时本身更容易把人吵醒。
+            if (engine.state.value.playWhenReady) fadeOutThen { engine.pause() }
         }
     }
 
-    fun release() {
-        mediaController?.removeListener(playerListener)
-        controllerFuture?.let {
-            if (!it.isDone) {
-                it.cancel(true)
+    override fun cancelSleepTimer() {
+        sleepTimerJob?.cancel()
+        sleepTimerJob = null
+        _sleepTimerRemainingMs.value = null
+    }
+
+    override fun setSongFavorite(songId: Long, isFavorite: Boolean) {
+        // songLookup first: the queue shown to the UI is rebuilt from it on every engine change,
+        // so updating only the current PlayerState would let the heart flip back a moment later.
+        songLookup[songId]?.let { songLookup[songId] = it.copy(isFavorite = isFavorite) }
+        _playerState.update { state ->
+            state.copy(
+                currentSong = state.currentSong?.withFavorite(songId, isFavorite),
+                playbackQueue = state.playbackQueue.map { it.withFavorite(songId, isFavorite) }
+            )
+        }
+    }
+
+    private fun Song.withFavorite(songId: Long, isFavorite: Boolean): Song =
+        if (id == songId) copy(isFavorite = isFavorite) else this
+
+    // endregion
+
+    // region 音量：ReplayGain 与淡入淡出
+
+    /**
+     * 决定当前曲目的基础音量。
+     *
+     * 标签读取要碰磁盘，所以先按"没有标签"把音量放到位，读完再修正 —— 起播不能等一次文件读。
+     * [volumeToken] 保证上一首读得慢的结果不会落到这一首上。
+     */
+    private fun applyTrackVolume(songId: Long?) {
+        val token = ++volumeToken
+
+        if (!replayGainEnabled) {
+            baseVolume = FULL_VOLUME
+            applyVolume()
+            return
+        }
+
+        val path = songId?.let { songLookup[it]?.path }
+        if (path.isNullOrBlank()) {
+            baseVolume = FULL_VOLUME
+            applyVolume()
+            return
+        }
+
+        baseVolume = FULL_VOLUME
+        applyVolume()
+        scope.launch(Dispatchers.IO) {
+            val gainDb = runCatching { audioMetadataRepository.getReplayGainDb(path) }.getOrNull()
+            if (token != volumeToken) return@launch
+            baseVolume = gainDb?.let(::volumeForGainDb) ?: FULL_VOLUME
+            applyVolume()
+        }
+    }
+
+    /**
+     * ReplayGain 的 dB 值换算成音量倍率：`10^(dB/20)`。
+     *
+     * 正增益会超过 1.0，而 `ExoPlayer.volume` 的上限就是 1.0，只能截断。所以这个开关对安静的歌
+     * 是"不处理"，对响的歌才是"压下来" —— 这正是音量均衡要的效果，反过来的话就得改 DSP 了。
+     */
+    private fun volumeForGainDb(gainDb: Float): Float =
+        10f.pow(gainDb / 20f).coerceIn(MIN_VOLUME, FULL_VOLUME)
+
+    private fun applyVolume() {
+        engine.setVolume(baseVolume * fadeFactor)
+    }
+
+    /** 从静音推上来。已经在淡入时重新开始，不会叠加。 */
+    private fun fadeIn() {
+        fadeJob?.cancel()
+        if (fadeDurationMs <= 0L) {
+            fadeFactor = FULL_VOLUME
+            applyVolume()
+            return
+        }
+        fadeJob = scope.launch {
+            val stepMs = (fadeDurationMs / FADE_STEPS).coerceAtLeast(1L)
+            for (step in 1..FADE_STEPS) {
+                fadeFactor = step / FADE_STEPS.toFloat()
+                applyVolume()
+                delay(stepMs)
             }
         }
-        mediaController?.release()
-        mediaController = null
-        supervisorJob.cancel()
+    }
+
+    /**
+     * 先压到静音，再执行 [action]。
+     *
+     * 渐变结束后把 [fadeFactor] 复位成 1 但不写回引擎：引擎停在 0 音量，下一次 [fadeIn] 才有
+     * 起点。若这里写回 1，暂停期间引擎会一直是满音量，恢复播放时就没有淡入。
+     */
+    private fun fadeOutThen(action: () -> Unit) {
+        fadeJob?.cancel()
+        if (fadeDurationMs <= 0L) {
+            fadeFactor = FULL_VOLUME
+            applyVolume()
+            action()
+            return
+        }
+        fadeJob = scope.launch {
+            val stepMs = (fadeDurationMs / FADE_STEPS).coerceAtLeast(1L)
+            for (step in FADE_STEPS downTo 0) {
+                fadeFactor = step / FADE_STEPS.toFloat()
+                applyVolume()
+                delay(stepMs)
+            }
+            action()
+            fadeFactor = FULL_VOLUME
+        }
+    }
+
+    // endregion
+
+    private companion object {
+        const val PROGRESS_INTERVAL_MS = 1_000L
+        const val POSITION_PERSIST_INTERVAL_MS = 5_000L
+
+        /** 睡眠定时器每秒减一次，界面上的倒计时才不会看起来卡住 */
+        const val SLEEP_TIMER_TICK_MS = 1_000L
+
+        /** Fraction of a track that must play before it counts as a play. */
+        const val PLAY_COUNT_THRESHOLD = 0.5f
+
+        /** How many songs a queue-end continuation appends at a time. */
+        const val CONTINUATION_SIZE = 20
+
+        /** 淡入淡出的步数。按 200ms 算每步 20ms，足够平滑又不至于每毫秒打一次播放器。 */
+        const val FADE_STEPS = 10
+
+        const val FULL_VOLUME = 1f
+
+        /** 静音。ReplayGain 换算出来的倍率也用它做下界，避免 0 与"被压到听不见"混在一起。 */
+        const val MIN_VOLUME = 0f
     }
 }

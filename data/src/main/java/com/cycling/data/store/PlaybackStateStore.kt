@@ -93,17 +93,6 @@ class PlaybackStateStore @Inject constructor(
         }
     }
 
-    suspend fun saveAll(state: SavedState) {
-        context.playerDataStore.edit { prefs ->
-            prefs[queueSongIdsKey] = Json.encodeToString(state.queueSongIds)
-            prefs[currentIndexKey] = state.currentIndex
-            prefs[playbackPositionKey] = state.playbackPosition
-            prefs[repeatModeKey] = state.repeatMode.name
-            prefs[shuffleModeKey] = state.shuffleMode
-            prefs[wasPlayingKey] = state.wasPlaying
-        }
-    }
-
     suspend fun clear() {
         context.playerDataStore.edit { it.clear() }
     }

@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+
 package com.cycling.presentation.ai
 
 import androidx.compose.foundation.layout.Box
@@ -10,19 +12,19 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -30,21 +32,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.cycling.core.ui.components.M3DetailTopAppBar
-import com.cycling.core.ui.theme.SpotifyColors
+import com.cycling.core.ui.components.M3SymbolIcon
+import com.cycling.core.ui.components.SymbolIconName
+import com.cycling.core.ui.theme.SonSizes
+import com.cycling.core.ui.theme.SonSpacing
+import com.cycling.domain.model.AiInfo
 import com.cycling.presentation.R
 import dev.jeziellago.compose.markdowntext.MarkdownText
 
-private val AiAccent = androidx.compose.ui.graphics.Color(0xFFBB86FC)
-
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AiInfoScreen(
     type: String,
@@ -66,35 +64,45 @@ fun AiInfoScreen(
 
     Scaffold(
         topBar = {
-            M3DetailTopAppBar(
-                title = stringResource(R.string.ai_title),
-                navigationIcon = Icons.AutoMirrored.Filled.ArrowBack,
-                navigationIconContentDescription = stringResource(R.string.ai_back_desc),
-                onNavigationClick = onNavigateBack,
+            TopAppBar(
+                title = {
+                    Text(
+                        text = stringResource(R.string.ai_title),
+                        style = MaterialTheme.typography.titleLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        M3SymbolIcon(
+                            name = SymbolIconName.ArrowBack,
+                            filled = true,
+                            contentDescription = stringResource(R.string.ai_back_desc)
+                        )
+                    }
+                },
                 actions = {
-                    Icon(
-                        imageVector = Icons.Default.AutoAwesome,
+                    M3SymbolIcon(
+                        name = SymbolIconName.AutoAwesome,
+                        filled = true,
                         contentDescription = null,
-                        tint = AiAccent,
-                        modifier = Modifier
-                            .padding(end = 12.dp)
-                            .size(22.dp)
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(SonSizes.iconSmall)
                     )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = SpotifyColors.Background,
-                    titleContentColor = SpotifyColors.TextPrimary,
-                    navigationIconContentColor = SpotifyColors.TextPrimary
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface
                 )
             )
-        },
-        containerColor = SpotifyColors.Background
+        }
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = SonSpacing.medium)
         ) {
             when {
                 !uiState.hasApiKey -> {
@@ -129,32 +137,32 @@ private fun ApiKeyRequiredContent(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(32.dp),
+            .padding(SonSpacing.extraLarge),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(
-                imageVector = Icons.Default.AutoAwesome,
+            M3SymbolIcon(
+                name = SymbolIconName.AutoAwesome,
+                filled = true,
                 contentDescription = null,
-                tint = AiAccent.copy(alpha = 0.6f),
-                modifier = Modifier.size(56.dp)
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(SonSizes.iconExtraLarge)
             )
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(SonSpacing.medium))
             Text(
                 text = stringResource(R.string.ai_need_api_key_title),
-                color = SpotifyColors.TextPrimary,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onSurface
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(SonSpacing.small))
             Text(
                 text = stringResource(R.string.ai_need_api_key_desc),
-                color = SpotifyColors.TextTertiary,
-                fontSize = 13.sp
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Spacer(modifier = Modifier.height(24.dp))
-            TextButton(onClick = onNavigateToApiKeyConfig) {
-                Text(stringResource(R.string.ai_go_to_settings), color = AiAccent)
+            Spacer(modifier = Modifier.height(SonSpacing.large))
+            Button(onClick = onNavigateToApiKeyConfig) {
+                Text(text = stringResource(R.string.ai_go_to_settings))
             }
         }
     }
@@ -165,18 +173,16 @@ private fun LoadingContent() {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(32.dp),
+            .padding(SonSpacing.extraLarge),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            CircularProgressIndicator(
-                color = AiAccent
-            )
-            Spacer(modifier = Modifier.height(16.dp))
+            LoadingIndicator()
+            Spacer(modifier = Modifier.height(SonSpacing.medium))
             Text(
                 text = stringResource(R.string.ai_loading),
-                color = SpotifyColors.TextSecondary,
-                fontSize = 13.sp
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -190,32 +196,31 @@ private fun ErrorContent(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(32.dp),
+            .padding(SonSpacing.extraLarge),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 text = stringResource(R.string.ai_error),
-                color = Color(0xFFFF6B6B),
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.error
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(SonSpacing.small))
             Text(
                 text = error,
-                color = SpotifyColors.TextTertiary,
-                fontSize = 13.sp
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            Spacer(modifier = Modifier.height(24.dp))
-            TextButton(onClick = onRetry) {
-                Icon(
-                    imageVector = Icons.Default.Refresh,
+            Spacer(modifier = Modifier.height(SonSpacing.large))
+            OutlinedButton(onClick = onRetry) {
+                M3SymbolIcon(
+                    name = SymbolIconName.Refresh,
+                    filled = true,
                     contentDescription = null,
-                    tint = AiAccent,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(SonSizes.buttonIcon)
                 )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(stringResource(R.string.ai_retry), color = AiAccent)
+                Spacer(modifier = Modifier.width(SonSpacing.small))
+                Text(text = stringResource(R.string.ai_retry))
             }
         }
     }
@@ -223,48 +228,49 @@ private fun ErrorContent(
 
 @Composable
 private fun InfoContent(
-    info: com.cycling.domain.model.AiInfo
+    info: AiInfo
 ) {
     val scrollState = rememberScrollState()
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 12.dp)
+            .padding(top = SonSpacing.mediumSmall)
             .verticalScroll(scrollState)
     ) {
-        // Title card
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
-                .padding(bottom = 16.dp)
-        ) {
-            Column {
-                Icon(
-                    imageVector = Icons.Default.AutoAwesome,
+        // 标题卡：抬升以与正文区分层级
+        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(SonSpacing.medium)) {
+                M3SymbolIcon(
+                    name = SymbolIconName.AutoAwesome,
+                    filled = true,
                     contentDescription = null,
-                    tint = AiAccent,
-                    modifier = Modifier.size(20.dp)
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(SonSizes.iconSmall)
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(SonSpacing.small))
                 Text(
                     text = info.title,
-                    color = SpotifyColors.TextPrimary,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
         }
 
-        // Content
-        MarkdownText(
-            markdown = info.content,
-            style = MaterialTheme.typography.bodyMedium.copy(
-                color = SpotifyColors.TextSecondary,
-                fontSize = 14.sp
-            )
-        )
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(SonSpacing.medium))
+
+        // 正文用填充卡承载；Markdown 自绘的引用/代码块样式由库决定，此处只统一文字色
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Box(modifier = Modifier.padding(SonSpacing.medium)) {
+                MarkdownText(
+                    markdown = info.content,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(SonSpacing.extraLarge))
     }
 }

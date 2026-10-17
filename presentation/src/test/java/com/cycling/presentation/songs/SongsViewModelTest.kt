@@ -5,16 +5,19 @@ import com.cycling.domain.model.Playlist
 import com.cycling.domain.model.Song
 import com.cycling.domain.model.SortOrder
 import com.cycling.domain.model.ViewMode
+import com.cycling.domain.model.ScanProgress
 import com.cycling.domain.repository.PlayerRepository
 import com.cycling.domain.repository.PlaylistRepository
 import com.cycling.domain.repository.SongRepository
 import com.cycling.domain.repository.SongsPreferencesRepository
+import com.cycling.domain.usecase.ScanMusicUseCase
 import com.cycling.presentation.util.TestDispatcherRule
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -37,6 +40,7 @@ class SongsViewModelTest {
     private lateinit var songsPreferencesRepository: SongsPreferencesRepository
     private lateinit var playlistRepository: PlaylistRepository
     private lateinit var playerRepository: PlayerRepository
+    private lateinit var scanMusicUseCase: ScanMusicUseCase
     private lateinit var viewModel: SongsViewModel
 
     private fun createSong(
@@ -95,6 +99,8 @@ class SongsViewModelTest {
         songsPreferencesRepository = mockk()
         playlistRepository = mockk()
         playerRepository = mockk()
+        scanMusicUseCase = mockk()
+        every { scanMusicUseCase.progress() } returns flowOf(ScanProgress())
 
         every { songRepository.getAllSongs() } returns flowOf(emptyList())
         every { playlistRepository.getAllPlaylists() } returns flowOf(emptyList())
@@ -110,7 +116,9 @@ class SongsViewModelTest {
         val songs = listOf(createSong(id = 1), createSong(id = 2))
         every { songRepository.getAllSongs() } returns flowOf(songs)
 
-        viewModel = SongsViewModel(songRepository, songsPreferencesRepository, playlistRepository, playerRepository)
+        viewModel = SongsViewModel(
+            songRepository, songsPreferencesRepository, playlistRepository, playerRepository, scanMusicUseCase
+        )
         advanceUntilIdle()
 
         assertEquals(songs, viewModel.uiState.value.songs)
@@ -122,7 +130,9 @@ class SongsViewModelTest {
     @Test
     fun `ToggleViewMode changes view mode from LIST to GRID`() = runTest {
         coEvery { songsPreferencesRepository.saveViewMode(any()) } returns Unit
-        viewModel = SongsViewModel(songRepository, songsPreferencesRepository, playlistRepository, playerRepository)
+        viewModel = SongsViewModel(
+            songRepository, songsPreferencesRepository, playlistRepository, playerRepository, scanMusicUseCase
+        )
         advanceUntilIdle()
 
         viewModel.handleIntent(SongsIntent.ToggleViewMode)
@@ -136,7 +146,9 @@ class SongsViewModelTest {
     fun `ToggleViewMode changes view mode from GRID to LIST`() = runTest {
         coEvery { songsPreferencesRepository.getViewMode() } returns ViewMode.GRID
         coEvery { songsPreferencesRepository.saveViewMode(any()) } returns Unit
-        viewModel = SongsViewModel(songRepository, songsPreferencesRepository, playlistRepository, playerRepository)
+        viewModel = SongsViewModel(
+            songRepository, songsPreferencesRepository, playlistRepository, playerRepository, scanMusicUseCase
+        )
         advanceUntilIdle()
 
         viewModel.handleIntent(SongsIntent.ToggleViewMode)
@@ -150,7 +162,9 @@ class SongsViewModelTest {
     fun `ChangeSortOrder with same order toggles ascending`() = runTest {
         coEvery { songsPreferencesRepository.saveSortOrder(any()) } returns Unit
         coEvery { songsPreferencesRepository.saveSortAscending(any()) } returns Unit
-        viewModel = SongsViewModel(songRepository, songsPreferencesRepository, playlistRepository, playerRepository)
+        viewModel = SongsViewModel(
+            songRepository, songsPreferencesRepository, playlistRepository, playerRepository, scanMusicUseCase
+        )
         advanceUntilIdle()
 
         viewModel.handleIntent(SongsIntent.ChangeSortOrder(SortOrder.TITLE))
@@ -164,7 +178,9 @@ class SongsViewModelTest {
     fun `ChangeSortOrder with different order sets ascending to true`() = runTest {
         coEvery { songsPreferencesRepository.saveSortOrder(any()) } returns Unit
         coEvery { songsPreferencesRepository.saveSortAscending(any()) } returns Unit
-        viewModel = SongsViewModel(songRepository, songsPreferencesRepository, playlistRepository, playerRepository)
+        viewModel = SongsViewModel(
+            songRepository, songsPreferencesRepository, playlistRepository, playerRepository, scanMusicUseCase
+        )
         advanceUntilIdle()
 
         viewModel.handleIntent(SongsIntent.ChangeSortOrder(SortOrder.ARTIST))
@@ -184,7 +200,9 @@ class SongsViewModelTest {
     @Test
     fun `SongClick emits NavigateToPlayer effect`() = runTest {
         val song = createSong(id = 123L)
-        viewModel = SongsViewModel(songRepository, songsPreferencesRepository, playlistRepository, playerRepository)
+        viewModel = SongsViewModel(
+            songRepository, songsPreferencesRepository, playlistRepository, playerRepository, scanMusicUseCase
+        )
         advanceUntilIdle()
 
         val effects = mutableListOf<SongsEffect>()
@@ -201,7 +219,9 @@ class SongsViewModelTest {
     @Test
     fun `ShowAddToPlaylistDialog updates state with song`() = runTest {
         val song = createSong(id = 1L)
-        viewModel = SongsViewModel(songRepository, songsPreferencesRepository, playlistRepository, playerRepository)
+        viewModel = SongsViewModel(
+            songRepository, songsPreferencesRepository, playlistRepository, playerRepository, scanMusicUseCase
+        )
         advanceUntilIdle()
 
         viewModel.handleIntent(SongsIntent.ShowAddToPlaylistDialog(song))
@@ -214,7 +234,9 @@ class SongsViewModelTest {
     @Test
     fun `DismissAddToPlaylistDialog clears state`() = runTest {
         val song = createSong(id = 1L)
-        viewModel = SongsViewModel(songRepository, songsPreferencesRepository, playlistRepository, playerRepository)
+        viewModel = SongsViewModel(
+            songRepository, songsPreferencesRepository, playlistRepository, playerRepository, scanMusicUseCase
+        )
         advanceUntilIdle()
 
         viewModel.handleIntent(SongsIntent.ShowAddToPlaylistDialog(song))
@@ -231,7 +253,9 @@ class SongsViewModelTest {
         val song = createSong(id = 1L)
         val playlistId = 10L
         coEvery { playlistRepository.addSongToPlaylist(playlistId, song.id) } returns Unit
-        viewModel = SongsViewModel(songRepository, songsPreferencesRepository, playlistRepository, playerRepository)
+        viewModel = SongsViewModel(
+            songRepository, songsPreferencesRepository, playlistRepository, playerRepository, scanMusicUseCase
+        )
         advanceUntilIdle()
 
         viewModel.handleIntent(SongsIntent.ShowAddToPlaylistDialog(song))
@@ -250,7 +274,9 @@ class SongsViewModelTest {
         val playlistId = 100L
         coEvery { playlistRepository.createPlaylist(playlistName) } returns playlistId
         coEvery { playlistRepository.addSongToPlaylist(playlistId, song.id) } returns Unit
-        viewModel = SongsViewModel(songRepository, songsPreferencesRepository, playlistRepository, playerRepository)
+        viewModel = SongsViewModel(
+            songRepository, songsPreferencesRepository, playlistRepository, playerRepository, scanMusicUseCase
+        )
         advanceUntilIdle()
 
         viewModel.handleIntent(SongsIntent.ShowAddToPlaylistDialog(song))
@@ -267,9 +293,42 @@ class SongsViewModelTest {
     fun `loadPlaylists updates state with playlists`() = runTest {
         val playlists = listOf(createPlaylist(id = 1), createPlaylist(id = 2))
         every { playlistRepository.getAllPlaylists() } returns flowOf(playlists)
-        viewModel = SongsViewModel(songRepository, songsPreferencesRepository, playlistRepository, playerRepository)
+        viewModel = SongsViewModel(
+            songRepository, songsPreferencesRepository, playlistRepository, playerRepository, scanMusicUseCase
+        )
         advanceUntilIdle()
 
         assertEquals(playlists, viewModel.uiState.value.playlists)
+    }
+
+    @Test
+    fun `ScanLibrary runs the scan`() = runTest {
+        coEvery { scanMusicUseCase.scan() } returns Result.failure(RuntimeException("no audio files"))
+        viewModel = SongsViewModel(
+            songRepository, songsPreferencesRepository, playlistRepository, playerRepository, scanMusicUseCase
+        )
+        advanceUntilIdle()
+
+        viewModel.handleIntent(SongsIntent.ScanLibrary)
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { scanMusicUseCase.scan() }
+    }
+
+    // 首次启动那次扫描是在这个 ViewModel 之外发起的，界面上的转圈必须跟着扫描器本身走，
+    // 否则用户在扫描过程中切到歌曲页，看到的是一个空列表加一个可以再按一次的按钮。
+    @Test
+    fun `isScanning follows the scanner, not a local flag`() = runTest {
+        val progress = MutableStateFlow(ScanProgress())
+        every { scanMusicUseCase.progress() } returns progress
+        viewModel = SongsViewModel(
+            songRepository, songsPreferencesRepository, playlistRepository, playerRepository, scanMusicUseCase
+        )
+        advanceUntilIdle()
+
+        progress.value = ScanProgress(isScanning = true)
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.isScanning)
     }
 }

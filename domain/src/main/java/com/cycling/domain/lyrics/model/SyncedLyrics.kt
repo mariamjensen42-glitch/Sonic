@@ -1,39 +1,19 @@
 package com.cycling.domain.lyrics.model
 
+import com.cycling.domain.lyrics.model.karaoke.KaraokeLine
+
 data class SyncedLyrics(
     val lines: List<ISyncedLine>,
     val title: String = "",
     val id: String = "0",
-    val artists: List<Artist>? = emptyList(),
 ) {
-    fun getCurrentFirstHighlightLineIndexByTime(time: Int): Int {
-        if (lines.isEmpty()) return 0
-
-        var low = 0
-        var high = lines.size - 1
-        var resultIndex = lines.size
-
-        while (low <= high) {
-            val mid = low + (high - low) / 2
-            val line = lines[mid]
-
-            if (line.start > time) {
-                resultIndex = mid
-                high = mid - 1
-            } else if (line.end < time) {
-                low = mid + 1
-            } else {
-                resultIndex = mid
-                high = mid - 1
-            }
-        }
-
-        return if (resultIndex < lines.size && time in lines[resultIndex].start..lines[resultIndex].end) {
-            resultIndex
-        } else {
-            low.coerceAtMost(lines.size)
-        }
-    }
+    /**
+     * 是否含逐字（卡拉 OK）行。
+     *
+     * 播放页据此决定逐字高亮还是整行高亮，缓存据此决定保留多久，歌词选择器据此标注「逐字 / 行级」。
+     */
+    val isWordByWord: Boolean
+        get() = lines.any { it is KaraokeLine }
 
     fun getCurrentAllHighlightLineIndicesByTime(time: Int): List<Int> {
         if (lines.isEmpty()) {

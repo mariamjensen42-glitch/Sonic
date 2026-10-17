@@ -70,6 +70,7 @@ fun PlaylistEntity.toDomain(): Playlist {
         dateAdded = dateAdded,
         dateModified = dateModified,
         numberOfSongs = 0,
-        albumArt = null
+        albumArt = null,
+        description = description
     )
 }

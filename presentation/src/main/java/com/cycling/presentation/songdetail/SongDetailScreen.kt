@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+
 package com.cycling.presentation.songdetail
 
 import android.content.ClipData
@@ -6,7 +8,6 @@ import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,58 +19,57 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Button
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil3.compose.AsyncImage
-import com.cycling.core.ui.components.M3FilledButton
+import com.cycling.core.ui.components.M3SymbolIcon
+import com.cycling.core.ui.components.SymbolIconName
+import com.cycling.core.ui.components.M3Artwork
+import com.cycling.core.ui.theme.SonSizes
+import com.cycling.core.ui.theme.SonLayout
+import com.cycling.core.ui.theme.SonSpacing
 import com.cycling.domain.model.AudioMetadata
 import com.cycling.domain.model.Song
 import com.cycling.presentation.R
+import com.cycling.presentation.components.PlaylistPickerDialog
 import com.cycling.presentation.components.formatDuration
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** 沉浸式头部的封面尺寸：无对应 token，这里集中一处命名，避免散落魔法值。 */
+
+/** 歌词折叠时显示的行数：大约一屏，再多就会把下面的信息区推得太远。 */
+private const val CollapsedLyricsLines = 12
+
 @Composable
 fun SongDetailScreen(
     onNavigateBack: () -> Unit,
@@ -85,7 +85,6 @@ fun SongDetailScreen(
         viewModel.uiEffect.collect { effect ->
             when (effect) {
                 is SongDetailEffect.NavigateToPlayer -> onNavigateToPlayer(effect.songId)
-                is SongDetailEffect.ShowAddToPlaylistDialog -> {}
                 is SongDetailEffect.ShowCopiedMessage -> {
                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                     val clip = ClipData.newPlainText("Song Path", context.getString(effect.message))
@@ -110,63 +109,72 @@ fun SongDetailScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            CenterAlignedTopAppBar(
                 title = {
                     Text(
-                        text = if (uiState.isEditMode) stringResource(R.string.song_detail_title_edit) else stringResource(R.string.song_detail_title_view),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface
+                        text = if (uiState.isEditMode) {
+                            stringResource(R.string.song_detail_title_edit)
+                        } else {
+                            stringResource(R.string.song_detail_title_view)
+                        },
+                        style = MaterialTheme.typography.titleLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = {
-                        if (uiState.isEditMode) {
-                            viewModel.handleIntent(SongDetailIntent.ExitEditMode)
-                        } else {
-                            onNavigateBack()
+                    IconButton(
+                        onClick = {
+                            if (uiState.isEditMode) {
+                                viewModel.handleIntent(SongDetailIntent.ExitEditMode)
+                            } else {
+                                onNavigateBack()
+                            }
                         }
-                    }) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    ) {
+                        M3SymbolIcon(
+                            name = SymbolIconName.ArrowBack,
+                            filled = true,
                             contentDescription = stringResource(R.string.song_detail_back_desc)
                         )
                     }
                 },
                 actions = {
                     if (uiState.isEditMode) {
-                        IconButton(
-                            onClick = { viewModel.handleIntent(SongDetailIntent.SaveChanges) },
-                            enabled = uiState.hasChanges && !uiState.isSaving
-                        ) {
-                            if (uiState.isSaving) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(24.dp),
-                                    color = MaterialTheme.colorScheme.primary,
-                                    strokeWidth = 2.dp
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Default.Check,
-                                    contentDescription = stringResource(R.string.song_detail_save_desc),
-                                    tint = if (uiState.hasChanges) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.onSurfaceVariant
+                        if (uiState.isSaving) {
+                            LoadingIndicator(modifier = Modifier.size(SonSizes.iconMedium))
+                        } else {
+                            IconButton(
+                                onClick = { viewModel.handleIntent(SongDetailIntent.SaveChanges) },
+                                enabled = uiState.hasChanges
+                            ) {
+                                M3SymbolIcon(
+                                    name = SymbolIconName.Check,
+                                    filled = true,
+                                    contentDescription = stringResource(R.string.song_detail_save_desc)
                                 )
                             }
                         }
                     } else {
                         uiState.song?.let {
-                            IconButton(onClick = { viewModel.handleIntent(SongDetailIntent.EnterEditMode) }) {
-                                Icon(
-                                    imageVector = Icons.Default.Edit,
+                            IconButton(
+                                onClick = { viewModel.handleIntent(SongDetailIntent.EnterEditMode) }
+                            ) {
+                                M3SymbolIcon(
+                                    name = SymbolIconName.Edit,
+                                    filled = true,
                                     contentDescription = stringResource(R.string.song_detail_edit_desc)
                                 )
                             }
                         }
                     }
-                }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface
+                )
             )
-        },
-        containerColor = MaterialTheme.colorScheme.background
+        }
     ) { paddingValues ->
         if (uiState.isLoading) {
             Box(
@@ -175,7 +183,7 @@ fun SongDetailScreen(
                     .padding(paddingValues),
                 contentAlignment = Alignment.Center
             ) {
-                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                LoadingIndicator()
             }
         } else {
             uiState.song?.let { song ->
@@ -194,6 +202,7 @@ fun SongDetailScreen(
                             onAlbumChange = { viewModel.handleIntent(SongDetailIntent.UpdateAlbum(it)) },
                             onYearChange = { viewModel.handleIntent(SongDetailIntent.UpdateYear(it)) },
                             onGenreChange = { viewModel.handleIntent(SongDetailIntent.UpdateGenre(it)) },
+                            onLyricsChange = { viewModel.handleIntent(SongDetailIntent.UpdateLyrics(it)) },
                             onSave = { viewModel.handleIntent(SongDetailIntent.SaveChanges) },
                             onCancel = { viewModel.handleIntent(SongDetailIntent.ExitEditMode) }
                         )
@@ -203,13 +212,24 @@ fun SongDetailScreen(
                             uiState = uiState,
                             onPlay = { viewModel.handleIntent(SongDetailIntent.PlaySong) },
                             onFavorite = { viewModel.handleIntent(SongDetailIntent.ToggleFavorite) },
-                            onAddToPlaylist = { viewModel.handleIntent(SongDetailIntent.AddToPlaylist) }
+                            onAddToPlaylist = { viewModel.handleIntent(SongDetailIntent.AddToPlaylist) },
+                            onEditLyrics = { viewModel.handleIntent(SongDetailIntent.EnterEditMode) }
                         )
                     }
                 }
             }
         }
     }
+
+    PlaylistPickerDialog(
+        visible = uiState.showAddToPlaylistDialog,
+        playlists = uiState.playlists,
+        onDismiss = { viewModel.handleIntent(SongDetailIntent.DismissAddToPlaylistDialog) },
+        onPlaylistSelected = { playlistId ->
+            viewModel.handleIntent(SongDetailIntent.AddToPlaylistTo(playlistId))
+        },
+        onCreateNewPlaylist = { viewModel.handleIntent(SongDetailIntent.CreatePlaylistAndAddSong(it)) }
+    )
 }
 
 @Composable
@@ -218,22 +238,134 @@ private fun ViewModeContent(
     uiState: SongDetailUiState,
     onPlay: () -> Unit,
     onFavorite: () -> Unit,
-    onAddToPlaylist: () -> Unit
+    onAddToPlaylist: () -> Unit,
+    onEditLyrics: () -> Unit
 ) {
-    SongHeader(song = song)
-
-    Spacer(modifier = Modifier.height(24.dp))
-
-    ActionButtons(
+    SongHeader(
+        song = song,
         isFavorite = uiState.isFavorite,
         onPlay = onPlay,
         onFavorite = onFavorite,
         onAddToPlaylist = onAddToPlaylist
     )
 
-    Spacer(modifier = Modifier.height(24.dp))
+    Spacer(modifier = Modifier.height(SonSpacing.large))
+
+    // 歌词排在信息之前：它是这首歌的内容，下面的时长、比特率只是文件属性。
+    LyricsSection(
+        lyrics = uiState.lyrics,
+        isLoading = uiState.isLoadingLyrics,
+        onEditLyrics = onEditLyrics
+    )
 
     SongInfoSection(song = song, audioMetadata = uiState.audioMetadata)
+
+    // 列表底部预留浮动导航栏空间。
+    Spacer(modifier = Modifier.height(SonLayout.bottomBarClearance))
+}
+
+/**
+ * 歌词只读区。
+ *
+ * 折叠而不是全展开：一首歌的歌词往往比页面其余部分加起来还长，默认摊开会把音频信息、文件信息
+ * 挤到很远的地方。阈值之外给一个展开按钮，两种需求都能满足。
+ */
+@Composable
+private fun LyricsSection(
+    lyrics: List<LyricsDisplayLine>,
+    isLoading: Boolean,
+    onEditLyrics: () -> Unit
+) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = SonLayout.screenMargin)
+    ) {
+        InfoSectionTitle(stringResource(R.string.song_detail_section_lyrics))
+
+        when {
+            lyrics.isEmpty() && isLoading -> Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = SonSpacing.large),
+                contentAlignment = Alignment.Center
+            ) {
+                LoadingIndicator(modifier = Modifier.size(SonSizes.iconLarge))
+            }
+
+            lyrics.isEmpty() -> EmptyLyrics(onEditLyrics = onEditLyrics)
+
+            else -> {
+                val visible = if (expanded) lyrics else lyrics.take(CollapsedLyricsLines)
+                Column(verticalArrangement = Arrangement.spacedBy(SonSpacing.mediumSmall)) {
+                    visible.forEach { line ->
+                        LyricsLine(line = line)
+                    }
+                }
+
+                if (lyrics.size > CollapsedLyricsLines) {
+                    TextButton(
+                        onClick = { expanded = !expanded },
+                        modifier = Modifier.padding(top = SonSpacing.small)
+                    ) {
+                        Text(
+                            text = stringResource(
+                                if (expanded) R.string.song_detail_lyrics_collapse
+                                else R.string.song_detail_lyrics_expand
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(SonSpacing.medium))
+    }
+}
+
+@Composable
+private fun LyricsLine(line: LyricsDisplayLine) {
+    Column(verticalArrangement = Arrangement.spacedBy(SonSpacing.extraSmall)) {
+        Text(
+            text = line.text,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        line.translation?.takeIf { it.isNotBlank() }?.let { translation ->
+            Text(
+                text = translation,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+/** 空态不是一句「暂无歌词」就完事：这里正是用户想补一份歌词时会看到的地方。 */
+@Composable
+private fun EmptyLyrics(onEditLyrics: () -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = stringResource(R.string.song_detail_lyrics_empty),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        TextButton(
+            onClick = onEditLyrics,
+            modifier = Modifier.padding(top = SonSpacing.extraSmall)
+        ) {
+            M3SymbolIcon(
+                name = SymbolIconName.Edit,
+                filled = true,
+                contentDescription = null,
+                modifier = Modifier.size(SonSizes.buttonIcon)
+            )
+            Spacer(modifier = Modifier.width(SonSpacing.small))
+            Text(text = stringResource(R.string.song_detail_lyrics_add))
+        }
+    }
 }
 
 @Composable
@@ -245,120 +377,105 @@ private fun EditModeContent(
     onAlbumChange: (String) -> Unit,
     onYearChange: (String) -> Unit,
     onGenreChange: (String) -> Unit,
+    onLyricsChange: (String) -> Unit,
     onSave: () -> Unit,
     onCancel: () -> Unit
 ) {
     Column(
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = SonLayout.screenMargin)
     ) {
-        Box(
+        M3Artwork(
+            artwork = song.albumArt,
+            placeholderIcon = SymbolIconName.MusicNote,
+            shape = MaterialTheme.shapes.extraLarge,
             modifier = Modifier
-                .size(180.dp)
+                .size(SonSizes.headerArtwork)
                 .align(Alignment.CenterHorizontally)
-                .padding(top = 16.dp)
-                .clip(RoundedCornerShape(12.dp)),
-            contentAlignment = Alignment.Center
+                .padding(top = SonSpacing.medium)
+        )
+
+        Spacer(modifier = Modifier.height(SonSpacing.large))
+
+        EditTextField(
+            label = stringResource(R.string.song_detail_title_label),
+            value = uiState.editedTitle,
+            onValueChange = onTitleChange,
+            placeholder = stringResource(R.string.song_detail_title_placeholder)
+        )
+
+        Spacer(modifier = Modifier.height(SonSpacing.medium))
+
+        EditTextField(
+            label = stringResource(R.string.song_detail_artist_label),
+            value = uiState.editedArtist,
+            onValueChange = onArtistChange,
+            placeholder = stringResource(R.string.song_detail_artist_placeholder)
+        )
+
+        Spacer(modifier = Modifier.height(SonSpacing.medium))
+
+        EditTextField(
+            label = stringResource(R.string.song_detail_album_label),
+            value = uiState.editedAlbum,
+            onValueChange = onAlbumChange,
+            placeholder = stringResource(R.string.song_detail_album_placeholder)
+        )
+
+        Spacer(modifier = Modifier.height(SonSpacing.medium))
+
+        EditTextField(
+            label = stringResource(R.string.song_detail_year_label),
+            value = uiState.editedYear,
+            onValueChange = onYearChange,
+            placeholder = stringResource(R.string.song_detail_year_placeholder),
+            keyboardType = KeyboardType.Number
+        )
+
+        Spacer(modifier = Modifier.height(SonSpacing.medium))
+
+        EditTextField(
+            label = stringResource(R.string.song_detail_genre_label),
+            value = uiState.editedGenre,
+            onValueChange = onGenreChange,
+            placeholder = stringResource(R.string.song_detail_genre_placeholder)
+        )
+
+        Spacer(modifier = Modifier.height(SonSpacing.medium))
+
+        OutlinedTextField(
+            value = uiState.editedLyrics,
+            onValueChange = onLyricsChange,
+            label = { Text(text = stringResource(R.string.song_detail_lyrics_label)) },
+            placeholder = { Text(text = stringResource(R.string.song_detail_lyrics_placeholder)) },
+            supportingText = { Text(text = stringResource(R.string.song_detail_lyrics_hint)) },
+            minLines = 6,
+            maxLines = 14,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(SonSpacing.large))
+
+        Button(
+            onClick = onSave,
+            modifier = Modifier.fillMaxWidth(),
+            enabled = uiState.hasChanges && !uiState.isSaving
         ) {
-            if (song.albumArt != null) {
-                AsyncImage(
-                    model = song.albumArt,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.MusicNote,
-                        contentDescription = null,
-                        modifier = Modifier.size(80.dp),
-                        tint = Color(0xFFFF453A)
-                    )
-                }
-            }
+            Text(text = if (uiState.isSaving) stringResource(R.string.song_detail_saving) else stringResource(R.string.song_detail_save))
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(SonSpacing.mediumSmall))
 
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
+        TextButton(
+            onClick = onCancel,
+            modifier = Modifier.fillMaxWidth()
         ) {
-            EditTextField(
-                label = stringResource(R.string.song_detail_title_label),
-                value = uiState.editedTitle,
-                onValueChange = onTitleChange,
-                placeholder = stringResource(R.string.song_detail_title_placeholder)
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            EditTextField(
-                label = stringResource(R.string.song_detail_artist_label),
-                value = uiState.editedArtist,
-                onValueChange = onArtistChange,
-                placeholder = stringResource(R.string.song_detail_artist_placeholder)
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            EditTextField(
-                label = stringResource(R.string.song_detail_album_label),
-                value = uiState.editedAlbum,
-                onValueChange = onAlbumChange,
-                placeholder = stringResource(R.string.song_detail_album_placeholder)
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            EditTextField(
-                label = stringResource(R.string.song_detail_year_label),
-                value = uiState.editedYear,
-                onValueChange = onYearChange,
-                placeholder = stringResource(R.string.song_detail_year_placeholder),
-                keyboardType = KeyboardType.Number
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            EditTextField(
-                label = stringResource(R.string.song_detail_genre_label),
-                value = uiState.editedGenre,
-                onValueChange = onGenreChange,
-                placeholder = stringResource(R.string.song_detail_genre_placeholder)
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            M3FilledButton(
-                onClick = onSave,
-                modifier = Modifier.fillMaxWidth(),
-                enabled = uiState.hasChanges && !uiState.isSaving
-            ) {
-                Text(text = if (uiState.isSaving) stringResource(R.string.song_detail_saving) else stringResource(R.string.song_detail_save))
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            TextButton(
-                onClick = onCancel,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = stringResource(R.string.song_detail_cancel),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Spacer(modifier = Modifier.height(32.dp))
+            Text(text = stringResource(R.string.song_detail_cancel))
         }
+
+        Spacer(modifier = Modifier.height(SonSpacing.extraLarge))
     }
 }
 
@@ -375,16 +492,8 @@ private fun EditTextField(
         onValueChange = onValueChange,
         label = { Text(text = label) },
         placeholder = { Text(text = placeholder) },
-        modifier = Modifier.fillMaxWidth(),
-        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
         singleLine = true,
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = MaterialTheme.colorScheme.primary,
-            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
-            focusedLabelColor = MaterialTheme.colorScheme.primary,
-            cursorColor = MaterialTheme.colorScheme.primary
-        ),
-        shape = RoundedCornerShape(12.dp)
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType)
     )
 }
 
@@ -401,7 +510,7 @@ private fun DiscardChangesDialog(
             TextButton(onClick = onDiscard) {
                 Text(
                     text = stringResource(R.string.song_detail_discard),
-                    color = Color(0xFFFF453A)
+                    color = MaterialTheme.colorScheme.error
                 )
             }
         },
@@ -414,122 +523,90 @@ private fun DiscardChangesDialog(
 }
 
 @Composable
-private fun SongHeader(song: Song) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Box(
-            modifier = Modifier
-                .size(240.dp)
-                .clip(RoundedCornerShape(12.dp)),
-            contentAlignment = Alignment.Center
-        ) {
-            if (song.albumArt != null) {
-                AsyncImage(
-                    model = song.albumArt,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.MusicNote,
-                        contentDescription = null,
-                        modifier = Modifier.size(100.dp),
-                        tint = Color(0xFFFF453A)
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text(
-            text = song.title,
-            style = MaterialTheme.typography.headlineSmall,
-            color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            fontWeight = FontWeight.Bold
-        )
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        Text(
-            text = song.artist,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.primary
-        )
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        Text(
-            text = song.album,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-@Composable
-private fun ActionButtons(
+private fun SongHeader(
+    song: Song,
     isFavorite: Boolean,
     onPlay: () -> Unit,
     onFavorite: () -> Unit,
     onAddToPlaylist: () -> Unit
 ) {
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(horizontal = SonLayout.screenMargin, vertical = SonSpacing.large),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        M3FilledButton(
-            onClick = onPlay,
-            icon = Icons.Default.PlayArrow,
-            modifier = Modifier.weight(1f)
-        ) {
-            Text(text = stringResource(R.string.song_detail_play))
-        }
+        M3Artwork(
+            artwork = song.albumArt,
+            placeholderIcon = SymbolIconName.MusicNote,
+            shape = MaterialTheme.shapes.extraLarge,
+            modifier = Modifier.size(SonSizes.headerArtwork)
+        )
 
-        IconButton(
-            onClick = onFavorite,
-            modifier = Modifier
-                .size(48.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(
-                    if (isFavorite) Color(0xFFFF453A).copy(alpha = 0.1f)
-                    else MaterialTheme.colorScheme.surfaceVariant
+        Spacer(modifier = Modifier.height(SonSpacing.large))
+
+        Text(
+            text = song.title,
+            style = MaterialTheme.typography.headlineMediumEmphasized,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(SonSpacing.extraSmall))
+
+        Text(
+            text = song.artist,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+
+        Spacer(modifier = Modifier.height(SonSpacing.extraSmall))
+
+        Text(
+            text = song.album,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+
+        Spacer(modifier = Modifier.height(SonSpacing.large))
+
+        // 主动作 + 次要动作并排一行，取代原先"居中 FAB + 下一行图标按钮"的堆叠。
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(SonSpacing.small),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Button(onClick = onPlay) {
+                M3SymbolIcon(
+                    name = SymbolIconName.PlayArrow,
+                    filled = true,
+                    contentDescription = null,
+                    modifier = Modifier.size(SonSizes.buttonIcon)
                 )
-        ) {
-            Icon(
-                imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                contentDescription = if (isFavorite) stringResource(R.string.player_unfavorite_desc) else stringResource(R.string.player_favorite_desc),
-                tint = if (isFavorite) Color(0xFFFF453A) else MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
+                Spacer(modifier = Modifier.width(SonSpacing.small))
+                Text(text = stringResource(R.string.song_detail_play))
+            }
 
-        IconButton(
-            onClick = onAddToPlaylist,
-            modifier = Modifier
-                .size(48.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.PlaylistAdd,
-                contentDescription = stringResource(R.string.song_detail_add_to_playlist_desc),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            FilledTonalIconButton(onClick = onFavorite) {
+                M3SymbolIcon(
+                    name = SymbolIconName.Favorite,
+                    filled = isFavorite,
+                    contentDescription = if (isFavorite) stringResource(R.string.player_unfavorite_desc) else stringResource(R.string.player_favorite_desc)
+                )
+            }
+
+            FilledTonalIconButton(onClick = onAddToPlaylist) {
+                M3SymbolIcon(
+                    name = SymbolIconName.PlaylistAdd,
+                    filled = true,
+                    contentDescription = stringResource(R.string.song_detail_add_to_playlist_desc)
+                )
+            }
         }
     }
 }
@@ -539,16 +616,9 @@ private fun SongInfoSection(song: Song, audioMetadata: AudioMetadata?) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
+            .padding(horizontal = SonLayout.screenMargin)
     ) {
-        Text(
-            text = stringResource(R.string.song_detail_section_basic),
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onBackground,
-            fontWeight = FontWeight.SemiBold
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
+        InfoSectionTitle(stringResource(R.string.song_detail_section_basic))
 
         InfoItem(label = stringResource(R.string.song_detail_duration), value = formatDuration(song.duration))
         InfoItem(label = stringResource(R.string.song_detail_format), value = getFormatFromMimeType(song.mimeType, stringResource(R.string.song_detail_unknown)))
@@ -566,20 +636,13 @@ private fun SongInfoSection(song: Song, audioMetadata: AudioMetadata?) {
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(SonSpacing.medium))
 
-        Text(
-            text = stringResource(R.string.song_detail_section_audio),
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onBackground,
-            fontWeight = FontWeight.SemiBold
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
+        InfoSectionTitle(stringResource(R.string.song_detail_section_audio))
 
         val bitrate = audioMetadata?.bitrate ?: song.bitrate
         InfoItem(label = stringResource(R.string.song_detail_bitrate), value = if (bitrate > 0) "$bitrate kbps" else stringResource(R.string.song_detail_unknown))
-        
+
         audioMetadata?.let { metadata ->
             if (metadata.sampleRate > 0) {
                 InfoItem(label = stringResource(R.string.song_detail_sample_rate), value = "${metadata.sampleRate} Hz")
@@ -592,33 +655,29 @@ private fun SongInfoSection(song: Song, audioMetadata: AudioMetadata?) {
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(SonSpacing.medium))
 
-        Text(
-            text = stringResource(R.string.song_detail_section_file),
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onBackground,
-            fontWeight = FontWeight.SemiBold
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
+        InfoSectionTitle(stringResource(R.string.song_detail_section_file))
 
         InfoItem(label = stringResource(R.string.song_detail_added_date), value = formatDate(song.dateAdded, stringResource(R.string.song_detail_unknown)))
         InfoItem(label = stringResource(R.string.song_detail_modified_date), value = formatDate(song.dateModified, stringResource(R.string.song_detail_unknown)))
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(SonSpacing.medium))
 
-        Text(
-            text = stringResource(R.string.song_detail_section_path),
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onBackground,
-            fontWeight = FontWeight.SemiBold
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
+        InfoSectionTitle(stringResource(R.string.song_detail_section_path))
 
         PathItem(path = song.path)
     }
+}
+
+@Composable
+private fun InfoSectionTitle(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleMediumEmphasized,
+        color = MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.padding(bottom = SonLayout.sectionTitleGap)
+    )
 }
 
 @Composable
@@ -626,7 +685,7 @@ private fun InfoItem(label: String, value: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .padding(vertical = SonSpacing.small),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(
@@ -644,8 +703,8 @@ private fun InfoItem(label: String, value: String) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(0.5.dp)
-            .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+            .height(1.dp)
+            .background(MaterialTheme.colorScheme.outlineVariant)
     )
 }
 
@@ -654,7 +713,7 @@ private fun PathItem(path: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .padding(vertical = SonSpacing.small),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
@@ -664,7 +723,7 @@ private fun PathItem(path: String) {
             modifier = Modifier.weight(1f)
         )
 
-        Spacer(modifier = Modifier.width(8.dp))
+        Spacer(modifier = Modifier.width(SonSpacing.small))
 
         val context = LocalContext.current
         TextButton(
@@ -674,12 +733,12 @@ private fun PathItem(path: String) {
                 clipboard.setPrimaryClip(clip)
             }
         ) {
-            Icon(
-                imageVector = Icons.Default.ContentCopy,
-                contentDescription = stringResource(R.string.song_detail_copy_desc),
-                modifier = Modifier.size(16.dp)
+            M3SymbolIcon(
+                name = SymbolIconName.ContentCopy,
+                filled = true,
+                contentDescription = null
             )
-            Spacer(modifier = Modifier.width(4.dp))
+            Spacer(modifier = Modifier.width(SonSpacing.small))
             Text(stringResource(R.string.song_detail_copy))
         }
     }

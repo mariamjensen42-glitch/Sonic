@@ -5,6 +5,7 @@ import com.cycling.data.repository.AlbumRepositoryImpl
 import com.cycling.data.repository.ArtistRepositoryImpl
 import com.cycling.data.repository.AudioMetadataRepositoryImpl
 import com.cycling.data.repository.ExcludedFolderRepositoryImpl
+import com.cycling.data.repository.LibraryTransferRepositoryImpl
 import com.cycling.data.repository.LyricsRepositoryImpl
 import com.cycling.data.repository.MusicScannerRepositoryImpl
 import com.cycling.data.repository.PlaylistRepositoryImpl
@@ -17,6 +18,7 @@ import com.cycling.domain.repository.AlbumRepository
 import com.cycling.domain.repository.ArtistRepository
 import com.cycling.domain.repository.AudioMetadataRepository
 import com.cycling.domain.repository.ExcludedFolderRepository
+import com.cycling.domain.repository.LibraryTransferRepository
 import com.cycling.domain.repository.LyricsRepository
 import com.cycling.domain.repository.MusicScannerRepository
 import com.cycling.domain.repository.PlaylistRepository
@@ -105,4 +107,10 @@ abstract class RepositoryModule {
     abstract fun bindSettingsRepository(
         settingsRepositoryImpl: SettingsRepositoryImpl
     ): SettingsRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindLibraryTransferRepository(
+        libraryTransferRepositoryImpl: LibraryTransferRepositoryImpl
+    ): LibraryTransferRepository
 }

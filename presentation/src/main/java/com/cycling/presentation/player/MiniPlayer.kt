@@ -1,224 +1,144 @@
+@file:OptIn(ExperimentalMaterial3ExpressiveApi::class)
+
 package com.cycling.presentation.player
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearWavyProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.DpSize
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import coil3.compose.AsyncImage
-import com.cycling.core.ui.theme.SpotifyColors
+import com.cycling.core.ui.components.M3SymbolIcon
+import com.cycling.core.ui.components.SymbolIconName
+import com.cycling.core.ui.components.M3Artwork
+import com.cycling.core.ui.theme.SonSizes
+import com.cycling.core.ui.theme.SonSpacing
 import com.cycling.domain.model.Song
 import com.cycling.presentation.R
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * 迷你播放器。
+ *
+ * 悬浮于底部导航栏之上的一块高圆角表面：左封面、中信息、右控制，
+ * 进度用 Expressive 的波浪线性指示器贯穿底部 —— 不再用零高度 Slider 硬凑。
+ */
 @Composable
 fun MiniPlayer(
     currentSong: Song?,
     isPlaying: Boolean,
     playbackPosition: Long,
     duration: Long,
+    isFavorite: Boolean,
     onPlayPause: () -> Unit,
+    onToggleFavorite: () -> Unit,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    backgroundColor: Color = SpotifyColors.Surface
+    modifier: Modifier = Modifier
 ) {
     if (currentSong == null) return
 
-    val songProgress = if (duration > 0) {
-        playbackPosition.toFloat() / duration.toFloat()
-    } else 0f
+    val progress = if (duration > 0) {
+        (playbackPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
+    } else {
+        0f
+    }
 
-    var isLiked by remember { mutableStateOf(false) }
-
-    Column(
+    Surface(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 13.dp, vertical = 4.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(backgroundColor)
-            .clipToBounds()
+            .padding(
+                start = SonSpacing.medium,
+                end = SonSpacing.medium,
+                top = SonSpacing.extraSmall,
+                bottom = SonSpacing.extraSmall
+            )
+            .clickable(onClick = onClick),
+        shape = MaterialTheme.shapes.extraLarge,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurface
     ) {
-        Row(
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 4.dp)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = onClick
-                )
-        ) {
+        Column {
             Row(
-                horizontalArrangement = Arrangement.Start,
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.widthIn(max = 260.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        start = SonSpacing.small,
+                        end = SonSpacing.small,
+                        top = SonSpacing.small,
+                        bottom = SonSpacing.extraSmall
+                    ),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // Cover art (42dp, 6dp rounded)
-                Box(
-                    modifier = Modifier
-                        .size(42.dp)
-                        .padding(end = 10.dp)
-                        .clip(RoundedCornerShape(6.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (currentSong.albumArt != null) {
-                        AsyncImage(
-                            model = currentSong.albumArt,
-                            contentDescription = null,
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(SpotifyColors.SurfaceVariant),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.MusicNote,
-                                contentDescription = null,
-                                modifier = Modifier.size(22.dp),
-                                tint = SpotifyColors.TextTertiary
-                            )
-                        }
-                    }
-                }
+                M3Artwork(
+                    artwork = currentSong.albumArt,
+                    placeholderIcon = SymbolIconName.MusicNote,
+                    shape = MaterialTheme.shapes.small,
+                    modifier = Modifier.size(SonSizes.thumbnail)
+                )
 
-                // Title + Artist
-                Column(
-                    modifier = Modifier.widthIn(max = 200.dp)
-                ) {
+                Spacer(modifier = Modifier.width(SonSpacing.mediumSmall))
+
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = currentSong.title,
-                        color = SpotifyColors.TextPrimary,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleSmallEmphasized,
+                        color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         text = currentSong.artist,
-                        color = SpotifyColors.TextSecondary,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
+
+                IconButton(onClick = onToggleFavorite) {
+                    M3SymbolIcon(
+                        name = SymbolIconName.Favorite,
+                        filled = isFavorite,
+                        contentDescription = stringResource(
+                            if (isFavorite) R.string.player_unfavorite_desc
+                            else R.string.player_favorite_desc
+                        ),
+                        modifier = Modifier.size(SonSizes.iconSmall)
+                    )
+                }
+
+                FilledIconButton(onClick = onPlayPause) {
+                    M3SymbolIcon(
+                        name = if (isPlaying) SymbolIconName.Pause else SymbolIconName.PlayArrow,
+                        filled = true,
+                        contentDescription = stringResource(
+                            if (isPlaying) R.string.player_pause_desc else R.string.player_play_desc
+                        ),
+                        modifier = Modifier.size(SonSizes.iconMedium)
+                    )
+                }
             }
 
-            // Like + Play/Pause
-            Row(
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.width(70.dp)
-            ) {
-                // Like button
-                Icon(
-                    modifier = Modifier
-                        .size(22.dp)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) {
-                            isLiked = !isLiked
-                        },
-                    painter = if (isLiked) painterResource(id = R.drawable.added)
-                    else painterResource(id = R.drawable.ic_add),
-                    tint = SpotifyColors.TextPrimary,
-                    contentDescription = if (isLiked) stringResource(R.string.player_unfavorite_desc) else stringResource(R.string.player_favorite_desc)
-                )
-
-                // Play/Pause button
-                Icon(
-                    painter = if (isPlaying) painterResource(id = R.drawable.ic_playing) else painterResource(id = R.drawable.play_svgrepo_com),
-                    contentDescription = if (isPlaying) stringResource(R.string.player_pause_desc) else stringResource(R.string.player_play_desc),
-                    tint = SpotifyColors.TextPrimary,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .padding(horizontal = 5.dp)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                            onClick = onPlayPause
-                        )
-                )
-            }
-        }
-
-        // Progress bar — Box with 0dp height so slider overlays without taking space
-        val sliderColors = SliderDefaults.colors(
-            thumbColor = Color.White,
-            activeTrackColor = Color.White,
-            inactiveTrackColor = Color.Gray
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(0.dp)
-        ) {
-            Slider(
-                value = songProgress,
-                onValueChange = {},
-                valueRange = 0f..1f,
-                colors = sliderColors,
-                track = { sliderState ->
-                    SliderDefaults.Track(
-                        sliderState = sliderState,
-                        modifier = Modifier.height(1.dp),
-                        colors = sliderColors,
-                        drawStopIndicator = null,
-                        thumbTrackGapSize = (-4).dp
-                    )
-                },
-                thumb = {
-                    SliderDefaults.Thumb(
-                        interactionSource = remember { MutableInteractionSource() },
-                        modifier = Modifier,
-                        colors = sliderColors,
-                        thumbSize = DpSize(0.dp, 0.dp)
-                    )
-                },
-                modifier = Modifier.fillMaxWidth()
+            LinearWavyProgressIndicator(
+                progress = { progress },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = SonSpacing.medium)
+                    .height(SonSpacing.small)
             )
         }
     }

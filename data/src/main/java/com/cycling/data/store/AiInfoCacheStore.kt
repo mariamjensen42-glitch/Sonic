@@ -4,8 +4,12 @@ import com.cycling.data.local.dao.AiInfoCacheDao
 import com.cycling.data.local.entity.AiInfoCacheEntity
 import com.cycling.domain.model.AiInfo
 import com.cycling.domain.model.AiInfoType
+import com.cycling.domain.model.Song
+import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
+
+private const val FAVORITE_PLAYLIST_DESCRIPTION_CACHE_KEY = "FAVORITE_PLAYLIST_DESCRIPTION"
 
 @Singleton
 class AiInfoCacheStore @Inject constructor(
@@ -51,6 +55,32 @@ class AiInfoCacheStore @Inject constructor(
     suspend fun saveAlbumInfo(albumTitle: String, artist: String, info: AiInfo) {
         val cacheKey = buildAlbumCacheKey(albumTitle, artist)
         save(cacheKey, info)
+    }
+
+    suspend fun getFavoritePlaylistDescription(songs: List<Song>): String? {
+        val entity = aiInfoCacheDao.getByCacheKey(FAVORITE_PLAYLIST_DESCRIPTION_CACHE_KEY) ?: return null
+        val signature = buildFavoriteSongsSignature(songs)
+        if (entity.type != AiInfoType.PLAYLIST_DESCRIPTION.name || entity.title != signature) return null
+        return entity.content.takeIf { it.isNotBlank() }
+    }
+
+    suspend fun saveFavoritePlaylistDescription(songs: List<Song>, description: String) {
+        val signature = buildFavoriteSongsSignature(songs)
+        save(
+            FAVORITE_PLAYLIST_DESCRIPTION_CACHE_KEY,
+            AiInfo(
+                type = AiInfoType.PLAYLIST_DESCRIPTION,
+                title = signature,
+                content = description
+            )
+        )
+    }
+
+    private fun buildFavoriteSongsSignature(songs: List<Song>): String {
+        val input = songs.joinToString(separator = "\n") { "${it.id}\u0000${it.title}\u0000${it.artist}" }
+        return MessageDigest.getInstance("SHA-256")
+            .digest(input.toByteArray(Charsets.UTF_8))
+            .joinToString(separator = "") { byte -> byte.toUByte().toString(16).padStart(2, '0') }
     }
 
     private suspend fun getByCacheKey(cacheKey: String): AiInfo? {

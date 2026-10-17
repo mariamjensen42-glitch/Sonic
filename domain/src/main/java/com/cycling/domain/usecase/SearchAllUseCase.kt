@@ -21,9 +21,10 @@ class SearchAllUseCase @Inject constructor(
         return combine(
             songRepository.searchSongs(query),
             albumRepository.searchAlbums(query),
-            artistRepository.searchArtists(query)
-        ) { songs, albums, artists ->
-            SearchResult(songs, albums, artists)
+            artistRepository.searchArtists(query),
+            songRepository.searchLyrics(query)
+        ) { songs, albums, artists, lyricsMatches ->
+            SearchResult(songs, albums, artists, lyricsMatches)
         }
     }
 }

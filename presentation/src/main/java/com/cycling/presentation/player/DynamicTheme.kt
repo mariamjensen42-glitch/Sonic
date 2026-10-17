@@ -1,91 +1,73 @@
 package com.cycling.presentation.player
 
-import android.graphics.Bitmap
+import androidx.compose.material3.ColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
-import androidx.palette.graphics.Palette
+import androidx.compose.ui.platform.LocalContext
 import coil3.ImageLoader
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
 import coil3.request.allowHardware
 import coil3.toBitmap
+import com.cycling.core.ui.theme.ArtColorExtractor
+import com.cycling.core.ui.theme.sonColorSchemeOf
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import timber.log.Timber
 
-data class DominantColors(
-    val primary: Color,
-    val secondary: Color,
-    val tertiary: Color
-)
-
-suspend fun extractDominantColors(bitmap: Bitmap): DominantColors {
-    return withContext(Dispatchers.Default) {
-        val palette = Palette.from(bitmap)
-            .maximumColorCount(16)
-            .generate()
-
-        val vibrantSwatch = palette.vibrantSwatch
-        val darkVibrantSwatch = palette.darkVibrantSwatch
-        val mutedSwatch = palette.mutedSwatch
-        val darkMutedSwatch = palette.darkMutedSwatch
-        val lightVibrantSwatch = palette.lightVibrantSwatch
-
-        val primary = vibrantSwatch?.let { Color(it.rgb) }
-            ?: darkVibrantSwatch?.let { Color(it.rgb) }
-            ?: mutedSwatch?.let { Color(it.rgb) }
-            ?: Color(0xFF1a1a2e)
-
-        val secondary = darkVibrantSwatch?.let { Color(it.rgb) }
-            ?: darkMutedSwatch?.let { Color(it.rgb) }
-            ?: Color(0xFF16213e)
-
-        val tertiary = mutedSwatch?.let { Color(it.rgb) }
-            ?: lightVibrantSwatch?.let { Color(it.rgb) }
-            ?: Color(0xFF0f0f23)
-
-        DominantColors(primary, secondary, tertiary)
+/**
+ * 封面派生的主题。
+ *
+ * [seed] 是封面提取出的种子色，[colorScheme] 是由它展开的完整配色方案。
+ * 两者都为空时表示不用封面换肤，主题回落到品牌色。
+ */
+@Immutable
+data class SonArtworkTheme(
+    val seed: Color? = null,
+    val colorScheme: ColorScheme? = null
+) {
+    companion object {
+        val None = SonArtworkTheme()
     }
 }
 
+/**
+ * 从当前封面提取种子色并生成配色方案。
+ *
+ * 整个流程（Coil 解码 → Palette 取色 → HCT 色调映射）都在后台线程完成：
+ * 色调映射涉及上千次颜色空间迭代，放在主线程会在切歌瞬间造成掉帧。
+ */
 @Composable
-fun rememberDominantColors(
-    imageUrl: String?,
-    defaultColors: DominantColors = DominantColors(
-        primary = Color(0xFF1a1a2e),
-        secondary = Color(0xFF16213e),
-        tertiary = Color(0xFF0f0f23)
-    )
-): DominantColors {
-    var dominantColors by remember { mutableStateOf(defaultColors) }
-    val context = androidx.compose.ui.platform.LocalContext.current
+fun rememberArtworkTheme(imageUrl: String?, darkTheme: Boolean): SonArtworkTheme {
+    val context = LocalContext.current
+    var theme by remember(imageUrl, darkTheme) { mutableStateOf(SonArtworkTheme.None) }
 
-    LaunchedEffect(imageUrl) {
-        if (imageUrl != null) {
-            try {
-                val loader = ImageLoader.Builder(context).build()
+    LaunchedEffect(imageUrl, darkTheme) {
+        if (imageUrl == null) {
+            theme = SonArtworkTheme.None
+            return@LaunchedEffect
+        }
+        theme = runCatching {
+            withContext(Dispatchers.Default) {
                 val request = ImageRequest.Builder(context)
                     .data(imageUrl)
                     .allowHardware(false)
                     .build()
-
-                val result = loader.execute(request) as? SuccessResult
-                val bitmap = result?.image?.toBitmap()
-
-                if (bitmap != null) {
-                    dominantColors = extractDominantColors(bitmap)
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
+                val result = ImageLoader.Builder(context).build().execute(request) as? SuccessResult
+                val seed = result?.image?.toBitmap()?.let { ArtColorExtractor.seedFromBitmap(it) }
+                    ?: return@withContext SonArtworkTheme.None
+                SonArtworkTheme(seed = seed, colorScheme = sonColorSchemeOf(seed, darkTheme))
             }
-        } else {
-            dominantColors = defaultColors
-        }
+        }.onFailure {
+            Timber.w(it, "rememberArtworkTheme: 封面取色失败")
+        }.getOrDefault(SonArtworkTheme.None)
     }
 
-    return dominantColors
+    return theme
 }

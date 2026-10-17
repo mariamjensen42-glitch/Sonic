@@ -14,9 +14,4 @@ interface AiInfoCacheDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(cacheEntity: AiInfoCacheEntity)
 
-    @Query("DELETE FROM ai_info_cache WHERE cacheKey = :cacheKey")
-    suspend fun deleteByCacheKey(cacheKey: String)
-
-    @Query("DELETE FROM ai_info_cache")
-    suspend fun deleteAll()
 }

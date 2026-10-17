@@ -1,8 +1,12 @@
 package com.cycling.data.repository
 
+import com.cycling.data.local.dao.LyricsIndexDao
 import com.cycling.data.local.dao.SongDao
+import com.cycling.data.local.dao.SongStateDao
 import com.cycling.data.local.entity.SongEntity
+import com.cycling.data.local.entity.SongStateEntity
 import com.cycling.data.local.mediastore.MediaStoreHelper
+import com.cycling.data.local.saf.SafFolderBrowser
 import com.cycling.data.local.scanner.SongLibraryWriter
 import com.cycling.domain.repository.ExcludedFolderRepository
 import io.mockk.coEvery
@@ -22,23 +26,55 @@ import org.junit.Test
 class SongRepositoryImplTest {
 
     private lateinit var songDao: SongDao
+    private lateinit var songStateDao: SongStateDao
+    private lateinit var lyricsIndexDao: LyricsIndexDao
     private lateinit var mediaStoreHelper: MediaStoreHelper
     private lateinit var songLibraryWriter: SongLibraryWriter
     private lateinit var excludedFolderRepository: ExcludedFolderRepository
+    private lateinit var safFolderBrowser: SafFolderBrowser
     private lateinit var songRepository: SongRepositoryImpl
 
     @Before
     fun setup() {
         songDao = mockk()
+        songStateDao = mockk()
+        lyricsIndexDao = mockk()
         mediaStoreHelper = mockk()
         songLibraryWriter = mockk()
         excludedFolderRepository = mockk()
+        safFolderBrowser = mockk()
         songRepository = SongRepositoryImpl(
             songDao,
+            songStateDao,
+            lyricsIndexDao,
             mediaStoreHelper,
             songLibraryWriter,
-            excludedFolderRepository
+            excludedFolderRepository,
+            safFolderBrowser
         )
+    }
+
+    @Test
+    fun `a song that was never nudged has no lyrics offset`() = runTest {
+        coEvery { songStateDao.get(1L) } returns null
+
+        assertEquals(0L, songRepository.getLyricsOffset(1L))
+    }
+
+    @Test
+    fun `a stored lyrics offset is read back`() = runTest {
+        coEvery { songStateDao.get(1L) } returns SongStateEntity(songId = 1L, lyricsOffsetMs = -250L)
+
+        assertEquals(-250L, songRepository.getLyricsOffset(1L))
+    }
+
+    @Test
+    fun `a new lyrics offset is written to the song state row`() = runTest {
+        coEvery { songStateDao.upsertLyricsOffset(any(), any(), any()) } returns Unit
+
+        songRepository.setLyricsOffset(1L, -250L)
+
+        coVerify(exactly = 1) { songStateDao.upsertLyricsOffset(1L, -250L, any()) }
     }
 
     private fun createSongEntity(
@@ -290,6 +326,64 @@ class SongRepositoryImplTest {
         songRepository.refreshSongs()
 
         coVerify(exactly = 1) { mediaStoreHelper.queryAllSongs(excluded) }
+    }
+
+    /**
+     * 媒体库目录树：旧实现以空串为根，绝对路径 split("/") 的首元素是空串，
+     * 根层会塌成一个无名目录；现在树从 "/" 开始。这两条用例把两个行为都钉住。
+     */
+    @Test
+    fun `library folder root lists the storage root, not a nameless folder`() = runTest {
+        coEvery { songDao.getAllSongPaths() } returns listOf(
+            "/storage/emulated/0/Music/Rock/a.mp3",
+            "/storage/emulated/0/Music/Jazz/b.mp3",
+            "/storage/emulated/0/Podcasts/p.mp3"
+        )
+
+        val content = songRepository.getLibraryFolderContent("")
+
+        assertEquals(1, content.folders.size)
+        assertEquals("storage", content.folders[0].name)
+        assertEquals("/storage", content.folders[0].path)
+        assertEquals(3, content.folders[0].songCount)
+        assertNull(content.parentPath)
+    }
+
+    @Test
+    fun `a sibling folder sharing a name prefix is not leaked into its neighbor`() = runTest {
+        coEvery { songDao.getAllSongPaths() } returns listOf(
+            "/storage/emulated/0/Music/rock/a.mp3",
+            "/storage/emulated/0/Music2/live/b.mp3"
+        )
+        coEvery { songDao.getSongsByPathPrefix("/storage/emulated/0/") } returns emptyList()
+
+        val content = songRepository.getLibraryFolderContent("/storage/emulated/0")
+
+        assertEquals(
+            listOf("/storage/emulated/0/Music", "/storage/emulated/0/Music2"),
+            content.folders.map { it.path }
+        )
+        assertEquals("/storage/emulated", content.parentPath)
+    }
+
+    @Test
+    fun `a library folder lists direct subfolders and direct songs only`() = runTest {
+        coEvery { songDao.getAllSongPaths() } returns listOf(
+            "/storage/emulated/0/Music/direct.mp3",
+            "/storage/emulated/0/Music/nested/deep.mp3"
+        )
+        coEvery {
+            songDao.getSongsByPathPrefix("/storage/emulated/0/Music/")
+        } returns listOf(
+            createSongEntity(path = "/storage/emulated/0/Music/direct.mp3"),
+            createSongEntity(path = "/storage/emulated/0/Music/nested/deep.mp3")
+        )
+
+        val content = songRepository.getLibraryFolderContent("/storage/emulated/0/Music")
+
+        assertEquals(listOf("/storage/emulated/0/Music/nested"), content.folders.map { it.path })
+        assertEquals(listOf("direct.mp3"), content.songs.map { it.path.substringAfterLast('/') })
+        assertEquals(listOf("/storage/emulated/0/Music/direct.mp3"), content.songs.map { it.path })
     }
 
     private fun createSong(

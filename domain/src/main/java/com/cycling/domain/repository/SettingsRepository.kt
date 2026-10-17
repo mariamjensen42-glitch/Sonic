@@ -1,23 +1,19 @@
 package com.cycling.domain.repository
 
 import com.cycling.domain.model.LyricsProvider
-import com.cycling.domain.model.ThemeMode
 import kotlinx.coroutines.flow.Flow
 
 /**
  * User preferences, one [Flow] per setting.
  *
- * Deliberately not a single `Flow<AppSettings>` snapshot: a theme change would then re-emit the
- * equalizer state and the lyrics provider order too, and every screen collecting any part of it
- * would recompose. Granular flows keep each change local to the screens that care.
+ * Deliberately not a single `Flow<AppSettings>` snapshot: changing the playback speed would then
+ * re-emit the equalizer state and the lyrics provider order too, and every screen collecting any
+ * part of it would recompose. Granular flows keep each change local to the screens that care.
  *
  * Implementations must be usable before anything has been written, so every getter has a
  * documented default.
  */
 interface SettingsRepository {
-
-    val themeMode: Flow<ThemeMode>
-    suspend fun setThemeMode(mode: ThemeMode)
 
     /** Playback rate, clamped to [MIN_PLAYBACK_SPEED]..[MAX_PLAYBACK_SPEED]. */
     val playbackSpeed: Flow<Float>
@@ -42,6 +38,17 @@ interface SettingsRepository {
 
     val onlineLyricsEnabled: Flow<Boolean>
     suspend fun setOnlineLyricsEnabled(enabled: Boolean)
+
+    /** When false, starting playback from a list/song click does not open the full player page. */
+    val openPlayerOnPlay: Flow<Boolean>
+    suspend fun setOpenPlayerOnPlay(enabled: Boolean)
+
+    /**
+     * When the queue ends with repeat off, append songs similar to the last one and keep playing.
+     * On by default: a queue that stops dead after "play this song" is the surprising outcome.
+     */
+    val autoContinueEnabled: Flow<Boolean>
+    suspend fun setAutoContinueEnabled(enabled: Boolean)
 
     /** Providers to try, in order. Never empty. */
     val lyricsProviderOrder: Flow<List<LyricsProvider>>
