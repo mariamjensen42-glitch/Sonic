@@ -38,8 +38,9 @@
 | 纵向 | 0 → 24% → 46% → 53% | 0.12 → 0.30 → 0.10 → 0 | 0.18 → 0.46 → 0.16 → 0 |
 
 - 53% 就是 Player 封面下沿；标题在约 55% 起。**光晕必须在标题第一个基线之前归零**，标题、歌手、进度、运输控件全部落在 surface 上。
-- CollectionDetail 的 hero 是通栏方形：光晕主要被封面遮住，可见部分在 top bar 与封面下沿；下沿的 fade 允许最多 12dp 进入动作区，**不进入首行歌曲**。样张里的 210px → 222px 就是这条 12dp。
+- CollectionDetail 的 hero 是通栏方形：光晕主要被封面遮住，可见部分在 top bar 与封面下沿；下沿的 fade 允许最多 12dp 进入动作区，**不进入首行歌曲**。样张里的 210px → 222px 就是这条 12dp。**#18 采用字段表的纵向峰值 0.46（亮）/ 0.30（暗）作为这 12dp 的起点**，与 1.3 的字段表一致；prototype 的 0.58/0.42 不采用。色面画在 hero list item 内，surface 只填 hero 区，不遮/不染下面的动作区与歌曲。
 - top bar / 状态栏位于光晕内；保持 top bar 透明，图标用 onSurface / onSurfaceVariant，不额外加 scrim。暗色顶栏会被染成深色封面调，亮色顶栏会被染成浅容器调；两套都要在真机上复看状态栏图标。
+- **#18 记录的上栏例外**：CollectionDetail 的 top bar 直接压在封面上，折叠前图标/标题用 onArtwork，surface band 变实后过渡到 onSurface / onSurfaceVariant。这是对上面 onSurface/onSurfaceVariant 规则的唯一例外，原因是封面颜色任意、onSurface 在深色封面上不可读；页面仍只从 MaterialTheme.colorScheme / LocalSonExtendedColors 取色。
 - 禁止 blur / RenderEffect / 大范围 graphicsLayer 模糊；光晕是渐变，不是毛玻璃。
 - 禁止硬边：C 的 32dp 圆角整块是被否方案，不在 B 里复活。
 
@@ -59,6 +60,7 @@
 ### 1.4 封面裁剪
 
 - **近灰封面**：ArtColorExtractor 仍取最有彩度的 swatch，并把彩度抬到至少 12；但色相不可靠。规则改为 **种子 HCT chroma < 16 时，色相兜底品牌色 SonicSeed**，其余照旧。原型 cover=gray 就是这条规则（灰封面 + 品牌紫调）。阈值 16 是起点，#18 用真实封面库校准；调整只动一个常量。
+- **阈值校准记录（#18，2026-10-18）**：阈值保留 16；单元测试覆盖 15.999 / 16.0 / 48.0；常量是 SonTonalScheme.GRAYSCALE_CHROMA_THRESHOLD，提取器的最低彩度提升 12 不变。Agent 不能跑真机/封面库，设备测量由用户完成：取验收截图集里的近灰、深色、奶油、霓虹四类封面各 3–5 张，跑 scripts/ui-verify.ps1 出图；抽一张封面读 Hct.fromColor(seed).chroma（可在 debug 日志或临时单测里打印）。若 16–20 的灰封面仍出现随机色相，调高阈值；若低彩度彩色封面丢掉自己的色相，调低阈值。每次只改这一个常量并重跑 SonTonalSchemeTest。
 - **过饱和封面**：不直接把 swatch 原始色铺到界面。SonTonalScheme 的 primary chroma 固定 48，页面只用角色色；饱和度由 role + alpha 决定，不由封面原图决定。光晕 alpha 上限 0.70（亮）/ 0.62（暗），不再往上加。
 - **过暗封面**：hero 标题/控件的可读性由 artworkScrim（两套主题都是深色）负责，不由光晕负责；光晕的 tone 来自 scheme，不随封面明度变暗。B-dark 样张展示这条：深蓝封面 + 浅青容器光晕。
 - 封面本身不裁切、不重新着色；裁剪只发生在 palette 的 hue/chroma 入口。
@@ -69,6 +71,7 @@
 - 形状保持现有 CircleShape（动作簇的胶囊）；不新增形状，不手写 RoundedCornerShape。
 - 尺寸 48–56dp 高；只包三个动作，不扩成整行，不覆盖列表。
 - 动作簇是 CollectionDetail 的；Player 没有动作簇，Player 的饱和 moment 由封面本身 + 光晕承担。如果 #20 的验收认为 Player 仍然弱，只能在 Player 的方案里加一个受限的 secondaryContainer 块，不允许改成整块 primaryContainer 或全屏洗。
+- **#18 落实**：CollectionActions 的 container/content color 是参数，默认 surfaceContainerHigh / onSurfaceVariant；只有 CollectionDetail 显式传 secondaryContainer / onSecondaryContainer。12dp 下沿 fade 是 CollectionDetail 的包装，不放进共享组件，因此 MyMusic 不会拿到第二块色面或 fade。
 
 ### 1.6 安静面
 
@@ -92,7 +95,7 @@
 ### 2.2 主题层（只有两处）
 
 1. **播放键按压**：LargeFloatingActionButton 默认 28dp 圆角（MaterialTheme.shapes.extraLarge）↔ CircleShape，仅按压时形变，松手回弹；播放/暂停切换只换图标，不改形状。用 MaterialTheme.motionScheme.fastSpatialSpec()，不写裸 spring/tween；原型里的 220ms 是 CSS 近似，不是实现参数。
-2. **hero 折叠**：封面从满铺缩进 top bar 缩略图（32dp），尺寸、圆角、位置连续插值；圆角 0 → 8dp（MaterialTheme.shapes.small），标题交叉淡入；由滚动进度驱动，不是定时动画。原型里的“播放折叠”只是检查手感的按钮，生产里没有这个按钮。
+2. **hero 折叠**：封面在 hero list item 内连续改变尺寸、圆角（0 → 8dp，MaterialTheme.shapes.small）、位置；由滚动进度驱动，不是定时动画；顶栏缩略图/标题沿用原有 crossfade。标题保持固定字体、固定在 hero 底部，只做 alpha crossfade，不参与 scale/clip。**#18 限制**：hero 仍在 LazyColumn 的 item 内；真正的 shared-element fold（封面离开 item 落进 top bar 缩略图）需要 overlay + 每帧布局，会与本屏的折叠顶栏/列表重组路径冲突，本 ticket 采用 closest honest behavior，并在验收报告里记录。原型里的“播放折叠”只是检查手感的按钮，生产里没有这个按钮。
 
 底栏按 #5 已定的标准 NavigationBar（无 FAB、无容器 morph）；迷你播放器保持悬浮卡片，不参与本规则的 shape morph。
 
@@ -128,9 +131,11 @@
 ### 4.2 CollectionDetail
 
 - 删除 List 背景的旧四段渐变，背景改为 surface。
-- hero 区域加光晕；top bar 保持透明；下沿 fade ≤ 12dp。
-- CollectionActions 容器改 secondaryContainer / onSecondaryContainer；播放全部仍 primary。
-- 保留现有 hero 标题、动作簇、列表留白与拖拽排序。
+- 光晕在 hero item 内绘制（SonColorFieldBackground），surface 只填 hero 区；cover 收缩时从四周露出；下沿 12dp fade 由 CollectionDetail 包装动作区，共享 CollectionActions 不画。
+- top bar 保持 CenterAlignedTopAppBar + 32dp 缩略图/标题 crossfade；surface band 负责滚动态底色。
+- hero 折叠在 item 内做尺寸/圆角/位置插值；标题 fixed font + alpha；顶栏缩略图仍是 crossfade（见 2.2 的限制）。
+- CollectionActions 容器参数由页面传入 secondaryContainer / onSecondaryContainer；默认仍是中性。
+- 播放全部仍 primary；保留现有 hero 标题、动作簇、列表留白与拖拽排序。
 
 ### 4.3 播放页（#9 / #20）
 
@@ -141,12 +146,15 @@
 ### 4.4 灰封面
 
 - 在 SonTonalScheme.from 里做 chroma < 16 → 品牌 hue；不要在页面里判断。
+- 校准方法与记录见 1.4；本 ticket 只固定阈值 seam，设备测量由用户完成。
 
 ### 4.5 验证
 
 - 真机明暗两套截图：B 样张、灰封面、深色封面、折叠态。
 - 对比度表重算；光晕文字落点、动作簇、播放键三组。
 - 色面与 FAB 的角色互斥检查：任何新页面如果要用 primaryContainer 实心块，必须同时改 FAB 角色或改用 secondaryContainer 受限块。
+- CollectionDetail 的顶栏在封面上的图标颜色按 1.2 的例外复看；如果 onArtwork 在亮色封面上不够，调 hero scrim，不要改回页面自拼色。
+- 12dp 下沿 fade 取纵向峰值 0.46/0.30；截图里确认首行无染色。
 - 构建/测试由用户执行；Agent 只做静态检查。
 
 ## 5. 被否的方案

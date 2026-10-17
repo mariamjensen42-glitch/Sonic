@@ -4,6 +4,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
@@ -38,11 +39,8 @@ sealed interface SonColorFieldEnd {
     /** 到 hero 下沿归零（Player 用）。 */
     data object HeroBottom : SonColorFieldEnd
 
-    /**
-     * 允许最多 [tail] 进入动作区，绝不进入首行歌曲（CollectionDetail 用）。
-     * 默认 12dp 是规则里的上限，不是页面常量。
-     */
-    data class Detail(val tail: Dp = SonColorField.DetailTail) : SonColorFieldEnd
+    /** 允许最多 [SonColorField.DetailTail] 进入动作区，绝不进入首行（CollectionDetail 用）。 */
+    data object Detail : SonColorFieldEnd
 }
 
 /**
@@ -86,8 +84,6 @@ data class SonColorFieldLayer(
  */
 @Immutable
 data class SonColorFieldSpec(
-    val dark: Boolean,
-    val end: SonColorFieldEnd,
     val radial: SonColorFieldLayer,
     val vertical: SonColorFieldLayer,
     val tail: SonColorFieldLayer?
@@ -96,13 +92,6 @@ data class SonColorFieldSpec(
     val tintRole: SonColorFieldRole = SonColorFieldRole.PrimaryContainer
 
     val surfaceRole: SonColorFieldRole = SonColorFieldRole.Surface
-
-    fun verticalAlphaAt(fraction: Float): Float = vertical.alphaAt(fraction)
-
-    fun radialAlphaAt(radiusFraction: Float): Float = radial.alphaAt(radiusFraction)
-
-    /** Detail 的 12dp 收尾；HeroBottom 没有 tail，恒为 0。 */
-    fun tailAlphaAt(fraction: Float): Float = tail?.alphaAt(fraction) ?: 0f
 }
 
 /**
@@ -137,9 +126,10 @@ object SonColorField {
     private val DarkVerticalAlphas = listOf(0.12f, 0.30f, 0.10f, 0f)
 
     // CollectionDetail 的 hero 是通栏方形，径向层被封面遮住；可见部分只有封面下沿的
-    // 12dp fade。prototype 的 band field 用 .58（亮）/ .42（暗），这里沿用同一数值。
-    private const val LightDetailTailAlpha = 0.58f
-    private const val DarkDetailTailAlpha = 0.42f
+    // 12dp fade。它取字段表里的纵向峰值（亮 0.46 / 暗 0.30），不引入 prototype 的
+    // 0.58 / 0.42 这一组未验收数值。
+    private const val LightDetailTailAlpha = 0.46f
+    private const val DarkDetailTailAlpha = 0.30f
 
     fun spec(
         dark: Boolean,
@@ -165,8 +155,6 @@ object SonColorField {
             null
         }
         return SonColorFieldSpec(
-            dark = dark,
-            end = end,
             radial = radial,
             vertical = vertical,
             tail = tail
@@ -175,33 +163,37 @@ object SonColorField {
 }
 
 /**
- * 把 [SonColorFieldSpec] 渲染成 hero 背景（Player 用，#20 接入）。
+ * 把 [SonColorFieldSpec] 渲染成 hero 背景（CollectionDetail 与 #20 Player 共用）。
  *
- * 容器高度按 [SonColorField.HeroBottomFraction] 反推，让 53% 恰好落在 [heroBottom]；
- * 因此色面在 hero 下沿归零，之后即使容器继续延伸也是透明的。调用方负责把正文放在
- * hero 下沿之后，渲染器不参与布局。
+ * 容器就是 hero 区域：高度取 [heroBottom]；纵向 stop 与径向椭圆按
+ * [SonColorField.HeroBottomFraction] 归一化，让 53% 正好落在 hero 下沿。
+ * surface 只填 hero 区，不会向下遮挡正文；hero 以下的 12dp 收尾由
+ * [sonColorFieldDetailFade] 负责。
  */
 @Composable
 fun SonColorFieldBackground(
     heroBottom: Dp,
     modifier: Modifier = Modifier,
+    colorScheme: ColorScheme = MaterialTheme.colorScheme,
     dark: Boolean = isSystemInDarkTheme()
 ) {
     val spec = remember(dark) { SonColorField.spec(dark = dark) }
-    val colorScheme = MaterialTheme.colorScheme
-    val tint = colorScheme.primaryContainer
-    val surface = colorScheme.surface
+    val tint = spec.tintRole.resolve(colorScheme)
+    val surface = spec.surfaceRole.resolve(colorScheme)
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(heroBottom / SonColorField.HeroBottomFraction)
+            .height(heroBottom)
             .drawBehind {
                 drawRect(color = surface)
                 drawRadialLayer(spec.radial, tint)
                 drawRect(
                     brush = Brush.verticalGradient(
-                        *spec.vertical.toColorStops(tint)
+                        *spec.vertical.toColorStops(
+                            tint = tint,
+                            stopScale = SonColorField.HeroBottomFraction
+                        )
                     )
                 )
             }
@@ -215,13 +207,14 @@ fun SonColorFieldBackground(
 @Composable
 fun Modifier.sonColorFieldDetailFade(
     dark: Boolean = isSystemInDarkTheme(),
-    tail: Dp = SonColorField.DetailTail
+    tail: Dp = SonColorField.DetailTail,
+    colorScheme: ColorScheme = MaterialTheme.colorScheme
 ): Modifier {
     val spec = remember(dark, tail) {
-        SonColorField.spec(dark = dark, end = SonColorFieldEnd.Detail(tail))
+        SonColorField.spec(dark = dark, end = SonColorFieldEnd.Detail)
     }
-    val tint = MaterialTheme.colorScheme.primaryContainer
-    val startAlpha = spec.tailAlphaAt(0f)
+    val tint = spec.tintRole.resolve(colorScheme)
+    val startAlpha = spec.tail?.alphaAt(0f) ?: 0f
 
     return drawBehind {
         drawRect(
@@ -234,23 +227,32 @@ fun Modifier.sonColorFieldDetailFade(
     }
 }
 
-private fun SonColorFieldLayer.toColorStops(tint: Color): Array<Pair<Float, Color>> =
+private fun SonColorFieldRole.resolve(colorScheme: ColorScheme): Color = when (this) {
+    SonColorFieldRole.PrimaryContainer -> colorScheme.primaryContainer
+    SonColorFieldRole.Surface -> colorScheme.surface
+}
+
+private fun SonColorFieldLayer.toColorStops(
+    tint: Color,
+    stopScale: Float = 1f
+): Array<Pair<Float, Color>> =
     stops.indices.map { index ->
-        stops[index] to tint.copy(alpha = alphas[index])
+        (stops[index] / stopScale).coerceIn(0f, 1f) to tint.copy(alpha = alphas[index])
     }.toTypedArray()
 
 /**
  * Compose 的 radialGradient 只有圆形半径；这里用 canvas 的纵向缩放把它变成
- * 规则里的椭圆（92% 宽 × 50% 高）。绘制矩形放大到足够覆盖组件，超出部分由
- * DrawScope 的边界裁掉。
+ * 规则里的椭圆（92% 宽 × 50% 高）。径向的 y 坐标同样除以 HeroBottomFraction，
+ * 因此 hero 下沿正好落在径向的 60% stop（alpha 0）。绘制矩形放大到足够覆盖
+ * 组件，超出部分由 DrawScope 的边界裁掉。
  */
 private fun DrawScope.drawRadialLayer(layer: SonColorFieldLayer, tint: Color) {
     val center = Offset(
         x = size.width * SonColorField.RadialCenterX,
-        y = size.height * SonColorField.RadialCenterY
+        y = size.height * (SonColorField.RadialCenterY / SonColorField.HeroBottomFraction)
     )
     val radiusX = size.width * SonColorField.RadialRadiusX
-    val radiusY = size.height * SonColorField.RadialRadiusY
+    val radiusY = size.height * (SonColorField.RadialRadiusY / SonColorField.HeroBottomFraction)
     if (radiusX <= 0f || radiusY <= 0f) return
 
     val brush = Brush.radialGradient(

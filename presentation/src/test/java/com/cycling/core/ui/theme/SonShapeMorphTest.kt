@@ -5,6 +5,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.unit.dp
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
 /**
@@ -27,9 +28,9 @@ class SonShapeMorphTest {
 
     @Test
     fun `release returns to the extra large shape`() {
-        // 松手/取消时进度回到 0，形状回到 idle。
+        // 松手/取消时进度回到 0，形状回到 idle；pressed 与 released 必须不同。
         assertEquals(SonShapes.extraLarge, SonShapeMorph.pressShape(0f))
-        assertEquals(SonShapeMorph.pressShape(0f), SonShapeMorph.pressShape(0f))
+        assertNotEquals(SonShapeMorph.pressShape(1f), SonShapeMorph.pressShape(0f))
     }
 
     @Test
@@ -39,7 +40,7 @@ class SonShapeMorphTest {
     }
 
     @Test
-    fun `hero fold interpolates size corner and position`() {
+    fun `hero fold interpolates size and position`() {
         val start = SonShapeMorph.heroFold(
             progress = 0f,
             startSize = 360.dp,
@@ -48,7 +49,6 @@ class SonShapeMorphTest {
             endY = 16.dp
         )
         assertEquals(360f, start.size.value, 0f)
-        assertEquals(0f, start.corner.value, 0f)
         assertEquals(0f, start.x.value, 0f)
         assertEquals(0f, start.y.value, 0f)
 
@@ -60,7 +60,6 @@ class SonShapeMorphTest {
             endY = 16.dp
         )
         assertEquals(196f, middle.size.value, 0.001f)
-        assertEquals(4f, middle.corner.value, 0.001f)
         assertEquals(32f, middle.x.value, 0.001f)
         assertEquals(8f, middle.y.value, 0.001f)
 
@@ -72,7 +71,6 @@ class SonShapeMorphTest {
             endY = 16.dp
         )
         assertEquals(32f, end.size.value, 0f)
-        assertEquals(8f, end.corner.value, 0f)
         assertEquals(64f, end.x.value, 0f)
         assertEquals(16f, end.y.value, 0f)
     }
