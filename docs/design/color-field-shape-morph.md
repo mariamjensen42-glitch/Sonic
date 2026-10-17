@@ -85,7 +85,7 @@
 | Button / FilledTonalButton | 官方按压形变 + ripple |
 | IconButton / FAB | 官方按压反馈；播放键的额外形变见 2.2 |
 | ListItem / SegmentedButton / Chip | 官方选中/按压 |
-| 底部导航 / 迷你播放器 | 官方容器；容器级 morph 由 #5 决定 |
+| 底部导航 / 迷你播放器 | 底部导航：标准 NavigationBar（#5 已定），无容器 morph；迷你播放器：悬浮卡片，不做 shape morph |
 
 这些不需要主题层新能力。禁止写 M3Button / M3IconButton 之类的转发壳，也禁止 indication = null。
 
@@ -94,7 +94,7 @@
 1. **播放键按压**：LargeFloatingActionButton 默认 28dp 圆角（MaterialTheme.shapes.extraLarge）↔ CircleShape，仅按压时形变，松手回弹；播放/暂停切换只换图标，不改形状。用 MaterialTheme.motionScheme.fastSpatialSpec()，不写裸 spring/tween；原型里的 220ms 是 CSS 近似，不是实现参数。
 2. **hero 折叠**：封面从满铺缩进 top bar 缩略图（32dp），尺寸、圆角、位置连续插值；圆角 0 → 8dp（MaterialTheme.shapes.small），标题交叉淡入；由滚动进度驱动，不是定时动画。原型里的“播放折叠”只是检查手感的按钮，生产里没有这个按钮。
 
-底栏 / 迷你播放器的容器 morph 留给 #5；本规则不新增第三处。
+底栏按 #5 已定的标准 NavigationBar（无 FAB、无容器 morph）；迷你播放器保持悬浮卡片，不参与本规则的 shape morph。
 
 ### 2.3 禁止
 
@@ -164,7 +164,7 @@ C 的 secondaryContainer 开关是这次最有价值的反例：它证明“换�
 
 ## 6. 不在本规则内
 
-- 底栏 / 迷你播放器的容器 morph（#5）。
+- 底栏 / 迷你播放器容器（#5 已定：标准 NavigationBar + 悬浮迷你播放器；不做容器 morph）。
 - 首页、播放页的构图与信息层级（#8 / #9 / #19 / #20）。
 - 自适应 / 平板 / 横屏 / 系统面。
 - 歌词的高亮与自动滚动（已有规则）。
