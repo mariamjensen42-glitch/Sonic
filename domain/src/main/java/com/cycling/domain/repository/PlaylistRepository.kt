@@ -24,9 +24,14 @@ interface PlaylistRepository {
 
     suspend fun deletePlaylist(playlistId: Long)
 
-    suspend fun addSongToPlaylist(playlistId: Long, songId: Long)
+    /**
+     * 返回**真正写进去的行数**：一首歌在一张歌单里只有一行，重复添加是幂等的，
+     * 已经在歌单里时返回 0。界面报数量时报这个值，不要报"本来想加几首"。
+     */
+    suspend fun addSongToPlaylist(playlistId: Long, songId: Long): Int
 
-    suspend fun addSongsToPlaylist(playlistId: Long, songIds: List<Long>)
+    /** 批量添加同样按 songId 去重，返回真正写进去的行数（跳过已在单里的与本批重复的 id）。 */
+    suspend fun addSongsToPlaylist(playlistId: Long, songIds: List<Long>): Int
 
     /** 把歌单里第 [fromIndex] 首移到 [toIndex]（0-based，按当前显示顺序）。 */
     suspend fun moveSong(playlistId: Long, fromIndex: Int, toIndex: Int)

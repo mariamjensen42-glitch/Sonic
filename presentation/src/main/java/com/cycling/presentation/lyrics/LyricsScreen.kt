@@ -2,6 +2,7 @@
 
 package com.cycling.presentation.lyrics
 
+import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,8 +15,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -24,16 +23,20 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,20 +45,31 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.isSpecified
+import androidx.compose.ui.unit.sp
 import com.cycling.core.ui.components.M3SymbolIcon
 import com.cycling.core.ui.components.SymbolIconName
+import com.cycling.core.ui.theme.LocalSonExtendedColors
 import com.cycling.core.ui.theme.SonLayout
 import com.cycling.core.ui.theme.SonSizes
 import com.cycling.core.ui.theme.SonSpacing
-import com.cycling.domain.model.LyricsCandidate
-import com.cycling.domain.model.LyricsProvider
+import com.cycling.core.ui.theme.sonDynamicBackdrop
 import com.cycling.domain.model.LyricsSource
+import com.cycling.domain.repository.SettingsRepository.Companion.MAX_LYRICS_TEXT_SIZE_SP
+import com.cycling.domain.repository.SettingsRepository.Companion.MIN_LYRICS_TEXT_SIZE_SP
 import com.cycling.presentation.R
+import com.cycling.presentation.components.LyricsCandidatesSheet
+import com.cycling.presentation.components.SonLoadingState
 import com.cycling.presentation.lyrics.components.KaraokeLyricsView
+import kotlin.math.roundToInt
 import com.cycling.presentation.player.LYRICS_OFFSET_STEP_MS
 import com.cycling.presentation.player.PlayerIntent
 import com.cycling.presentation.player.PlayerUiState
@@ -63,6 +77,20 @@ import java.util.Locale
 
 /** 帧间隔超过这个值就认为掉帧严重（例如刚从后台回来），插值不再外推 */
 private const val StallThresholdNanos = 250_000_000L
+
+/** 辉光的底色透明度：只做"发光"，不该长出一圈可见的描边。 */
+private const val LyricsGlowAlpha = 0.45f
+
+/** 辉光半径按字号取倍数，大字号那档才不会发光过窄。 */
+private const val LyricsGlowRadiusRatio = 1.1f
+
+/**
+ * 歌词页的动态色面强度。
+ *
+ * 这一屏是阅读面：色面整屏铺开会让文字落色（对比度表按安静 surface 算的），所以压掉两成多，
+ * 让它只作为「在动」的背景存在。数值与播放页的 hero 强度一起在 ADR-0005 里定。
+ */
+private const val LyricsBackdropDim = 0.22f
 
 @Composable
 fun LyricsScreen(
@@ -77,6 +105,38 @@ fun LyricsScreen(
     val latestLines by rememberUpdatedState(uiState.lyrics?.lines ?: emptyList())
     val latestOffset by rememberUpdatedState(uiState.lyricsOffsetMs)
     var showOffsetDialog by remember { mutableStateOf(false) }
+    var showSettingsSheet by remember { mutableStateOf(false) }
+
+    // 字号与辉光都只改样式，不改歌词数据：切档位时不需要重新解析、重新测量整份歌词。
+    val extended = LocalSonExtendedColors.current
+    val density = LocalDensity.current
+    val normalBase = MaterialTheme.typography.headlineMedium
+    val accompanimentBase = MaterialTheme.typography.titleMedium
+    val textSizeSp = uiState.lyricsTextSizeSp
+    // 伴奏行没有自己的字号设置：按主题里两者原始字号的比值跟着缩放，比例关系保持不变。
+    val accompanimentRatio =
+        if (normalBase.fontSize.isSpecified && accompanimentBase.fontSize.isSpecified &&
+            normalBase.fontSize.value > 0f
+        ) {
+            accompanimentBase.fontSize.value / normalBase.fontSize.value
+        } else {
+            1f
+        }
+    val accompanimentSizeSp = textSizeSp * accompanimentRatio
+    val glowColor = extended.lyricsInactive.copy(alpha = LyricsGlowAlpha)
+    val glowRadiusPx = with(density) { (textSizeSp * LyricsGlowRadiusRatio).sp.toPx() }
+    val normalStyle = remember(normalBase, textSizeSp, uiState.lyricsGlowEnabled, glowColor, glowRadiusPx) {
+        normalBase
+            .atSize(textSizeSp.toFloat())
+            .glowIf(uiState.lyricsGlowEnabled, glowColor, glowRadiusPx)
+    }
+    val accompanimentStyle = remember(
+        accompanimentBase, accompanimentSizeSp, uiState.lyricsGlowEnabled, glowColor, glowRadiusPx
+    ) {
+        accompanimentBase
+            .atSize(accompanimentSizeSp)
+            .glowIf(uiState.lyricsGlowEnabled, glowColor, glowRadiusPx)
+    }
 
     // 绘制阶段读时间：lineTrigger 只用于换行时触发重绘，位置取插值后的平滑值。
     // 偏移在这里减去而不是去改歌词本身 —— 它只决定"此刻该高亮哪一句"，改数据就得重新解析、
@@ -121,32 +181,51 @@ fun LyricsScreen(
         }
     }
 
-    // 页面底色即 surface（已由封面种子色着色），不再叠静态灰带。
+    // 页面底色即 surface（已由壁纸动态取色着色）；动态色面铺在 padding 之外，铺满整屏。
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.surface)
+            .sonDynamicBackdrop(playing = uiState.isPlaying, dim = LyricsBackdropDim)
             .statusBarsPadding()
     ) {
         val lyrics = uiState.lyrics
         if (lyrics != null) {
-            val listState = rememberLazyListState()
+            // 列表直接从「当前播放到的那一行」开始铺：不要先渲染第 0 行再滚/跳到当前行。
+            // 跳那一帧虽然不再做动画，但仍会白组合一屏不在播放位置的行（每行都要做音节测量、
+            // 渐隐遮罩），进歌词页的卡顿主要就来自这里。
+            val initialLineIndex = remember(lyrics) {
+                val time = uiState.playbackPosition.toInt() - uiState.lyricsOffsetMs.toInt()
+                val lines = lyrics.lines
+                if (lines.isEmpty()) {
+                    0
+                } else {
+                    lines.indexOfLast { it.start <= time }.coerceIn(0, lines.lastIndex)
+                }
+            }
+            val listState = rememberLazyListState(
+                initialFirstVisibleItemIndex = initialLineIndex
+            )
             KaraokeLyricsView(
                 listState = listState,
                 lyrics = lyrics,
                 currentPosition = currentPositionProvider,
+                isPlaying = uiState.isPlaying,
                 onLineClicked = { line ->
                     onIntent(PlayerIntent.SeekTo(line.start.toLong()))
                 },
                 onLinePressed = { showOffsetDialog = true },
+                normalLineTextStyle = normalStyle,
+                accompanimentLineTextStyle = accompanimentStyle,
+                useBlurEffect = uiState.lyricsBlurEnabled,
+                alignCenter = uiState.lyricsAlignCenter,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(top = SonSpacing.huge, bottom = SonLayout.bottomBarClearance)
             )
         } else if (uiState.isLoadingLyrics) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                LoadingIndicator()
-            }
+            // sidecar / 缓存里的歌词通常瞬间就到，只有真去网络查时才需要转圈。
+            SonLoadingState()
         } else if (uiState.currentSong != null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
@@ -213,6 +292,15 @@ fun LyricsScreen(
                         }
                     }
                 }
+                // 字号 / 对齐 / 辉光 / 模糊就在这一页调：听歌时觉得字小了，跳去设置页再回来
+                // 会打断正在对的那一句。
+                IconButton(onClick = { showSettingsSheet = true }) {
+                    M3SymbolIcon(
+                        name = SymbolIconName.Tune,
+                        filled = true,
+                        contentDescription = stringResource(R.string.lyrics_settings_desc)
+                    )
+                }
             },
             colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                 containerColor = Color.Transparent,
@@ -240,6 +328,153 @@ fun LyricsScreen(
             onDismiss = { onIntent(PlayerIntent.DismissLyricsCandidates) }
         )
     }
+
+    if (showSettingsSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showSettingsSheet = false },
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
+        ) {
+            LyricsSettingsSheet(
+                textSizeSp = uiState.lyricsTextSizeSp,
+                alignCenter = uiState.lyricsAlignCenter,
+                glowEnabled = uiState.lyricsGlowEnabled,
+                blurEnabled = uiState.lyricsBlurEnabled,
+                onTextSizeChange = { onIntent(PlayerIntent.SetLyricsTextSizeSp(it)) },
+                onAlignCenterChange = { onIntent(PlayerIntent.SetLyricsAlignCenter(it)) },
+                onGlowChange = { onIntent(PlayerIntent.SetLyricsGlowEnabled(it)) },
+                onBlurChange = { onIntent(PlayerIntent.SetLyricsBlurEnabled(it)) }
+            )
+        }
+    }
+}
+
+/**
+ * 歌词界面设置面板。
+ *
+ * 放在歌词页而不是设置页：这几项都是"看着这一句觉得不对"时才想起来调的，
+ * 跳出去再回来会打断正在看的位置。面板不遮住正在唱的那几行（底部弹出），改完立刻能看到。
+ */
+@Composable
+private fun LyricsSettingsSheet(
+    textSizeSp: Int,
+    alignCenter: Boolean,
+    glowEnabled: Boolean,
+    blurEnabled: Boolean,
+    onTextSizeChange: (Int) -> Unit,
+    onAlignCenterChange: (Boolean) -> Unit,
+    onGlowChange: (Boolean) -> Unit,
+    onBlurChange: (Boolean) -> Unit
+) {
+    // 拖动只改本地值，松手才写 DataStore：跟着手指一格格落盘会明显掉帧。
+    var sliderValue by remember(textSizeSp) { mutableFloatStateOf(textSizeSp.toFloat()) }
+    val blurSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+
+    // 拖到一半直接把面板划走时 onValueChangeFinished 不会来，走的时候补一次提交。
+    val latestSliderValue by rememberUpdatedState(sliderValue)
+    DisposableEffect(Unit) {
+        onDispose {
+            val committed = latestSliderValue.roundToInt()
+            if (committed != textSizeSp) onTextSizeChange(committed)
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = SonSpacing.medium)
+            .padding(bottom = SonSpacing.extraLarge)
+    ) {
+        Text(
+            text = stringResource(R.string.lyrics_settings_title),
+            style = MaterialTheme.typography.titleLarge,
+            modifier = Modifier.padding(vertical = SonSpacing.small)
+        )
+
+        // 字号：12–48sp，与 Salt Player 同范围
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = SonSpacing.small),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = stringResource(R.string.lyrics_settings_text_size),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = stringResource(R.string.lyrics_settings_text_size_value, sliderValue.roundToInt()),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+        Slider(
+            value = sliderValue,
+            onValueChange = { sliderValue = it },
+            valueRange = MIN_LYRICS_TEXT_SIZE_SP.toFloat()..MAX_LYRICS_TEXT_SIZE_SP.toFloat(),
+            steps = MAX_LYRICS_TEXT_SIZE_SP - MIN_LYRICS_TEXT_SIZE_SP - 1,
+            onValueChangeFinished = { onTextSizeChange(sliderValue.roundToInt()) }
+        )
+
+        SettingsSheetSwitch(
+            title = stringResource(R.string.lyrics_settings_align_center),
+            supporting = stringResource(R.string.lyrics_settings_align_center_subtitle),
+            checked = alignCenter,
+            onCheckedChange = onAlignCenterChange
+        )
+        SettingsSheetSwitch(
+            title = stringResource(R.string.lyrics_settings_glow),
+            supporting = stringResource(R.string.lyrics_settings_glow_subtitle),
+            checked = glowEnabled,
+            onCheckedChange = onGlowChange
+        )
+        SettingsSheetSwitch(
+            title = stringResource(R.string.lyrics_settings_blur),
+            // 虚化走 RenderEffect，Android 12 以下没有这条路径 —— 说明原因并置灰，而不是悄悄失效。
+            supporting = if (blurSupported) {
+                stringResource(R.string.lyrics_settings_blur_subtitle)
+            } else {
+                stringResource(R.string.lyrics_settings_blur_unsupported)
+            },
+            checked = blurEnabled && blurSupported,
+            enabled = blurSupported,
+            onCheckedChange = onBlurChange
+        )
+    }
+}
+
+@Composable
+private fun SettingsSheetSwitch(
+    title: String,
+    supporting: String,
+    checked: Boolean,
+    enabled: Boolean = true,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    ListItem(
+        headlineContent = {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge
+            )
+        },
+        supportingContent = {
+            Text(
+                text = supporting,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        },
+        trailingContent = {
+            Switch(
+                checked = checked && enabled,
+                onCheckedChange = if (enabled) onCheckedChange else null,
+                enabled = enabled
+            )
+        },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+    )
 }
 
 /**
@@ -301,120 +536,22 @@ private fun formatOffset(offsetMs: Long): String =
     if (offsetMs == 0L) "0.0s"
     else String.format(Locale.getDefault(), "%+.1fs", offsetMs / 1000f)
 
-/**
- * 歌词版本选择。
- *
- * 在线来源会把同一首歌上架很多次，不同版本带的文档还不一样 —— 有的有逐字时间轴，有的只有整行，
- * 有的又是另一版母带、对轴差半秒 —— 所以自动挑出来的那一份只是默认值，不是答案。这里把各版本摊开
- * 让用户自己定，选中的那份写进缓存，下次播放直接用它。
- *
- * 每次打开都重新查一遍而不是复用上次的结果：用户点这个按钮，多半就是因为自动挑的那份不对，那么
- * 刚才那次自动挑选的结果正是他想绕开的东西。
- */
-@Composable
-private fun LyricsCandidatesSheet(
-    candidates: List<LyricsCandidate>,
-    isLoading: Boolean,
-    onSelect: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = SonSpacing.large)
-        ) {
-            Text(
-                text = stringResource(R.string.lyrics_candidates_title),
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(horizontal = SonSpacing.large, vertical = SonSpacing.small)
-            )
-            Text(
-                text = stringResource(R.string.lyrics_candidates_hint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = SonSpacing.large)
-            )
-            Spacer(Modifier.height(SonSpacing.small))
-
-            when {
-                isLoading -> Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = SonSpacing.extraLarge),
-                    contentAlignment = Alignment.Center
-                ) {
-                    LoadingIndicator()
-                }
-
-                candidates.isEmpty() -> Text(
-                    text = stringResource(R.string.lyrics_candidates_empty),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(SonSpacing.large)
-                )
-
-                else -> LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                    items(candidates, key = { it.id }) { candidate ->
-                        LyricsCandidateItem(
-                            candidate = candidate,
-                            onClick = { onSelect(candidate.id) }
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun LyricsCandidateItem(
-    candidate: LyricsCandidate,
-    onClick: () -> Unit
-) {
-    ListItem(
-        // 可点击的 ListItem 里，主标题这一格叫 content 而不是 headlineContent。
-        content = {
-            Text(
-                text = "${providerLabel(candidate.provider)} · ${qualityLabel(candidate.wordByWord)}"
-            )
-        },
-        // 版本之间真正的区别在专辑名（同一首歌的不同上架），拿不到才退回歌词首句。
-        supportingContent = {
-            val detail = candidate.label ?: candidate.preview
-            if (detail != null) {
-                Text(text = detail, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-        },
-        trailingContent = {
-            if (candidate.isCurrent) {
-                Text(
-                    text = stringResource(R.string.lyrics_candidate_current),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-        },
-        onClick = onClick
+/** 按档位缩放主题排版 token。字号/行高未指定时保持原样，避免乘出 NaN。 */
+private fun TextStyle.atSize(sizeSp: Float): TextStyle {
+    if (!fontSize.isSpecified || fontSize.value <= 0f) return this
+    val ratio = sizeSp / fontSize.value
+    return copy(
+        fontSize = sizeSp.sp,
+        lineHeight = if (lineHeight.isSpecified) (lineHeight.value * ratio).sp else lineHeight
     )
 }
 
-@Composable
-private fun providerLabel(provider: LyricsProvider): String = stringResource(
-    when (provider) {
-        LyricsProvider.NETEASE -> R.string.settings_lyrics_provider_netease
-        LyricsProvider.LRCLIB -> R.string.settings_lyrics_provider_lrclib
+/** 辉光：用一层同色阴影贴在字形后面，颜色取"非当前行"色，点亮后自然退到高亮色之下。 */
+private fun TextStyle.glowIf(enabled: Boolean, color: Color, radiusPx: Float): TextStyle =
+    if (enabled) {
+        copy(shadow = Shadow(color = color, offset = Offset.Zero, blurRadius = radiusPx))
+    } else {
+        this
     }
-)
 
-@Composable
-private fun qualityLabel(wordByWord: Boolean): String = stringResource(
-    if (wordByWord) R.string.lyrics_candidate_word_by_word else R.string.lyrics_candidate_line_level
-)
+

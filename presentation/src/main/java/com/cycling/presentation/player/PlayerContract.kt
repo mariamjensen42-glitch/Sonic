@@ -1,12 +1,14 @@
 package com.cycling.presentation.player
 
 import com.cycling.domain.lyrics.model.SyncedLyrics
+import com.cycling.domain.model.HiResBadge
 import com.cycling.domain.model.LyricsCandidate
 import com.cycling.domain.model.LyricsSource
 import com.cycling.domain.model.PlayerState
 import com.cycling.domain.model.RepeatMode
 import androidx.annotation.StringRes
 import com.cycling.domain.model.Song
+import com.cycling.domain.repository.SettingsRepository.Companion.DEFAULT_LYRICS_TEXT_SIZE_SP
 import com.cycling.domain.repository.SettingsRepository.Companion.DEFAULT_PLAYBACK_SPEED
 import com.cycling.domain.repository.SettingsRepository.Companion.DEFAULT_SLEEP_TIMER_PRESET_MINUTES
 
@@ -24,7 +26,6 @@ data class PlayerUiState(
     val queueIndex: Int = -1,
     val repeatMode: RepeatMode = RepeatMode.OFF,
     val shuffleMode: Boolean = false,
-    val showQueue: Boolean = false,
     val isFavorite: Boolean = false,
     val viewMode: PlayerViewMode = PlayerViewMode.COVER,
     val lyrics: SyncedLyrics? = null,
@@ -41,10 +42,24 @@ data class PlayerUiState(
     /** 「播放设置」面板是否展开（倍速与定时关闭）。 */
     val showPlaybackSettings: Boolean = false,
     val playbackSpeed: Float = DEFAULT_PLAYBACK_SPEED,
+    /** 播放页底部频谱条；关闭后这一屏不再有自发重绘。 */
+    val playerSpectrumEnabled: Boolean = true,
     /** 定时关闭剩余毫秒，没开就是 null。 */
     val sleepTimerRemainingMs: Long? = null,
     /** 上次选过的睡眠时长，用作面板里高亮的那一档。 */
-    val sleepTimerMinutes: Int = DEFAULT_SLEEP_TIMER_PRESET_MINUTES
+    val sleepTimerMinutes: Int = DEFAULT_SLEEP_TIMER_PRESET_MINUTES,
+    /** 封面左下角的小金标；纯装饰，不参与音频格式判断。 */
+    val hiResBadge: HiResBadge = HiResBadge.OFF,
+    /** 自定义小金标的图片 URI；[hiResBadge] 不是 CUSTOM 时忽略。 */
+    val hiResBadgeCustomUri: String? = null,
+    /** 歌词字号，sp。 */
+    val lyricsTextSizeSp: Int = DEFAULT_LYRICS_TEXT_SIZE_SP,
+    /** 歌词文本是否居中。 */
+    val lyricsAlignCenter: Boolean = false,
+    /** 歌词当前行是否带柔光。 */
+    val lyricsGlowEnabled: Boolean = false,
+    /** 歌词非当前行是否按距离虚化。 */
+    val lyricsBlurEnabled: Boolean = true
 )
 
 /** 歌词偏移一次调整的步长，也是界面上两个按钮的量。 */
@@ -67,7 +82,6 @@ sealed interface PlayerIntent {
     data class MoveQueueItem(val fromIndex: Int, val toIndex: Int) : PlayerIntent
     data class RemoveFromQueue(val index: Int) : PlayerIntent
     data object ClearQueue : PlayerIntent
-    data object ToggleQueue : PlayerIntent
     data object UpdateProgress : PlayerIntent
     data object ToggleFavorite : PlayerIntent
     data object ToggleViewMode : PlayerIntent
@@ -97,6 +111,21 @@ sealed interface PlayerIntent {
     data class SetSleepTimer(val minutes: Int) : PlayerIntent
 
     data object CancelSleepTimer : PlayerIntent
+
+    /** 开关播放页底部的频谱条。 */
+    data class SetPlayerSpectrumEnabled(val enabled: Boolean) : PlayerIntent
+
+    // ── 歌词界面外观 ────────────────────────────────────────────────────
+    // 这几项入口在歌词页自己的面板里：听歌时才想起来调，跳回设置页再回来非常打断。
+
+    /** 歌词字号，sp。 */
+    data class SetLyricsTextSizeSp(val sp: Int) : PlayerIntent
+
+    data class SetLyricsAlignCenter(val enabled: Boolean) : PlayerIntent
+
+    data class SetLyricsGlowEnabled(val enabled: Boolean) : PlayerIntent
+
+    data class SetLyricsBlurEnabled(val enabled: Boolean) : PlayerIntent
 }
 
 sealed interface PlayerEffect {

@@ -1,7 +1,10 @@
 package com.cycling.data.di
 
+import com.cycling.data.api.lyrics.AmllLyricsProvider
+import com.cycling.data.api.lyrics.KugouLyricsProvider
 import com.cycling.data.api.lyrics.LrclibLyricsProvider
 import com.cycling.data.api.lyrics.NetEaseLyricsProvider
+import com.cycling.data.api.lyrics.QQMusicLyricsProvider
 import com.cycling.domain.lyrics.provider.OnlineLyricsProvider
 import dagger.Binds
 import dagger.Module
@@ -22,9 +25,21 @@ abstract class LyricsModule {
 
     @Binds
     @IntoSet
+    abstract fun bindAmllProvider(impl: AmllLyricsProvider): OnlineLyricsProvider
+
+    @Binds
+    @IntoSet
     abstract fun bindLrclibProvider(impl: LrclibLyricsProvider): OnlineLyricsProvider
 
     @Binds
     @IntoSet
     abstract fun bindNetEaseProvider(impl: NetEaseLyricsProvider): OnlineLyricsProvider
+
+    @Binds
+    @IntoSet
+    abstract fun bindQqMusicProvider(impl: QQMusicLyricsProvider): OnlineLyricsProvider
+
+    @Binds
+    @IntoSet
+    abstract fun bindKugouProvider(impl: KugouLyricsProvider): OnlineLyricsProvider
 }

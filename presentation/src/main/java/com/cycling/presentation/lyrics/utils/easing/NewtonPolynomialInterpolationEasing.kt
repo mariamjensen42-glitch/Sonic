@@ -43,19 +43,6 @@ class NewtonPolynomialInterpolationEasing(points: List<Pair<Double, Double>>): E
     }
 }
 
-val DipAndRise = DipAndRise(0.5, 1.0)
-
-fun DipAndRise(
-    dip: Double = 0.5,
-    rise: Double = 1.0
-): NewtonPolynomialInterpolationEasing {
-    return NewtonPolynomialInterpolationEasing(
-        0.0 to 0.0,
-        0.5 to -dip,
-        1.0 to rise
-    )
-}
-
 val Swell = Swell(0.1)
 
 fun Swell(

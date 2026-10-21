@@ -8,6 +8,7 @@ import com.cycling.data.local.entity.LyricsIndexEntity
 import com.cycling.data.local.entity.LyricsOverrideEntity
 import com.cycling.data.local.lyrics.EmbeddedLyricsHelper
 import com.cycling.data.local.lyrics.LyricsFileHelper
+import com.cycling.data.store.LyricsCacheGenerationStore
 import com.cycling.domain.lyrics.model.ISyncedLine
 import com.cycling.domain.lyrics.model.SyncedLyrics
 import com.cycling.domain.lyrics.model.karaoke.KaraokeLine
@@ -25,10 +26,21 @@ import com.cycling.domain.model.Song
 import com.cycling.domain.repository.LyricsRepository
 import com.cycling.domain.repository.SettingsRepository
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
+
+/**
+ * 在线来源集合的代号。**新增来源或改变默认顺序**时加一，触发一次歌词缓存清空
+ * （见 `LyricsRepositoryImpl.ensureCacheGeneration`）。
+ *
+ * - 1 → 2：加入 AMLL；
+ * - 2 → 3：加入 QQ 音乐 / 酷狗音乐的歌词来源。
+ */
+internal const val LYRICS_CACHE_GENERATION = 3
 
 /**
  * Resolves lyrics for a track, cheapest and most authoritative source first.
@@ -51,6 +63,7 @@ class LyricsRepositoryImpl @Inject constructor(
     private val lyricsCacheDao: LyricsCacheDao,
     private val lyricsOverrideDao: LyricsOverrideDao,
     private val lyricsIndexDao: LyricsIndexDao,
+    private val cacheGenerationStore: LyricsCacheGenerationStore,
     private val settingsRepository: SettingsRepository,
     providers: Set<@JvmSuppressWildcards OnlineLyricsProvider>
 ) : LyricsRepository {
@@ -60,6 +73,9 @@ class LyricsRepositoryImpl @Inject constructor(
     private val providersByKind: Map<LyricsProvider, OnlineLyricsProvider> =
         providers.associateBy { it.provider }
 
+    private val cacheGenerationLock = Mutex()
+    private var cacheGenerationReady = false
+
     override suspend fun getLyrics(song: Song): Lyrics {
         val lyrics = resolveLyrics(song)
         // Every resolved document — sidecar, embedded, downloaded or user-written — becomes
@@ -68,7 +84,36 @@ class LyricsRepositoryImpl @Inject constructor(
         return lyrics
     }
 
+    /**
+     * 在线来源集合变化后的第一次取词：把旧来源留下的缓存整表清掉。
+     *
+     * 缓存行只记来源、不记「有没有比它更优先的来源还没问过」，所以新增一个 provider 之后，
+     * 已经放过的歌会一直命中旧的网易云行直到 TTL 到期 —— 新来源对它们等于不存在。清一次表，
+     * 下一次播放就会按当前顺序重新查。用户手写的歌词在另一张表，不受影响。
+     *
+     * 失败时保持旧缓存：宁可晚一点生效，也不能让取歌词本身失败。
+     */
+    private suspend fun ensureCacheGeneration() {
+        if (cacheGenerationReady) return
+        cacheGenerationLock.withLock {
+            if (cacheGenerationReady) return@withLock
+            try {
+                if (cacheGenerationStore.get() < LYRICS_CACHE_GENERATION) {
+                    lyricsCacheDao.clear()
+                    cacheGenerationStore.set(LYRICS_CACHE_GENERATION)
+                    Timber.d("getLyrics: cleared lyrics cache for provider generation $LYRICS_CACHE_GENERATION")
+                }
+                cacheGenerationReady = true
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Timber.w(e, "getLyrics: could not migrate the lyrics cache")
+            }
+        }
+    }
+
     private suspend fun resolveLyrics(song: Song): Lyrics {
+        ensureCacheGeneration()
         val songPath = song.path
         Timber.d("getLyrics: songPath=$songPath")
 
@@ -82,7 +127,12 @@ class LyricsRepositoryImpl @Inject constructor(
         val parsed = usableLyrics(cached.rawContent)
         if (parsed != null && !cached.hasExpired(parsed)) {
             Timber.d("getLyrics: cache hit for ${query.cacheKey} (source=${cached.source})")
-            return Lyrics(parsed, cached.rawContent, LyricsSource.ONLINE)
+            return Lyrics(
+                syncedLyrics = parsed,
+                rawContent = cached.rawContent,
+                source = LyricsSource.ONLINE,
+                provider = providerOf(cached.source)
+            )
         }
 
         // A blank body is a remembered "the providers had nothing", which must not cost two HTTP
@@ -111,6 +161,7 @@ class LyricsRepositoryImpl @Inject constructor(
 
     override suspend fun findLyricsCandidates(song: Song): List<LyricsCandidate> {
         if (!settingsRepository.onlineLyricsEnabled.first()) return emptyList()
+        ensureCacheGeneration()
 
         val query = LyricsQuery.of(song)
         val inUse = lyricsCacheDao.get(query.cacheKey)?.rawContent
@@ -127,6 +178,7 @@ class LyricsRepositoryImpl @Inject constructor(
                 Timber.w(e, "findLyricsCandidates: ${kind.name} failed for ${query.cacheKey}")
                 continue
             }
+            Timber.d("findLyricsCandidates: ${kind.name} returned ${found.size} for ${query.cacheKey}")
 
             found.forEachIndexed { index, lyrics ->
                 val parsed = usableLyrics(lyrics.rawContent) ?: return@forEachIndexed
@@ -156,7 +208,12 @@ class LyricsRepositoryImpl @Inject constructor(
         // choice survives a restart without any schema of its own.
         cacheLyrics(query, candidate.provider.name.lowercase(), candidate.rawContent)
         index(song.id, candidate.rawContent)
-        return Lyrics(parsed, candidate.rawContent, LyricsSource.ONLINE)
+        return Lyrics(
+            syncedLyrics = parsed,
+            rawContent = candidate.rawContent,
+            source = LyricsSource.ONLINE,
+            provider = candidate.provider
+        )
     }
 
     override suspend fun saveLyrics(song: Song, rawContent: String): Lyrics {
@@ -252,7 +309,14 @@ class LyricsRepositoryImpl @Inject constructor(
             } catch (e: Exception) {
                 Timber.w(e, "getLyrics: ${kind.name} failed for ${query.cacheKey}")
                 null
-            } ?: continue
+            }
+            if (found == null) {
+                // Debug-level on purpose: "this source had nothing" is the normal outcome for a
+                // library outside its catalogue, and it is what tells a support log apart from a
+                // provider that never got asked.
+                Timber.d("getLyrics: ${kind.name} had nothing for ${query.cacheKey}")
+                continue
+            }
 
             val syncedLyrics = usableLyrics(found.rawContent)
             if (syncedLyrics == null) {
@@ -261,7 +325,12 @@ class LyricsRepositoryImpl @Inject constructor(
             }
 
             cacheLyrics(query, kind.name.lowercase(), found.rawContent)
-            return Lyrics(syncedLyrics, found.rawContent, LyricsSource.ONLINE)
+            return Lyrics(
+                syncedLyrics = syncedLyrics,
+                rawContent = found.rawContent,
+                source = LyricsSource.ONLINE,
+                provider = kind
+            )
         }
 
         Timber.d("getLyrics: no online lyrics found for ${query.cacheKey}")
@@ -291,6 +360,16 @@ class LyricsRepositoryImpl @Inject constructor(
     /** Timed lyrics, or `null` when the content carries no timings the player can follow. */
     private fun usableLyrics(content: String): SyncedLyrics? =
         parseLyrics(content)?.takeIf { it.lines.isNotEmpty() }
+
+    /**
+     * The provider a cached row came from.
+     *
+     * `lyrics_cache.source` stores the enum name lowercased (and `"none"` for a remembered miss),
+     * so the round trip is a case-insensitive lookup. An unknown value — an old row written by a
+     * provider that has since been removed — is reported as `null` rather than guessed.
+     */
+    private fun providerOf(source: String): LyricsProvider? =
+        LyricsProvider.entries.firstOrNull { it.name.equals(source, ignoreCase = true) }
 
     /** The first line's text, used to tell two versions apart when the source gave no label. */
     private fun ISyncedLine.preview(): String? {

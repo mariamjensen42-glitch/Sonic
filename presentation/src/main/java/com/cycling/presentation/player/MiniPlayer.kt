@@ -1,5 +1,3 @@
-@file:OptIn(ExperimentalMaterial3ExpressiveApi::class)
-
 package com.cycling.presentation.player
 
 import androidx.compose.foundation.clickable
@@ -7,14 +5,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearWavyProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -35,7 +31,10 @@ import com.cycling.presentation.R
  * 迷你播放器。
  *
  * 悬浮于底部导航栏之上的一块高圆角表面：左封面、中信息、右控制，
- * 进度用 Expressive 的波浪线性指示器贯穿底部 —— 不再用零高度 Slider 硬凑。
+ * 进度用一条贯穿底部的静态线性指示器 —— 不用零高度 Slider 硬凑，也**不用
+ * `LinearWavyProgressIndicator`**：那个波浪是常驻动画，只要迷你播放器在场（也就是只要库里有
+ * 当前曲目），整块界面就会以 120 fps 持续重绘，实测暂停时也一样（10 秒 1231 帧、CPU 100%+）。
+ * 波浪保留给全屏的播放页，那里它才是值得的画面。
  */
 @Composable
 fun MiniPlayer(
@@ -133,12 +132,11 @@ fun MiniPlayer(
                 }
             }
 
-            LinearWavyProgressIndicator(
+            LinearProgressIndicator(
                 progress = { progress },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = SonSpacing.medium)
-                    .height(SonSpacing.small)
             )
         }
     }

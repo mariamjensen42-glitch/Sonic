@@ -9,12 +9,17 @@
 
     <!-- Player -->
     <string name="player_queue_title">播放队列</string>
+    <!-- 文件损坏/被删/解码失败：必须让用户知道为什么突然没声音了 -->
+    <string name="player_playback_failed_skipped">这首歌无法播放，已跳到下一首</string>
+    <string name="player_playback_failed">这首歌无法播放</string>
     <string name="player_clear_queue">清空</string>
     <string name="player_empty_queue">播放队列为空</string>
     <string name="player_close">关闭</string>
     <string name="player_now_playing">正在播放</string>
     <string name="player_settings_desc">播放设置</string>
     <string name="player_playback_settings_title">播放设置</string>
+    <string name="player_spectrum_title">频谱条</string>
+    <string name="player_spectrum_subtitle">关闭后底部不再显示频谱</string>
     <string name="player_queue_desc">播放队列</string>
     <string name="player_favorite_desc">收藏</string>
     <string name="player_unfavorite_desc">取消收藏</string>
@@ -45,6 +50,7 @@
     <string name="lyrics_candidate_line_level">行级</string>
     <string name="lyrics_candidate_current">当前使用</string>
     <string name="lyrics_candidate_selected">已切换歌词版本</string>
+    <string name="song_detail_lyrics_candidates_hint">点选一个版本填入编辑器，保存后才会生效</string>
 
     <!-- Player ViewModel -->
     <string name="player_added_to_queue">已添加到播放队列</string>
@@ -77,7 +83,6 @@
     <string name="collection_detail_add_desc">添加到歌单</string>
     <string name="collection_detail_song_count">%d 首歌曲</string>
     <string name="collection_detail_exit_selection_desc">退出多选</string>
-    <string name="collection_detail_added_toast">已添加到歌单</string>
     <string name="collection_detail_reorder_desc">排序</string>
     <string name="collection_detail_reorder_done_desc">完成排序</string>
     <string name="collection_detail_exit_reorder_desc">退出排序</string>
@@ -125,6 +130,15 @@
     <string name="search_tab_artists">艺人</string>
     <string name="search_artist_song_count">%1$d 首歌</string>
     <string name="search_back_desc">返回</string>
+    <string name="search_online_section">在线音乐</string>
+    <string name="search_online_loading">正在搜索在线音源…</string>
+    <string name="search_online_empty">在线音源没有搜到这首歌</string>
+    <string name="search_online_no_sources">还没有可用的在线音源，先去 设置 → 在线音乐 → 在线音源 导入一个脚本</string>
+    <string name="search_online_failed">取链失败：%1$s</string>
+    <string name="search_online_not_configured">没有已启用的在线音源</string>
+    <string name="search_online_playing_desc">正在取链</string>
+    <string name="search_online_load_more">加载更多在线结果</string>
+    <string name="search_online_loading_more">正在加载更多…</string>
 
     <!-- My Music -->
     <string name="mymusic_back_desc">返回</string>
@@ -195,6 +209,7 @@
     <string name="songs_sort_desc">排序</string>
     <string name="songs_count">%d 首歌曲</string>
     <string name="songs_play_next">下一首播放</string>
+    <string name="songs_add_to_queue">加入播放队列</string>
     <string name="songs_view_detail">查看详情</string>
     <string name="songs_add_to_playlist">添加到播放列表</string>
     <string name="songs_play_all">播放全部</string>
@@ -220,6 +235,8 @@
     <!-- Songs ViewModel -->
     <string name="playlist_added_to">已添加到播放列表</string>
     <string name="playlist_created_and_added">已创建播放列表并添加歌曲</string>
+    <!-- 去重后一首都没写进去：此时不能说"已添加"，要说清是本来就在单里 -->
+    <string name="playlist_song_already_added">已经在歌单里了</string>
 
     <!-- Album Detail -->
     <string name="album_detail_back_desc">返回</string>
@@ -366,7 +383,10 @@
     <string name="settings_online_lyrics">在线获取歌词</string>
     <string name="settings_online_lyrics_subtitle">本地文件没有歌词时从网络下载，并缓存到设备</string>
     <string name="settings_lyrics_provider_order">来源优先级</string>
+    <string name="settings_lyrics_provider_amll">AMLL 逐词歌词库</string>
     <string name="settings_lyrics_provider_netease">网易云音乐</string>
+    <string name="settings_lyrics_provider_qq_music">QQ 音乐</string>
+    <string name="settings_lyrics_provider_kugou">酷狗音乐</string>
     <string name="settings_lyrics_provider_lrclib">LRCLIB</string>
     <string name="settings_lyrics_provider_move_up">上移</string>
     <string name="settings_lyrics_provider_move_down">下移</string>
@@ -394,10 +414,25 @@
     <string name="song_detail_artist_placeholder">输入艺术家</string>
     <string name="song_detail_album_label">专辑</string>
     <string name="song_detail_album_placeholder">输入专辑</string>
+    <string name="song_detail_album_artist_label">专辑艺术家</string>
+    <string name="song_detail_album_artist_placeholder">输入专辑艺术家</string>
     <string name="song_detail_year_label">年份</string>
     <string name="song_detail_year_placeholder">输入年份</string>
     <string name="song_detail_genre_label">流派</string>
     <string name="song_detail_genre_placeholder">输入流派</string>
+    <string name="song_detail_track_number_label">音轨号</string>
+    <string name="song_detail_track_number_placeholder">如 3 或 3/12</string>
+    <string name="song_detail_disc_number_label">碟号</string>
+    <string name="song_detail_disc_number_placeholder">如 1 或 1/2</string>
+    <string name="song_detail_composer_label">作曲</string>
+    <string name="song_detail_composer_placeholder">输入作曲</string>
+    <string name="song_detail_publisher_label">出版商</string>
+    <string name="song_detail_publisher_placeholder">输入出版商</string>
+    <string name="song_detail_copyright_label">版权</string>
+    <string name="song_detail_copyright_placeholder">输入版权信息</string>
+    <string name="song_detail_comment_label">备注</string>
+    <string name="song_detail_comment_placeholder">输入备注</string>
+    <string name="song_detail_metadata_hint">标签写回支持 MP3 / FLAC / OGG / M4A / MP4 等格式；格式不支持或没有写入权限时，改动只保存在应用数据库里</string>
     <string name="song_detail_saving">保存中...</string>
     <string name="song_detail_save">保存</string>
     <string name="song_detail_cancel">取消</string>
@@ -436,13 +471,86 @@
     <string name="song_detail_lyrics_label">歌词</string>
     <string name="song_detail_lyrics_placeholder">每行一句歌词；带 LRC 时间轴时播放页可跟随，如 [00:12.34]歌词</string>
     <string name="song_detail_lyrics_hint">留空并保存会清除自定义歌词，恢复自动获取</string>
+    <string name="song_detail_lyrics_fetch">获取歌词</string>
+    <string name="song_detail_lyrics_info">歌词信息</string>
+    <string name="song_detail_lyrics_online_disabled">未开启在线歌词，请先在设置中开启</string>
+    <string name="song_detail_lyrics_candidate_filled">已填入歌词，保存后生效</string>
+
+    <!-- Song Detail · lyrics info -->
+    <string name="song_detail_lyrics_info_title">歌词信息</string>
+    <string name="song_detail_lyrics_info_source">来源</string>
+    <string name="song_detail_lyrics_info_timing">时间轴</string>
+    <string name="song_detail_lyrics_info_untimed">无时间轴</string>
+    <string name="song_detail_lyrics_info_lines">行数</string>
+    <string name="song_detail_lyrics_info_format">格式</string>
+    <string name="song_detail_lyrics_info_translation">译文</string>
+    <string name="song_detail_lyrics_info_yes">有</string>
+    <string name="song_detail_lyrics_info_no">无</string>
+    <string name="song_detail_lyrics_metadata_section">歌词元数据（LRC 头部标签）</string>
+    <string name="song_detail_lyrics_meta_title">标题 [ti]</string>
+    <string name="song_detail_lyrics_meta_artist">歌手 [ar]</string>
+    <string name="song_detail_lyrics_meta_album">专辑 [al]</string>
+    <string name="song_detail_lyrics_meta_offset">偏移 [offset]</string>
+    <string name="song_detail_lyrics_meta_offset_hint">毫秒；只写进歌词的 [offset] 标签，不改变播放对轴</string>
+    <string name="song_detail_lyrics_meta_by">制作 [by]</string>
+    <string name="song_detail_lyrics_meta_offset_label">偏移</string>
+    <string name="song_detail_lyrics_meta_by_label">制作</string>
+    <string name="song_detail_lyrics_metadata_unsupported">该歌词格式没有 LRC 头部元数据可编辑</string>
+    <string name="song_detail_lyrics_metadata_fill_song">填入歌曲标签</string>
+    <string name="song_detail_lyrics_metadata_apply">写回歌词</string>
+    <string name="song_detail_lyrics_metadata_close">关闭</string>
+    <string name="song_detail_lyrics_metadata_applied">歌词信息已写回编辑器</string>
+    <string name="song_detail_lyrics_metadata_filled">已填入歌曲信息</string>
+    <string name="song_detail_lyrics_metadata_no_song_info">歌词里没有可填入的标题、歌手或专辑</string>
+    <string name="song_detail_lyrics_source_user">手写</string>
+    <string name="song_detail_lyrics_source_embedded">内嵌标签</string>
+    <string name="song_detail_lyrics_source_file">旁车文件</string>
+    <string name="song_detail_lyrics_source_online">在线下载</string>
+    <string name="song_detail_lyrics_source_none">无</string>
+    <string name="song_detail_lyrics_format_plain">纯文本</string>
+    <string name="song_detail_lyrics_format_word_by_word_lrc">逐字 LRC</string>
+    <string name="song_detail_lyrics_format_enhanced_lrc">增强 LRC</string>
+    <string name="song_detail_lyrics_format_lyricify">Lyricify 逐字</string>
+
+    <!-- Song Detail · cover -->
+    <string name="song_detail_cover_manage">更换封面</string>
+    <string name="song_detail_cover_title">更换封面</string>
+    <string name="song_detail_cover_hint">可以从相册选择一张图，或从在线来源搜索封面</string>
+    <string name="song_detail_cover_pick_local">从相册选择</string>
+    <string name="song_detail_cover_search">重新搜索</string>
+    <string name="song_detail_cover_clear">恢复默认封面</string>
+    <string name="song_detail_cover_searching">正在搜索封面…</string>
+    <string name="song_detail_cover_applying">正在应用封面…</string>
+    <string name="song_detail_cover_empty">没有找到封面</string>
+    <string name="song_detail_cover_empty_hint">换个来源再搜一次，或从相册选择一张</string>
+    <string name="song_detail_cover_best_match">最佳匹配</string>
+    <string name="song_detail_cover_source_netease">网易云音乐</string>
+    <string name="song_detail_cover_source_qq">QQ 音乐</string>
+    <string name="song_detail_cover_source_kugou">酷狗音乐</string>
+    <string name="song_detail_cover_source_itunes">iTunes</string>
+
+    <!-- Song Detail · online metadata -->
+    <string name="song_detail_metadata_online_manage">获取在线信息</string>
+    <string name="song_detail_metadata_online_title">在线元数据</string>
+    <string name="song_detail_metadata_online_hint">点选一条填入编辑器，检查后保存才会生效</string>
+    <string name="song_detail_metadata_online_searching">正在搜索在线信息…</string>
+    <string name="song_detail_metadata_online_empty">没有找到匹配的在线信息</string>
+    <string name="song_detail_metadata_online_empty_hint">换个网络再试一次，或手动填写</string>
+    <string name="song_detail_metadata_online_track">音轨 %1$s</string>
 
     <!-- Song Detail ViewModel -->
     <string name="song_detail_vm_path_copied">路径已复制到剪贴板</string>
     <string name="song_detail_vm_update_failed">更新歌曲信息失败</string>
     <string name="song_detail_vm_save_success">保存成功</string>
+    <string name="song_detail_vm_save_partial">已保存到应用数据库；文件标签未写入（格式不支持或无写入权限）</string>
     <string name="song_detail_vm_save_failed">保存标签失败</string>
     <string name="song_detail_vm_lyrics_save_failed">保存歌词失败</string>
+    <string name="song_detail_vm_cover_updated">封面已更新</string>
+    <string name="song_detail_vm_cover_cleared">已恢复默认封面</string>
+    <string name="song_detail_vm_cover_failed">应用封面失败</string>
+    <string name="song_detail_vm_metadata_filled">已填入在线信息，检查后保存生效</string>
+    <string name="song_detail_vm_metadata_empty">该条目没有可填入的信息</string>
+    <string name="song_detail_vm_lyrics_fetch_failed">获取歌词失败</string>
 
     <!-- Bottom Navigation -->
     <string name="nav_home">首页</string>
@@ -463,4 +571,237 @@
     <string name="mymusic_subtitle_library">%1$d 个歌单</string>
     <string name="albums_count">%1$d 张专辑</string>
     <string name="artists_count">%1$d 位歌手</string>
+
+    <!-- 本地读取失败：ViewModel 兜底，界面不能永远停在载入态 -->
+    <string name="home_vm_load_failed">加载首页内容失败</string>
+    <string name="songs_vm_load_failed">加载歌曲失败</string>
+    <string name="collection_vm_load_failed">加载歌曲列表失败</string>
+    <string name="song_detail_vm_load_info_failed">加载歌曲信息失败</string>
+    <string name="mymusic_vm_load_failed">加载歌单失败</string>
+
+    <!-- 均衡器 / 播放页律动 -->
+    <string name="settings_equalizer_menu">均衡器</string>
+    <string name="settings_equalizer_menu_subtitle">10 段图形均衡、耳机校正与播放页律动</string>
+    <string name="equalizer_enable">启用均衡器</string>
+    <string name="equalizer_enable_subtitle">逐频段调节音色，预设一键切换</string>
+    <string name="equalizer_response">响应曲线</string>
+    <string name="equalizer_presets">预设</string>
+    <string name="equalizer_bands">频段</string>
+    <string name="equalizer_preamp">预放大</string>
+    <string name="equalizer_band_gain">%+.1f dB</string>
+    <string name="equalizer_preamp_value">%+.1f dB</string>
+    <string name="equalizer_reset">恢复默认</string>
+    <string name="equalizer_visualization">播放页律动</string>
+    <string name="equalizer_visualization_subtitle">封面随节拍起伏，暂停时完全静止</string>
+    <string name="equalizer_custom_active">自定义（已手动调整频段）</string>
+    <string name="eq_preset_flat">平直</string>
+    <string name="eq_preset_bass_boost">低音增强</string>
+    <string name="eq_preset_vocal">人声</string>
+    <string name="eq_preset_rock">摇滚</string>
+    <string name="eq_preset_pop">流行</string>
+    <string name="eq_preset_classical">古典</string>
+    <string name="eq_preset_jazz">爵士</string>
+    <string name="eq_preset_electronic">电子</string>
+    <string name="eq_preset_dance">舞曲</string>
+
+    <!-- 均衡器 · 耳机校正（AutoEQ） -->
+    <string name="autoeq_section">耳机校正</string>
+    <string name="autoeq_none">未应用校正</string>
+    <string name="autoeq_none_subtitle">按耳机型号套用 AutoEQ 参数档案，叠加在图形均衡之前</string>
+    <string name="autoeq_pick">选择</string>
+    <string name="autoeq_change">更换</string>
+    <string name="autoeq_title">耳机校正</string>
+    <string name="autoeq_subtitle">内置 %1$d 款耳机档案，叠加在当前均衡之上</string>
+    <string name="autoeq_search_hint">搜索耳机或耳塞型号</string>
+    <string name="autoeq_filter_all">全部</string>
+    <string name="autoeq_filter_in_ear">入耳</string>
+    <string name="autoeq_filter_earbud">平头</string>
+    <string name="autoeq_filter_over_ear">头戴</string>
+    <string name="autoeq_applied">当前校正：%1$s</string>
+    <string name="autoeq_applied_detail">来源 %1$s · 预放大 %2$+.1f dB</string>
+    <string name="autoeq_entry_detail">来源 %1$s · %2$s</string>
+    <string name="autoeq_clear">取消</string>
+    <string name="autoeq_empty">没有匹配的型号</string>
+    <string name="autoeq_in_use">使用中</string>
+
+    <!-- Settings · 在线音源（洛雪式脚本取链） -->
+    <string name="settings_section_online">在线音乐</string>
+    <string name="settings_online_sources_menu">在线音源</string>
+    <string name="settings_online_sources_menu_subtitle">LX 脚本插件、取链优先级与失效自动屏蔽</string>
+    <string name="online_sources_priority">取链优先级</string>
+    <string name="online_sources_priority_fallback">自动换源</string>
+    <string name="online_sources_priority_plugin_only">仅本平台</string>
+    <string name="online_sources_priority_fallback_desc">本平台失败后，继续尝试候选平台上的插件（成功率优先）</string>
+    <string name="online_sources_priority_plugin_only_desc">只用歌曲自身平台取链，不跨平台换源</string>
+    <string name="online_sources_sort">排序</string>
+    <string name="online_sources_sort_manual">手动</string>
+    <string name="online_sources_sort_platform_count">平台数</string>
+    <string name="online_sources_sort_speed">速度</string>
+    <string name="online_sources_sort_available">可用性</string>
+    <string name="online_sources_installed">已安装插件（%1$d）</string>
+    <string name="online_sources_empty">还没有音源插件。导入一个 LX 脚本（洛雪音源）即可开始在线取链。</string>
+    <string name="online_sources_import_file">导入文件</string>
+    <string name="online_sources_import_text">粘贴脚本</string>
+    <string name="online_sources_import_url">从链接导入</string>
+    <string name="online_sources_import_text_title">粘贴 LX 音源脚本</string>
+    <string name="online_sources_import_url_title">脚本链接</string>
+    <string name="online_sources_import_confirm">导入</string>
+    <string name="online_sources_cancel">取消</string>
+    <string name="online_sources_test">测试</string>
+    <string name="online_sources_delete">删除</string>
+    <string name="online_sources_move_up">上移</string>
+    <string name="online_sources_move_down">下移</string>
+    <string name="online_sources_auto_block">自动屏蔽</string>
+    <string name="online_sources_blocked">自动屏蔽：%1$s</string>
+    <string name="online_sources_manual_blocked">手动屏蔽：%1$s</string>
+    <string name="online_sources_clear_blocked_short">解除屏蔽</string>
+    <string name="online_sources_testing">正在测试…</string>
+    <string name="online_sources_test_ok">探测通过：%1$s 个音源</string>
+    <string name="online_sources_test_failed">探测失败：%1$s</string>
+    <string name="online_sources_import_ok">已导入：%1$s</string>
+    <string name="online_sources_import_failed">导入失败：%1$s</string>
+    <string name="online_sources_deleted">已删除</string>
+    <string name="online_sources_sources">音源：%1$s</string>
+    <string name="online_sources_platform_count">%1$d 个平台</string>
+    <string name="online_sources_error">错误：%1$s</string>
+    <string name="online_sources_opaque_hint">脚本被压缩/混淆，未识别到 lx 标记；能正常启动即可使用。</string>
+    <string name="online_sources_key_hint">授权由脚本自身（lxkey）决定；额度用完、Key 到期/停用这类错误会在测试或取链时提示。</string>
+
+    <!-- 听歌统计（听歌足迹：本周累计 / 时间脉络 / 常听） -->
+    <string name="stats_title">听歌统计</string>
+    <string name="stats_back">返回</string>
+    <string name="stats_settings">统计设置</string>
+    <string name="stats_hero_total">累计听歌时长</string>
+    <string name="stats_hero_plays_days">累计播放 %1$s 次 · 听歌 %2$d 天</string>
+    <string name="stats_average_per_song">平均每首 %1$s</string>
+    <string name="stats_period_today">今日</string>
+    <string name="stats_period_week">本周</string>
+    <string name="stats_period_month">本月</string>
+    <string name="stats_period_plays">%1$s 次</string>
+    <string name="stats_section_timeline">时间脉络</string>
+    <string name="stats_section_timeline_subtitle">本周节奏与近一年的听歌足迹</string>
+    <string name="stats_week_title">本周节奏</string>
+    <string name="stats_week_empty">这周还没有听歌</string>
+    <string name="stats_year_title">近一年</string>
+    <string name="stats_year_caption">每个格是一天，颜色越深听得越久</string>
+    <string name="stats_section_hours">听歌时刻</string>
+    <string name="stats_section_hours_subtitle">你通常在什么时候听歌</string>
+    <string name="stats_busiest_hour">最常在 %1$s–%2$s 听歌</string>
+    <string name="stats_section_top">常听</string>
+    <string name="stats_section_top_subtitle">按播放次数排序</string>
+    <string name="stats_top_songs">最常听的歌</string>
+    <string name="stats_top_artists">最常听的歌手</string>
+    <string name="stats_expand_ranking">展开完整榜单</string>
+    <string name="stats_collapse_ranking">收起完整榜单</string>
+    <string name="stats_empty_title">还没有听歌记录</string>
+    <string name="stats_empty_subtitle">从喜欢的一首歌开始，留下你的听歌足迹</string>
+    <string name="stats_clear">清空本地统计</string>
+    <string name="stats_clear_confirm_title">清空本地统计？</string>
+    <string name="stats_clear_confirm_text">所有听歌记录、统计与排行榜都会归零，且无法恢复。</string>
+    <string name="stats_clear_confirm">清空</string>
+    <string name="stats_cancel">取消</string>
+    <string name="stats_cleared">已清空本地统计</string>
+    <string name="stats_day_detail_title">%1$s 的听歌记录</string>
+    <string name="stats_day_detail_empty">这一天没有听歌记录</string>
+    <string name="stats_plays_count">%1$s 次</string>
+    <string name="stats_error">统计加载失败，请稍后重试</string>
+    <string name="stats_song_missing">这首歌已经不在曲库里了</string>
+    <string name="stats_week_total">本周共 %1$s</string>
+
+    <!-- 听歌排行榜（听歌足迹：时长榜 / 次数榜 × 日周月总 + 乐迷档案） -->
+    <string name="leaderboard_title">听歌排行榜</string>
+    <string name="leaderboard_back">返回</string>
+    <string name="leaderboard_metric_duration">时长榜</string>
+    <string name="leaderboard_metric_plays">次数榜</string>
+    <string name="leaderboard_range_day">日榜</string>
+    <string name="leaderboard_range_week">周榜</string>
+    <string name="leaderboard_range_month">月榜</string>
+    <string name="leaderboard_range_all">总榜</string>
+    <string name="leaderboard_range_hint">近 %1$d 天</string>
+    <string name="leaderboard_range_hint_all">全部累计</string>
+    <string name="leaderboard_profile_title">我的乐迷档案</string>
+    <string name="leaderboard_level">Lv.%1$d</string>
+    <string name="leaderboard_level_next">再听 %1$s 升到 Lv.%2$d</string>
+    <string name="leaderboard_level_max">已达最高等级</string>
+    <string name="leaderboard_stat_total">累计时长</string>
+    <string name="leaderboard_stat_days">在榜天数</string>
+    <string name="leaderboard_stat_streak">连续天数</string>
+    <string name="leaderboard_stat_best">最佳单日</string>
+    <string name="leaderboard_empty_title">这段时间还没有记录</string>
+    <string name="leaderboard_empty_subtitle">听几首歌，再回来看看自己的榜单</string>
+    <string name="leaderboard_list_title">歌曲榜</string>
+    <string name="leaderboard_error">排行榜加载失败，请稍后重试</string>
+    <string name="leaderboard_song_missing">这首歌已经不在曲库里了</string>
+    <string name="leaderboard_plays_count">%1$d 次</string>
+    <string name="leaderboard_share_of_period">占本时段 %1$d%%</string>
+
+    <!-- 听歌足迹 · 通用时长/计数格式 -->
+    <string name="listen_duration_hours_minutes">%1$d 小时 %2$d 分钟</string>
+    <string name="listen_duration_hours">%1$d 小时</string>
+    <string name="listen_duration_minutes">%1$d 分钟</string>
+    <string name="listen_duration_seconds">%1$d 秒</string>
+    <string name="listen_duration_zero">0 分钟</string>
+
+    <!-- 听歌足迹 · 我的音乐入口 -->
+    <string name="mymusic_section_listening">听歌足迹</string>
+    <string name="mymusic_stats_label">听歌统计</string>
+    <string name="mymusic_stats_subtitle">本周累计、时间脉络与常听</string>
+    <string name="mymusic_leaderboard_label">听歌排行榜</string>
+    <string name="mymusic_leaderboard_subtitle">时长榜、周榜与乐迷档案</string>
+
+    <!-- Settings · 存储与缓存 -->
+    <string name="settings_section_storage">存储</string>
+    <string name="settings_cache_menu">缓存管理</string>
+    <string name="settings_cache_usage">已用 %1$s</string>
+    <string name="settings_cache_calculating">统计中…</string>
+    <string name="settings_cache_title">存储与缓存</string>
+    <string name="settings_cache_images">封面与图片缓存</string>
+    <string name="settings_cache_http">网络缓存</string>
+    <string name="settings_cache_lyrics">歌词缓存</string>
+    <string name="settings_cache_ai">AI 信息缓存</string>
+    <string name="settings_cache_entries">%1$d 条</string>
+    <string name="settings_cache_clear_all">全部清理</string>
+    <string name="settings_cache_clear_desc">清理</string>
+    <string name="settings_cache_hint">自定义封面和音源脚本属于你的数据，不会被清理。</string>
+    <string name="settings_vm_cache_cleared">缓存已清理</string>
+    <string name="settings_cache_limit">缓存上限</string>
+    <string name="settings_cache_limit_off">未生效（自动清理已关闭）</string>
+    <string name="settings_cache_limit_desc">超过上限后清空最占空间的缓存目录，之后按需重新生成。</string>
+    <string name="settings_cache_auto_clean">自动清理</string>
+    <string name="settings_cache_auto_clean_desc">运行期间每小时检查一次，启动时补查</string>
+    <string name="settings_cache_confirm_title">清理缓存？</string>
+    <string name="settings_cache_confirm_all">将清空全部磁盘缓存、歌词缓存与 AI 信息缓存。自定义封面和音源脚本不受影响。</string>
+    <string name="settings_cache_confirm_disk">将清空「%1$s」，之后按需重新生成。</string>
+    <string name="settings_cache_confirm_lyrics">将清空歌词缓存，重新播放时按需重新获取。</string>
+    <string name="settings_cache_confirm_ai">将清空 AI 信息缓存，下次查看时重新请求。</string>
+    <string name="settings_cache_confirm_action">清理</string>
+    <string name="settings_cache_cancel">取消</string>
+    <string name="settings_cache_limit_mb">%1$d MB</string>
+
+    <!-- 封面小金标 -->
+    <string name="settings_hi_res_badge">封面小金标</string>
+    <string name="settings_hi_res_badge_subtitle">显示在播放页封面左下角</string>
+    <string name="settings_hi_res_badge_dialog_title">小金标样式</string>
+    <string name="settings_hi_res_badge_off">不显示</string>
+    <string name="settings_hi_res_badge_hi_res">Hi-Res Audio</string>
+    <string name="settings_hi_res_badge_wireless">Hi-Res 无线</string>
+    <string name="settings_hi_res_badge_gold">小金标</string>
+    <string name="settings_hi_res_badge_custom">自定义图片</string>
+    <string name="settings_hi_res_badge_pick">选择图片</string>
+    <string name="settings_hi_res_badge_clear">清除自定义图片</string>
+    <string name="settings_hi_res_badge_pick_failed">无法读取这张图片</string>
+
+    <!-- 歌词界面 -->
+    <string name="lyrics_settings_title">歌词界面</string>
+    <string name="lyrics_settings_desc">歌词界面设置</string>
+    <string name="lyrics_settings_text_size">歌词字号</string>
+    <string name="lyrics_settings_text_size_value">%1$d sp</string>
+    <string name="lyrics_settings_text_size_subtitle">只影响歌词页，不改动其他界面</string>
+    <string name="lyrics_settings_align_center">歌词居中对齐</string>
+    <string name="lyrics_settings_align_center_subtitle">行文本在可用宽度内居中</string>
+    <string name="lyrics_settings_glow">歌词辉光</string>
+    <string name="lyrics_settings_glow_subtitle">当前行文字带一层柔光</string>
+    <string name="lyrics_settings_blur">非当前行模糊</string>
+    <string name="lyrics_settings_blur_subtitle">离当前行越远越虚；关闭后更清晰也更省电</string>
+    <string name="lyrics_settings_blur_unsupported">需要 Android 12 及以上系统</string>
 </resources>

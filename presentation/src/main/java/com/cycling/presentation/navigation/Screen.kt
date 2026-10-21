@@ -25,6 +25,14 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data class AiInfo(val type: String, val name: String, val artist: String = "") : Screen
+
+    /** 听歌统计：本周累计、时间脉络、常听。 */
+    @Serializable
+    data object Stats : Screen
+
+    /** 听歌排行榜：时长榜 / 次数榜 × 日周月总 + 乐迷档案。 */
+    @Serializable
+    data object Leaderboard : Screen
 }
 
 sealed interface LibraryDestination : Screen {

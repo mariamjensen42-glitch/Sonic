@@ -9,10 +9,17 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.cycling.domain.model.HiResBadge
 import com.cycling.domain.model.LyricsProvider
 import com.cycling.domain.repository.SettingsRepository
 import com.cycling.domain.repository.SettingsRepository.Companion.DEFAULT_AUDIO_FADE_DURATION_MS
+import com.cycling.domain.repository.SettingsRepository.Companion.DEFAULT_CACHE_LIMIT_BYTES
+import com.cycling.domain.repository.SettingsRepository.Companion.DEFAULT_LYRICS_TEXT_SIZE_SP
 import com.cycling.domain.repository.SettingsRepository.Companion.DEFAULT_SLEEP_TIMER_PRESET_MINUTES
+import com.cycling.domain.repository.SettingsRepository.Companion.MAX_CACHE_LIMIT_BYTES
+import com.cycling.domain.repository.SettingsRepository.Companion.MAX_LYRICS_TEXT_SIZE_SP
+import com.cycling.domain.repository.SettingsRepository.Companion.MIN_CACHE_LIMIT_BYTES
+import com.cycling.domain.repository.SettingsRepository.Companion.MIN_LYRICS_TEXT_SIZE_SP
 import com.cycling.domain.repository.SettingsRepository.Companion.MAX_AUDIO_FADE_DURATION_MS
 import com.cycling.domain.repository.SettingsRepository.Companion.MAX_PLAYBACK_SPEED
 import com.cycling.domain.repository.SettingsRepository.Companion.MIN_PLAYBACK_SPEED
@@ -50,6 +57,13 @@ class SettingsRepositoryImpl @Inject constructor(
 
     override suspend fun setSkipSilence(enabled: Boolean) {
         context.settingsDataStore.edit { it[SKIP_SILENCE_KEY] = enabled }
+    }
+
+    override val playerSpectrumEnabled: Flow<Boolean> =
+        context.settingsDataStore.data.map { it[PLAYER_SPECTRUM_KEY] ?: true }
+
+    override suspend fun setPlayerSpectrumEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { it[PLAYER_SPECTRUM_KEY] = enabled }
     }
 
     override val rememberPlaybackPosition: Flow<Boolean> =
@@ -105,6 +119,25 @@ class SettingsRepositoryImpl @Inject constructor(
         context.settingsDataStore.edit { it[AUTO_CONTINUE_KEY] = enabled }
     }
 
+    override val cacheLimitBytes: Flow<Long> =
+        context.settingsDataStore.data.map { prefs ->
+            (prefs[CACHE_LIMIT_KEY] ?: DEFAULT_CACHE_LIMIT_BYTES)
+                .coerceIn(MIN_CACHE_LIMIT_BYTES, MAX_CACHE_LIMIT_BYTES)
+        }
+
+    override suspend fun setCacheLimitBytes(bytes: Long) {
+        context.settingsDataStore.edit {
+            it[CACHE_LIMIT_KEY] = bytes.coerceIn(MIN_CACHE_LIMIT_BYTES, MAX_CACHE_LIMIT_BYTES)
+        }
+    }
+
+    override val autoCleanCacheEnabled: Flow<Boolean> =
+        context.settingsDataStore.data.map { it[AUTO_CLEAN_CACHE_KEY] ?: true }
+
+    override suspend fun setAutoCleanCacheEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { it[AUTO_CLEAN_CACHE_KEY] = enabled }
+    }
+
     override val lyricsProviderOrder: Flow<List<LyricsProvider>> =
         context.settingsDataStore.data.map { prefs ->
             SettingsConversions.parseLyricsProviders(prefs[LYRICS_PROVIDERS_KEY])
@@ -117,9 +150,61 @@ class SettingsRepositoryImpl @Inject constructor(
         }
     }
 
+    override val lyricsTextSizeSp: Flow<Int> =
+        context.settingsDataStore.data.map { prefs ->
+            (prefs[LYRICS_TEXT_SIZE_KEY] ?: DEFAULT_LYRICS_TEXT_SIZE_SP)
+                .coerceIn(MIN_LYRICS_TEXT_SIZE_SP, MAX_LYRICS_TEXT_SIZE_SP)
+        }
+
+    override suspend fun setLyricsTextSizeSp(sp: Int) {
+        context.settingsDataStore.edit {
+            it[LYRICS_TEXT_SIZE_KEY] = sp.coerceIn(MIN_LYRICS_TEXT_SIZE_SP, MAX_LYRICS_TEXT_SIZE_SP)
+        }
+    }
+
+    override val lyricsAlignCenter: Flow<Boolean> =
+        context.settingsDataStore.data.map { it[LYRICS_ALIGN_CENTER_KEY] ?: false }
+
+    override suspend fun setLyricsAlignCenter(enabled: Boolean) {
+        context.settingsDataStore.edit { it[LYRICS_ALIGN_CENTER_KEY] = enabled }
+    }
+
+    override val lyricsGlowEnabled: Flow<Boolean> =
+        context.settingsDataStore.data.map { it[LYRICS_GLOW_KEY] ?: false }
+
+    override suspend fun setLyricsGlowEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { it[LYRICS_GLOW_KEY] = enabled }
+    }
+
+    override val lyricsBlurEnabled: Flow<Boolean> =
+        context.settingsDataStore.data.map { it[LYRICS_BLUR_KEY] ?: true }
+
+    override suspend fun setLyricsBlurEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { it[LYRICS_BLUR_KEY] = enabled }
+    }
+
+    override val hiResBadge: Flow<HiResBadge> =
+        context.settingsDataStore.data.map { prefs ->
+            HiResBadge.fromId(prefs[HI_RES_BADGE_KEY])
+        }
+
+    override suspend fun setHiResBadge(badge: HiResBadge) {
+        context.settingsDataStore.edit { it[HI_RES_BADGE_KEY] = badge.name }
+    }
+
+    override val hiResBadgeCustomUri: Flow<String?> =
+        context.settingsDataStore.data.map { it[HI_RES_BADGE_URI_KEY] }
+
+    override suspend fun setHiResBadgeCustomUri(uri: String?) {
+        context.settingsDataStore.edit { prefs ->
+            if (uri == null) prefs.remove(HI_RES_BADGE_URI_KEY) else prefs[HI_RES_BADGE_URI_KEY] = uri
+        }
+    }
+
     companion object {
         private val PLAYBACK_SPEED_KEY = stringPreferencesKey("playback_speed")
         private val SKIP_SILENCE_KEY = booleanPreferencesKey("skip_silence")
+        private val PLAYER_SPECTRUM_KEY = booleanPreferencesKey("player_spectrum_enabled")
         private val REMEMBER_POSITION_KEY = booleanPreferencesKey("remember_playback_position")
         private val AUDIO_FADE_DURATION_KEY = longPreferencesKey("audio_fade_duration_ms")
         private val REPLAY_GAIN_KEY = booleanPreferencesKey("replay_gain_enabled")
@@ -128,6 +213,14 @@ class SettingsRepositoryImpl @Inject constructor(
         private val ONLINE_LYRICS_KEY = booleanPreferencesKey("online_lyrics_enabled")
         private val OPEN_PLAYER_ON_PLAY_KEY = booleanPreferencesKey("open_player_on_play")
         private val AUTO_CONTINUE_KEY = booleanPreferencesKey("auto_continue_enabled")
+        private val CACHE_LIMIT_KEY = longPreferencesKey("cache_limit_bytes")
+        private val AUTO_CLEAN_CACHE_KEY = booleanPreferencesKey("auto_clean_cache_enabled")
         private val LYRICS_PROVIDERS_KEY = stringPreferencesKey("lyrics_providers")
+        private val LYRICS_TEXT_SIZE_KEY = intPreferencesKey("lyrics_text_size_sp")
+        private val LYRICS_ALIGN_CENTER_KEY = booleanPreferencesKey("lyrics_align_center")
+        private val LYRICS_GLOW_KEY = booleanPreferencesKey("lyrics_glow_enabled")
+        private val LYRICS_BLUR_KEY = booleanPreferencesKey("lyrics_blur_enabled")
+        private val HI_RES_BADGE_KEY = stringPreferencesKey("hi_res_badge")
+        private val HI_RES_BADGE_URI_KEY = stringPreferencesKey("hi_res_badge_custom_uri")
     }
 }

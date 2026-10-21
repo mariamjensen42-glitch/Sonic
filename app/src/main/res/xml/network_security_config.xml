@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  在线音源的播放地址由**用户导入的脚本**返回，域名随脚本而变，而且大量是 http：
+  网易云 CDN 常回 `http://m704.music.126.net/…`，长青的后端回 `http://yinyue.haitangw.net/…`。
+  targetSdk 36 默认禁止明文，ExoPlayer 会直接抛
+  `CleartextNotPermittedException`，表现为「搜到歌但一首也播不了」。
+
+  域名不可能枚举（换一个脚本就换一批 CDN），所以只能整体放行。HTTPS 不受影响：
+  系统不会把 https 降级成 http，既有歌词 / 封面 / AI 请求仍然走各自的 https 地址。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

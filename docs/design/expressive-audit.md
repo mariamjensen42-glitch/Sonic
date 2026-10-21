@@ -48,7 +48,7 @@ Roboto Flex + Material Symbols、封面取色、`SonColorField` / `SonShapeMorph
 | --- | --- | --- | --- |
 | 歌单 / 专辑 / 歌手详情（`CollectionDetailScreen`） | 沉浸式方形 hero + 色面光晕 + tonal 动作簇 + 介绍 + 72dp 无分割线列表 | 整屏转场已交给 `NavDisplay` 的空间弹簧；真机明暗截图待补 | P0（试点 1，代码已落） |
 | 首页（`HomeScreen`） | `LargeFlexibleTopAppBar` 问候语 + 非对称最近播放 hero（大卡 + 两行）+ `ButtonGroup` 快速入口 + 安静分区横滑 | 真机明暗截图待补 | P0（试点 2，代码已落） |
-| 播放页（`PlayerScreen`） | 封面背后的 `primaryContainer` 光晕 + `HorizontalFloatingToolbar` 运输簇 + 96dp 播放键按压形变 + `headlineMediumEmphasized` 标题 | 真机明暗截图待补 | P0（试点 3，代码已落） |
+| 播放页（`PlayerScreen`） | 封面背后的动态色面 + 无容器的图标运输簇（96dp 播放键按压形变是唯一实心形状）+ `headlineMediumEmphasized` 标题 | 真机明暗截图待补 | P0（试点 3，代码已落） |
 | 音乐库（`MyMusicScreen`） | `LargeFlexibleTopAppBar`（歌单计数副标题）+ 两个入口行 + 歌单分区 + 无分割线 | 只有一处色面（入口图标托底），按 #14 的“工具型页面”取舍 | P1（代码已落） |
 | 全部歌曲 / 搜索 / 文件夹 / 专辑 / 歌手 | `MediumFlexibleTopAppBar` + 计数副标题 + 无分割线列表 + 统一空态 | 搜索仍是吸顶输入框（保留），没有自己的 moment | P1（代码已落） |
 | 设置 | 分组卡片 + `ListItem` + Switch/滑块 | 按 #14 保持安静：不加大标题、不改扫读性；卡内分割线保留 | P2（有意不改） |
@@ -61,7 +61,8 @@ Roboto Flex + Material Symbols、封面取色、`SonColorField` / `SonShapeMorph
 
 - 首页：`LargeFlexibleTopAppBar` 承担第 1 条；hero 光晕承担第 2 条；`ButtonGroup` 承担第 3、5 条
   （被按项横向扩张是官方组件内部形变）；`NavDisplay` 的空间弹簧承担第 4 条；分区无分割线承担第 6 条。
-- 播放页：光晕承担第 2 条；96dp 播放键的 `rememberPressShapeMorph` 承担第 3 条；浮动运输 toolbar 承担第 5 条；
+- 播放页：动态色面承担第 2 条；96dp 播放键的 `rememberPressShapeMorph` 承担第 3 条；第 5 条由
+  `LargeFloatingActionButton` + Emphasized 字号承担（运输簇本身不再套浮动容器，见试点 3）；
   `headlineMediumEmphasized` 标题 + surface 正文承担第 1、6 条；第 4 条由导航层的 push/pop 弹簧承担。
 - 音乐库 / 列表族 / 内容族：第 1、6 条稳定；第 5 条由 `MediumFlexibleTopAppBar`、分段按钮、`LoadingIndicator` 承担；
   第 2、3 条按屏取舍（工具型页面不硬塞色面）。
@@ -92,11 +93,15 @@ Roboto Flex + Material Symbols、封面取色、`SonColorField` / `SonShapeMorph
 
 ### 试点 3：播放页 — 已落地（2026-10-18）
 
-- 封面背后是封面派生的 `primaryContainer` 光晕（B 规则，见 [color-field-shape-morph.md](color-field-shape-morph.md)），
-  到封面下沿归零，标题以下全部落在 surface；封面本身保持大圆角。
-- 运输控件改成官方 `HorizontalFloatingToolbar`：shuffle → prev → play → next → repeat；播放键仍是 96dp
-  `LargeFloatingActionButton`，按压时 28dp 圆角 → 圆（`SonShapeMorph`）。
-- 标题升到 `headlineMediumEmphasized`，歌手名降到 `labelLarge` 字距。
+- 背景是封面派生的动态色面（ADR-0005），hero 段最浓、到封面下沿往 surface 收；封面本身保持大圆角。
+- 运输控件是**一排无容器的图标**：shuffle → prev → play → next → repeat，`SpaceEvenly` 拉开。
+  曾经包在官方 `HorizontalFloatingToolbar` 的胶囊里，但在流动的色面上再盖一张不透明面板会把色面
+  切成两段（2026-10-20 真机反馈去掉了胶囊）。播放键仍是 96dp `LargeFloatingActionButton`，按压时
+  28dp 圆角 → 圆（`SonShapeMorph`），并且是这一屏唯一的实心形状。
+- 标题升到 `headlineMediumEmphasized`，歌手名降到 `labelLarge` 字距；标题**永远一行**，
+  放不下时用 `Modifier.basicMarquee()` 跑马灯（2026-10-20 真机反馈：多行标题会把版式撑开）。
+- 这一屏**不滚动**：版式高度固定，封面用 `weight(1f) + aspectRatio(1f)` 吃掉剩余高度、
+  屏幕矮时自己缩小，运输控件永远在屏幕内。
 - 顶栏从四个图标收成「关闭 / 歌词 / 队列」；收藏与播放设置收进标题行右侧的动作簇，右上角不再堆图标。
 
 ## 技术约定

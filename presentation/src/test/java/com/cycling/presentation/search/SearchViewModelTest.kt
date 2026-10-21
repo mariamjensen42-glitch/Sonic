@@ -4,6 +4,9 @@ import com.cycling.domain.model.Album
 import com.cycling.domain.model.Artist
 import com.cycling.domain.model.Song
 import com.cycling.domain.model.SearchResult
+import com.cycling.domain.online.usecase.OnlineSearchOutcome
+import com.cycling.domain.online.usecase.ResolveOnlinePlaySourceUseCase
+import com.cycling.domain.online.usecase.SearchOnlineMusicUseCase
 import com.cycling.domain.repository.PlayerRepository
 import com.cycling.domain.repository.SongRepository
 import com.cycling.domain.usecase.SearchHistoryUseCase
@@ -35,6 +38,8 @@ class SearchViewModelTest {
     private lateinit var getSearchSuggestionsUseCase: GetSearchSuggestionsUseCase
     private lateinit var playerRepository: PlayerRepository
     private lateinit var songRepository: SongRepository
+    private lateinit var searchOnlineMusic: SearchOnlineMusicUseCase
+    private lateinit var resolveOnlinePlaySource: ResolveOnlinePlaySourceUseCase
     private lateinit var viewModel: SearchViewModel
 
     private fun createSong(
@@ -107,12 +112,16 @@ class SearchViewModelTest {
         getSearchSuggestionsUseCase = mockk()
         playerRepository = mockk(relaxed = true)
         songRepository = mockk(relaxed = true)
+        searchOnlineMusic = mockk(relaxed = true)
+        resolveOnlinePlaySource = mockk(relaxed = true)
 
         every { searchHistoryUseCase.getAll() } returns flowOf(emptyList())
         every { searchAllUseCase(any()) } returns flowOf(SearchResult())
         every { getSearchSuggestionsUseCase(any()) } returns flowOf(emptyList())
         coEvery { searchHistoryUseCase.save(any()) } returns Unit
         coEvery { searchHistoryUseCase.clear() } returns Unit
+        // 在线搜索走网络，单测里默认「有音源但没搜到」，避免每个用例都要打桩。
+        coEvery { searchOnlineMusic(any(), any(), any()) } returns OnlineSearchOutcome()
     }
 
     @Test
@@ -125,7 +134,9 @@ class SearchViewModelTest {
             searchHistoryUseCase,
             getSearchSuggestionsUseCase,
             playerRepository,
-            songRepository
+            songRepository,
+            searchOnlineMusic,
+            resolveOnlinePlaySource
         )
         advanceUntilIdle()
 
@@ -143,7 +154,9 @@ class SearchViewModelTest {
             searchHistoryUseCase,
             getSearchSuggestionsUseCase,
             playerRepository,
-            songRepository
+            songRepository,
+            searchOnlineMusic,
+            resolveOnlinePlaySource
         )
         advanceUntilIdle()
 
@@ -169,7 +182,9 @@ class SearchViewModelTest {
             searchHistoryUseCase,
             getSearchSuggestionsUseCase,
             playerRepository,
-            songRepository
+            songRepository,
+            searchOnlineMusic,
+            resolveOnlinePlaySource
         )
         advanceUntilIdle()
 
@@ -189,7 +204,9 @@ class SearchViewModelTest {
             searchHistoryUseCase,
             getSearchSuggestionsUseCase,
             playerRepository,
-            songRepository
+            songRepository,
+            searchOnlineMusic,
+            resolveOnlinePlaySource
         )
         advanceUntilIdle()
 
@@ -210,7 +227,9 @@ class SearchViewModelTest {
             searchHistoryUseCase,
             getSearchSuggestionsUseCase,
             playerRepository,
-            songRepository
+            songRepository,
+            searchOnlineMusic,
+            resolveOnlinePlaySource
         )
         advanceUntilIdle()
 
@@ -228,7 +247,9 @@ class SearchViewModelTest {
             searchHistoryUseCase,
             getSearchSuggestionsUseCase,
             playerRepository,
-            songRepository
+            songRepository,
+            searchOnlineMusic,
+            resolveOnlinePlaySource
         )
         advanceUntilIdle()
 
@@ -245,7 +266,9 @@ class SearchViewModelTest {
             searchHistoryUseCase,
             getSearchSuggestionsUseCase,
             playerRepository,
-            songRepository
+            songRepository,
+            searchOnlineMusic,
+            resolveOnlinePlaySource
         )
         advanceUntilIdle()
 
@@ -262,7 +285,9 @@ class SearchViewModelTest {
             searchHistoryUseCase,
             getSearchSuggestionsUseCase,
             playerRepository,
-            songRepository
+            songRepository,
+            searchOnlineMusic,
+            resolveOnlinePlaySource
         )
         advanceUntilIdle()
 
@@ -285,7 +310,9 @@ class SearchViewModelTest {
             searchHistoryUseCase,
             getSearchSuggestionsUseCase,
             playerRepository,
-            songRepository
+            songRepository,
+            searchOnlineMusic,
+            resolveOnlinePlaySource
         )
         advanceUntilIdle()
 
@@ -303,7 +330,9 @@ class SearchViewModelTest {
             searchHistoryUseCase,
             getSearchSuggestionsUseCase,
             playerRepository,
-            songRepository
+            songRepository,
+            searchOnlineMusic,
+            resolveOnlinePlaySource
         )
         advanceUntilIdle()
 
@@ -321,7 +350,9 @@ class SearchViewModelTest {
             searchHistoryUseCase,
             getSearchSuggestionsUseCase,
             playerRepository,
-            songRepository
+            songRepository,
+            searchOnlineMusic,
+            resolveOnlinePlaySource
         )
         advanceUntilIdle()
 
@@ -341,7 +372,9 @@ class SearchViewModelTest {
             searchHistoryUseCase,
             getSearchSuggestionsUseCase,
             playerRepository,
-            songRepository
+            songRepository,
+            searchOnlineMusic,
+            resolveOnlinePlaySource
         )
         advanceUntilIdle()
 

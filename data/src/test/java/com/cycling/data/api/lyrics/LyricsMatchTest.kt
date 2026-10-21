@@ -1,9 +1,11 @@
 package com.cycling.data.api.lyrics
 
+import com.cycling.data.api.lyrics.dto.AmllSongItemDto
 import com.cycling.data.api.lyrics.dto.LrclibTrackDto
 import com.cycling.domain.model.LyricsQuery
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LyricsMatchTest {
@@ -90,5 +92,84 @@ class LyricsMatchTest {
     @Test
     fun `returns nothing when the provider has no candidates`() {
         assertNull(selectLrclibLyrics(emptyList(), query))
+    }
+
+    private fun amllSong(
+        id: Long,
+        album: String,
+        artists: List<String> = listOf("Artist")
+    ) = AmllSongItemDto(
+        id = id,
+        musicNames = listOf("Song"),
+        artistNames = artists,
+        albumNames = listOf(album)
+    )
+
+    @Test
+    fun `AMLL keeps only submissions that name the same artist`() {
+        val sameArtist = amllSong(1, "Album")
+        val someoneElse = amllSong(2, "Album", artists = listOf("Someone Else"))
+
+        assertEquals(
+            listOf(sameArtist),
+            selectAmllCandidates(listOf(sameArtist, someoneElse), query)
+        )
+    }
+
+    @Test
+    fun `AMLL matches a collaboration split across tags and names`() {
+        // 本地标签常写 "A feat. B"，而词库里 artistNames 是 ["A", "B"] —— 两边都要能对上。
+        val candidate = amllSong(1, "Album", artists = listOf("Brendon Urie", "Taylor Swift"))
+        val duet = query.copy(artist = "Taylor Swift feat. Brendon Urie")
+
+        assertEquals(listOf(candidate), selectAmllCandidates(listOf(candidate), duet))
+    }
+
+    @Test
+    fun `AMLL ignores a title match whose artist is unrelated`() {
+        // 服务端只按曲名搜，所以同名不同歌手的结果必须在这里被挡掉 —— 宁可没有歌词，
+        // 也不能把别人的歌词显示出来。
+        val wrongArtist = amllSong(1, "Album", artists = listOf("Different Artist"))
+
+        assertTrue(selectAmllCandidates(listOf(wrongArtist), query).isEmpty())
+    }
+
+    @Test
+    fun `AMLL still prefers the submission from the local album after filtering`() {
+        val live = amllSong(1, "Song (Live)")
+        val studio = amllSong(2, "Album")
+
+        assertEquals(listOf(studio, live), selectAmllCandidates(listOf(live, studio), query))
+    }
+
+    @Test
+    fun `ranks the AMLL submission timed to the same album first`() {
+        val live = amllSong(1, "Song (Live)")
+        val studio = amllSong(2, "Album")
+
+        assertEquals(listOf(studio, live), rankAmllCandidates(listOf(live, studio), query))
+    }
+
+    @Test
+    fun `keeps AMLL's own order when no album matches`() {
+        val single = amllSong(1, "Single")
+        val compilation = amllSong(2, "Compilation")
+
+        assertEquals(listOf(single, compilation), rankAmllCandidates(listOf(single, compilation), query))
+    }
+
+    @Test
+    fun `an AMLL album that only contains the local one still outranks no signal`() {
+        val deluxe = amllSong(1, "Album (Deluxe Edition)")
+        val unrelated = amllSong(2, "Something Else")
+
+        assertEquals(listOf(deluxe, unrelated), rankAmllCandidates(listOf(unrelated, deluxe), query))
+    }
+
+    @Test
+    fun `AMLL ranking never drops a candidate`() {
+        val candidates = listOf(amllSong(1, "A"), amllSong(2, "B"), amllSong(3, "Album"))
+
+        assertEquals(candidates.size, rankAmllCandidates(candidates, query).size)
     }
 }

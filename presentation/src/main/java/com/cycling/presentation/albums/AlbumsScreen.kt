@@ -11,14 +11,16 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenuGroup
+import androidx.compose.material3.DropdownMenuPopup
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MediumFlexibleTopAppBar
+import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SelectableDropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
@@ -106,18 +108,37 @@ fun AlbumsScreen(
                                 contentDescription = stringResource(R.string.albums_sort_desc)
                             )
                         }
-                        DropdownMenu(
+                        DropdownMenuPopup(
                             expanded = showSortMenu,
                             onDismissRequest = { showSortMenu = false }
                         ) {
-                            listOf(SortOrder.TITLE, SortOrder.ARTIST).forEach { order ->
-                                DropdownMenuItem(
-                                    text = { Text(text = getSortOrderName(order)) },
-                                    onClick = {
-                                        sortOrder = order
-                                        showSortMenu = false
-                                    }
-                                )
+                            // 与歌曲页的排序菜单同一套 Expressive 形态：选中项实底 + 勾。
+                            DropdownMenuGroup(shapes = MenuDefaults.groupShape(0, 1)) {
+                                val orders = listOf(SortOrder.TITLE, SortOrder.ARTIST)
+                                orders.forEachIndexed { index, order ->
+                                    val selected = sortOrder == order
+                                    SelectableDropdownMenuItem(
+                                        selected = selected,
+                                        onClick = {
+                                            sortOrder = order
+                                            showSortMenu = false
+                                        },
+                                        text = { Text(text = getSortOrderName(order)) },
+                                        shapes = MenuDefaults.itemShape(index, orders.size),
+                                        trailingContent = if (selected) {
+                                            {
+                                                M3SymbolIcon(
+                                                    name = SymbolIconName.Check,
+                                                    contentDescription = null,
+                                                    filled = true,
+                                                    size = MenuDefaults.TrailingIconSize
+                                                )
+                                            }
+                                        } else {
+                                            null
+                                        }
+                                    )
+                                }
                             }
                         }
                     }

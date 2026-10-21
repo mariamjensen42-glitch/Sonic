@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 
 package com.cycling.presentation.search
 
@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -24,6 +25,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -46,6 +48,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.widget.Toast
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import com.cycling.core.ui.components.M3SymbolIcon
 import com.cycling.core.ui.components.SymbolIconName
 import com.cycling.core.ui.components.M3Artwork
@@ -56,6 +59,7 @@ import com.cycling.domain.model.Album
 import com.cycling.domain.model.Artist
 import com.cycling.domain.model.LyricsMatch
 import com.cycling.domain.model.Song
+import com.cycling.domain.online.model.MusicInfo
 import com.cycling.presentation.R
 
 @Composable
@@ -76,7 +80,9 @@ fun SearchScreen(
                 is SearchEffect.NavigateToAlbumDetail -> onNavigateToAlbumDetail(effect.albumId)
                 is SearchEffect.NavigateToArtistDetail -> onNavigateToArtistDetail(effect.artistId)
                 is SearchEffect.ShowToast -> {
-                    Toast.makeText(context, context.getString(effect.message), Toast.LENGTH_SHORT).show()
+                    val text = effect.arg?.let { context.getString(effect.message, it) }
+                        ?: context.getString(effect.message)
+                    Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -255,6 +261,55 @@ fun SearchScreen(
                     }
                 }
 
+                if (showSongs) {
+                    when {
+                        uiState.onlineSearching -> item { OnlineSearchingRow() }
+
+                        uiState.onlineResults.isNotEmpty() -> {
+                            item {
+                                Text(
+                                    text = stringResource(R.string.search_online_section),
+                                    modifier = Modifier.padding(
+                                        start = SonSizes.listItemHorizontalPadding,
+                                        top = SonSpacing.large,
+                                        bottom = SonSpacing.small
+                                    ),
+                                    style = MaterialTheme.typography.titleSmallEmphasized,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            items(uiState.onlineResults, key = { it.onlineKey }) { track ->
+                                OnlineSongRow(
+                                    track = track,
+                                    resolving = uiState.resolvingOnlineKey == track.onlineKey,
+                                    onClick = {
+                                        viewModel.handleIntent(SearchIntent.OnlineTrackClicked(track))
+                                    }
+                                )
+                            }
+                            if (uiState.onlineHasMore || uiState.onlineLoadingMore) {
+                                item {
+                                    OnlineLoadMoreRow(
+                                        loading = uiState.onlineLoadingMore,
+                                        onClick = {
+                                            viewModel.handleIntent(SearchIntent.LoadMoreOnline)
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        // 空结果分两种：没装音源是「去装」，装了没搜到是「换个词」。
+                        !uiState.onlineHasSources -> item {
+                            OnlineHintRow(stringResource(R.string.search_online_no_sources))
+                        }
+
+                        else -> item {
+                            OnlineHintRow(stringResource(R.string.search_online_empty))
+                        }
+                    }
+                }
+
                 if (showSongs && uiState.songs.isNotEmpty()) {
                     item {
                         Text(
@@ -268,7 +323,7 @@ fun SearchScreen(
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
-                    items(uiState.songs) { song ->
+                    items(uiState.songs, key = { it.id }) { song ->
                         SongRow(
                             song = song,
                             onClick = { viewModel.handleIntent(SearchIntent.SongClicked(song)) },
@@ -290,7 +345,7 @@ fun SearchScreen(
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
-                    items(uiState.lyricsMatches) { match ->
+                    items(uiState.lyricsMatches, key = { it.song.id }) { match ->
                         LyricsMatchRow(
                             match = match,
                             onClick = {
@@ -313,7 +368,7 @@ fun SearchScreen(
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
-                    items(uiState.albums) { album ->
+                    items(uiState.albums, key = { it.id }) { album ->
                         AlbumRow(
                             album = album,
                             onClick = { viewModel.handleIntent(SearchIntent.AlbumClicked(album)) }
@@ -334,7 +389,7 @@ fun SearchScreen(
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
-                    items(uiState.artists) { artist ->
+                    items(uiState.artists, key = { it.id }) { artist ->
                         ArtistRow(
                             artist = artist,
                             onClick = { viewModel.handleIntent(SearchIntent.ArtistClicked(artist)) }
@@ -447,6 +502,136 @@ private fun ChipRow(
 // ════════════════════════════════════════════════════════════════
 // 结果行
 // ════════════════════════════════════════════════════════════════
+
+// ════════════════════════════════════════════════════════════════
+// 在线结果
+// ════════════════════════════════════════════════════════════════
+
+/** 在线搜索走网络，比本地慢一个量级，所以这里真的会转圈（不是本地查询那种一帧闪）。 */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun OnlineSearchingRow() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(
+                horizontal = SonLayout.screenMargin,
+                vertical = SonSpacing.small
+            ),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        LoadingIndicator(modifier = Modifier.size(SonSizes.iconSmall))
+        Spacer(modifier = Modifier.width(SonSpacing.small))
+        Text(
+            text = stringResource(R.string.search_online_loading),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+/** 翻页入口：追加而不是替换，加载中把按钮换成指示器。 */
+@Composable
+private fun OnlineLoadMoreRow(
+    loading: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(
+                horizontal = SonLayout.screenMargin,
+                vertical = SonSpacing.small
+            ),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (loading) {
+            LoadingIndicator(modifier = Modifier.size(SonSizes.iconSmall))
+            Spacer(modifier = Modifier.width(SonSpacing.small))
+            Text(
+                text = stringResource(R.string.search_online_loading_more),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            TextButton(onClick = onClick) {
+                Text(stringResource(R.string.search_online_load_more))
+            }
+        }
+    }
+}
+
+/** 在线区块的空态：一句解释，不占整屏。 */
+@Composable
+private fun OnlineHintRow(text: String) {
+    Text(
+        text = text,
+        modifier = Modifier.padding(
+            start = SonSizes.listItemHorizontalPadding,
+            end = SonSizes.listItemHorizontalPadding,
+            top = SonSpacing.small,
+            bottom = SonSpacing.small
+        ),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+}
+
+/**
+ * 在线歌曲行：平台名放 overline（同一首歌在各平台都有，得先让用户看清是哪一家），
+ * 取链期间行尾换成加载指示器。
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun OnlineSongRow(
+    track: MusicInfo,
+    resolving: Boolean,
+    onClick: () -> Unit
+) {
+    ListItem(
+        onClick = onClick,
+        overlineContent = {
+            Text(
+                text = track.source.displayName,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        },
+        content = {
+            Text(
+                text = track.title,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        },
+        supportingContent = {
+            Text(
+                text = listOf(track.artist, track.album)
+                    .filter { it.isNotBlank() }
+                    .joinToString(" · "),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        },
+        leadingContent = {
+            M3Artwork(
+                artwork = track.coverUrl,
+                placeholderIcon = SymbolIconName.MusicNote,
+                shape = MaterialTheme.shapes.small,
+                modifier = Modifier.size(SonSizes.thumbnail)
+            )
+        },
+        trailingContent = if (resolving) {
+            { LoadingIndicator(modifier = Modifier.size(SonSizes.iconSmall)) }
+        } else {
+            null
+        }
+    )
+}
 
 @Composable
 private fun SongRow(

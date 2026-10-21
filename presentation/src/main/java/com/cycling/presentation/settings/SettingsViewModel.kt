@@ -3,15 +3,19 @@ package com.cycling.presentation.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cycling.domain.model.ExcludedFolder
+import com.cycling.domain.model.CacheUsage
+import com.cycling.domain.model.HiResBadge
 import com.cycling.domain.model.LibraryStats
 import com.cycling.domain.model.LyricsProvider
 import com.cycling.domain.model.ScanResult
 import com.cycling.domain.model.ScanStep
 import com.cycling.domain.repository.AiRepository
+import com.cycling.domain.repository.CacheRepository
 import com.cycling.domain.repository.ExcludedFolderRepository
 import com.cycling.domain.repository.LibraryTransferRepository
 import com.cycling.domain.repository.PlayerRepository
 import com.cycling.domain.repository.SettingsRepository
+import com.cycling.domain.repository.SettingsRepository.Companion.DEFAULT_CACHE_LIMIT_BYTES
 import com.cycling.domain.repository.SettingsRepository.Companion.DEFAULT_LYRICS_PROVIDER_ORDER
 import com.cycling.domain.repository.SettingsRepository.Companion.DEFAULT_PLAYBACK_SPEED
 import com.cycling.domain.repository.SettingsRepository.Companion.DEFAULT_SLEEP_TIMER_PRESET_MINUTES
@@ -33,7 +37,7 @@ import timber.log.Timber
 import javax.inject.Inject
 
 enum class SettingsDestination {
-    MAIN, SCAN, EXCLUDE_FOLDERS, API_KEY_CONFIG, LIBRARY_STATS
+    MAIN, SCAN, EXCLUDE_FOLDERS, API_KEY_CONFIG, LIBRARY_STATS, EQUALIZER, ONLINE_SOURCES
 }
 
 data class SettingsUiState(
@@ -69,7 +73,15 @@ data class SettingsUiState(
     /** 上次选过的睡眠时长，用作下次打开选择器时的默认值。 */
     val sleepTimerMinutes: Int = DEFAULT_SLEEP_TIMER_PRESET_MINUTES,
     /** 定时器剩余毫秒，没开就是 null。 */
-    val sleepTimerRemainingMs: Long? = null
+    val sleepTimerRemainingMs: Long? = null,
+    /** 缓存面板的用量；首次统计完成前是 null（界面显示「统计中」）。 */
+    val cacheUsage: CacheUsage? = null,
+    val cacheLimitBytes: Long = DEFAULT_CACHE_LIMIT_BYTES,
+    val autoCleanCacheEnabled: Boolean = true,
+    /** 播放页封面左下角的小金标样式。 */
+    val hiResBadge: HiResBadge = HiResBadge.OFF,
+    /** 自定义小金标图片；与 [hiResBadge] 一起决定要不要真的去加载。 */
+    val hiResBadgeCustomUri: String? = null,
 )
 
 sealed interface SettingsScanStep {
@@ -108,6 +120,14 @@ sealed interface SettingsIntent {
     data class ImportM3u(val sourceUri: String) : SettingsIntent
     data class SetSleepTimer(val minutes: Int) : SettingsIntent
     data object CancelSleepTimer : SettingsIntent
+    data class ClearDiskCache(val id: String) : SettingsIntent
+    data object ClearLyricsCache : SettingsIntent
+    data object ClearAiInfoCache : SettingsIntent
+    data object ClearAllCaches : SettingsIntent
+    data class SetCacheLimit(val bytes: Long) : SettingsIntent
+    data class SetAutoCleanCache(val enabled: Boolean) : SettingsIntent
+    data class SetHiResBadge(val badge: HiResBadge) : SettingsIntent
+    data class SetHiResBadgeCustomUri(val uri: String?) : SettingsIntent
 }
 
 sealed interface SettingsEffect {
@@ -124,7 +144,8 @@ class SettingsViewModel @Inject constructor(
     private val getLibraryStatsUseCase: GetLibraryStatsUseCase,
     private val settingsRepository: SettingsRepository,
     private val libraryTransferRepository: LibraryTransferRepository,
-    private val playerRepository: PlayerRepository
+    private val playerRepository: PlayerRepository,
+    private val cacheRepository: CacheRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -136,6 +157,8 @@ class SettingsViewModel @Inject constructor(
     private val _hasApiKey = MutableStateFlow(false)
     val hasApiKey: StateFlow<Boolean> = _hasApiKey.asStateFlow()
 
+    private var isClearingCache = false
+
     init {
         Timber.d("SettingsViewModel: initialized")
         viewModelScope.launch {
@@ -146,7 +169,10 @@ class SettingsViewModel @Inject constructor(
         loadLibraryStats()
         observeLyricsSettings()
         observePlaybackSettings()
+        observeAppearanceSettings()
         observeSleepTimer()
+        observeCacheSettings()
+        loadCacheUsage()
     }
 
     fun handleIntent(intent: SettingsIntent) {
@@ -178,6 +204,62 @@ class SettingsViewModel @Inject constructor(
             is SettingsIntent.ImportM3u -> importM3u(intent.sourceUri)
             is SettingsIntent.SetSleepTimer -> setSleepTimer(intent.minutes)
             is SettingsIntent.CancelSleepTimer -> playerRepository.cancelSleepTimer()
+            is SettingsIntent.ClearDiskCache -> clearCache { cacheRepository.clearDiskCache(intent.id) }
+            is SettingsIntent.ClearLyricsCache -> clearCache { cacheRepository.clearLyricsCache() }
+            is SettingsIntent.ClearAiInfoCache -> clearCache { cacheRepository.clearAiInfoCache() }
+            is SettingsIntent.ClearAllCaches -> clearCache {
+                _uiState.value.cacheUsage?.diskCaches?.forEach { cacheRepository.clearDiskCache(it.id) }
+                cacheRepository.clearLyricsCache()
+                cacheRepository.clearAiInfoCache()
+            }
+            is SettingsIntent.SetCacheLimit -> viewModelScope.launch {
+                settingsRepository.setCacheLimitBytes(intent.bytes)
+            }
+            is SettingsIntent.SetAutoCleanCache -> viewModelScope.launch {
+                settingsRepository.setAutoCleanCacheEnabled(intent.enabled)
+            }
+            is SettingsIntent.SetHiResBadge -> viewModelScope.launch {
+                settingsRepository.setHiResBadge(intent.badge)
+            }
+            is SettingsIntent.SetHiResBadgeCustomUri -> viewModelScope.launch {
+                settingsRepository.setHiResBadgeCustomUri(intent.uri)
+            }
+        }
+    }
+
+    private fun loadCacheUsage() {
+        viewModelScope.launch { refreshCacheUsage() }
+    }
+
+    private fun observeCacheSettings() {
+        settingsRepository.cacheLimitBytes
+            .onEach { bytes -> _uiState.update { it.copy(cacheLimitBytes = bytes) } }
+            .launchIn(viewModelScope)
+        settingsRepository.autoCleanCacheEnabled
+            .onEach { enabled -> _uiState.update { it.copy(autoCleanCacheEnabled = enabled) } }
+            .launchIn(viewModelScope)
+    }
+
+    private suspend fun refreshCacheUsage() {
+        val usage = cacheRepository.usage()
+        _uiState.update { it.copy(cacheUsage = usage) }
+    }
+
+    /**
+     * 清理是用户点一下就跑完的一次性任务，连点没有额外收益，只会有两遍删除和两条提示。
+     * 门闩做成普通字段而不是状态：界面不需要知道它，禁用按钮反而会闪一下。
+     */
+    private fun clearCache(block: suspend () -> Unit) {
+        if (isClearingCache) return
+        isClearingCache = true
+        viewModelScope.launch {
+            runCatching { block() }
+                .onSuccess {
+                    _uiEffect.emit(SettingsEffect.ShowToast(R.string.settings_vm_cache_cleared))
+                }
+                .onFailure { Timber.e(it, "clearCache failed") }
+            refreshCacheUsage()
+            isClearingCache = false
         }
     }
 
@@ -253,6 +335,16 @@ class SettingsViewModel @Inject constructor(
 
     private fun setAutoContinueEnabled(enabled: Boolean) {
         viewModelScope.launch { settingsRepository.setAutoContinueEnabled(enabled) }
+    }
+
+    /** 封面小金标：设置页里唯一的外观项（歌词排版已经挪到歌词页自己的面板）。 */
+    private fun observeAppearanceSettings() {
+        settingsRepository.hiResBadge
+            .onEach { badge -> _uiState.update { it.copy(hiResBadge = badge) } }
+            .launchIn(viewModelScope)
+        settingsRepository.hiResBadgeCustomUri
+            .onEach { uri -> _uiState.update { it.copy(hiResBadgeCustomUri = uri) } }
+            .launchIn(viewModelScope)
     }
 
     /**

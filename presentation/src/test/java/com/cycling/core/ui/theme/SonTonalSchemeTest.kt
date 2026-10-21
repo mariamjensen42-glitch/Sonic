@@ -5,8 +5,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * 近灰封面的色相兜底：种子 HCT chroma < 16 用品牌色相，>= 16 保留种子色相。
- * 阈值是唯一的常量，页面不分支。
+ * 近灰封面的色相兜底：种子 HCT chroma < [SonTonalScheme.GRAYSCALE_CHROMA_THRESHOLD]
+ * 时用品牌色相，否则保留种子色相。阈值是唯一的常量，页面不分支。
  */
 class SonTonalSchemeTest {
 
@@ -14,12 +14,31 @@ class SonTonalSchemeTest {
 
     @Test
     fun `gray seed below the threshold falls back to the brand hue`() {
-        assertEquals(brandHue, SonTonalScheme.resolveSeedHue(seedHue = 200.0, chroma = 15.999), 0.0001)
+        assertEquals(
+            brandHue,
+            SonTonalScheme.resolveSeedHue(seedHue = 200.0, chroma = 7.999),
+            0.0001
+        )
     }
 
     @Test
     fun `seed exactly at the threshold keeps its hue`() {
-        assertEquals(200.0, SonTonalScheme.resolveSeedHue(seedHue = 200.0, chroma = 16.0), 0.0001)
+        assertEquals(
+            200.0,
+            SonTonalScheme.resolveSeedHue(seedHue = 200.0, chroma = 8.0),
+            0.0001
+        )
+    }
+
+    @Test
+    fun `a seed lifted by the extractor keeps its hue`() {
+        // 取色器会把淡封面的种子彩度抬到 12；这个值必须高于灰封面阈值，
+        // 否则奶油色 / 灰蓝色的封面永远回落到品牌色相。
+        assertEquals(
+            200.0,
+            SonTonalScheme.resolveSeedHue(seedHue = 200.0, chroma = 12.0),
+            0.0001
+        )
     }
 
     @Test

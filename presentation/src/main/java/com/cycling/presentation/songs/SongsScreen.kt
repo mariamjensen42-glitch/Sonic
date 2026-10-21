@@ -19,8 +19,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenuGroup
+import androidx.compose.material3.DropdownMenuPopup
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -29,7 +29,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MediumFlexibleTopAppBar
+import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SelectableDropdownMenuItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
@@ -61,7 +63,9 @@ import com.cycling.presentation.components.PlaylistPickerDialog
 import com.cycling.presentation.components.SonEmptyState
 import com.cycling.presentation.components.SonLoadingState
 import com.cycling.presentation.components.SongListItem
+import com.cycling.presentation.components.SongQueueActions
 import com.cycling.presentation.components.formatDuration
+import com.cycling.presentation.components.songMenuItems
 import com.cycling.presentation.permissions.MediaLibraryPermission
 import com.cycling.presentation.player.PlayerIntent
 import com.cycling.presentation.player.PlayerViewModel
@@ -119,6 +123,13 @@ fun SongsScreen(
     val sortedSongs = remember(uiState.songs, uiState.sortOrder, uiState.sortAscending) {
         sortSongs(uiState.songs, uiState.sortOrder, uiState.sortAscending)
     }
+
+    // 队列动作来自播放器、详情来自导航，收藏走本页自己的 VM：三件事都得在每一行上都可达。
+    val songQueueActions = SongQueueActions(
+        onPlayNext = { playerViewModel.handleIntent(PlayerIntent.PlayNext(it)) },
+        onAddToQueue = { playerViewModel.handleIntent(PlayerIntent.AddToQueue(it)) },
+        onViewDetail = { onNavigateToSongDetail(it.id) }
+    )
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -205,18 +216,39 @@ fun SongsScreen(
                                     contentDescription = stringResource(R.string.songs_sort_desc)
                                 )
                             }
-                            DropdownMenu(
+                            DropdownMenuPopup(
                                 expanded = showSortMenu,
                                 onDismissRequest = { showSortMenu = false }
                             ) {
-                                SortOrder.entries.forEach { sortOrder ->
-                                    DropdownMenuItem(
-                                        text = { Text(text = getSortOrderName(sortOrder)) },
-                                        onClick = {
-                                            viewModel.handleIntent(SongsIntent.ChangeSortOrder(sortOrder))
-                                            showSortMenu = false
-                                        }
-                                    )
+                                // Expressive 分组菜单：选中项自带实底与形变，末尾补一个勾。
+                                DropdownMenuGroup(shapes = MenuDefaults.groupShape(0, 1)) {
+                                    val orders = SortOrder.entries
+                                    orders.forEachIndexed { index, sortOrder ->
+                                        val selected = uiState.sortOrder == sortOrder
+                                        SelectableDropdownMenuItem(
+                                            selected = selected,
+                                            onClick = {
+                                                viewModel.handleIntent(
+                                                    SongsIntent.ChangeSortOrder(sortOrder)
+                                                )
+                                                showSortMenu = false
+                                            },
+                                            text = { Text(text = getSortOrderName(sortOrder)) },
+                                            shapes = MenuDefaults.itemShape(index, orders.size),
+                                            trailingContent = if (selected) {
+                                                {
+                                                    M3SymbolIcon(
+                                                        name = SymbolIconName.Check,
+                                                        contentDescription = null,
+                                                        filled = true,
+                                                        size = MenuDefaults.TrailingIconSize
+                                                    )
+                                                }
+                                            } else {
+                                                null
+                                            }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -278,14 +310,24 @@ fun SongsScreen(
                                         viewModel.handleIntent(SongsIntent.SongClick(song))
                                     }
                                 },
-                                moreMenuItems = listOf(
-                                    MenuItem(name = stringResource(R.string.songs_play_next), onClick = {
-                                        playerViewModel.handleIntent(PlayerIntent.PlayNext(song))
-                                    }),
-                                    MenuItem(name = stringResource(R.string.songs_view_detail), onClick = { onNavigateToSongDetail(song.id) }),
-                                    MenuItem(name = stringResource(R.string.songs_add_to_playlist), onClick = {
-                                        viewModel.handleIntent(SongsIntent.ShowAddToPlaylistDialog(song))
-                                    })
+                                moreMenuItems = songMenuItems(
+                                    song = song,
+                                    queueActions = songQueueActions,
+                                    onToggleFavorite = {
+                                        viewModel.handleIntent(SongsIntent.ToggleFavorite(it))
+                                    },
+                                    // 这一页特有的动作排在通用动作之后。
+                                    extra = listOf(
+                                        MenuItem(
+                                            name = stringResource(R.string.songs_add_to_playlist),
+                                            icon = SymbolIconName.PlaylistAdd,
+                                            onClick = {
+                                                viewModel.handleIntent(
+                                                    SongsIntent.ShowAddToPlaylistDialog(song)
+                                                )
+                                            }
+                                        )
+                                    )
                                 )
                             )
                         }

@@ -23,6 +23,9 @@ import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import javax.inject.Singleton
+import com.cycling.data.player.audio.BeatAnalyzerProcessor
+import com.cycling.data.player.audio.SoftwareEqualizerProcessor
+import com.cycling.data.player.audio.SonicRenderersFactory
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -47,7 +50,11 @@ abstract class PlayerModule {
         @Provides
         @Singleton
         @OptIn(UnstableApi::class)
-        fun provideExoPlayer(@ApplicationContext context: Context): ExoPlayer {
+        fun provideExoPlayer(
+            @ApplicationContext context: Context,
+            equalizerProcessor: SoftwareEqualizerProcessor,
+            beatAnalyzerProcessor: BeatAnalyzerProcessor
+        ): ExoPlayer {
             // The session id is generated and pinned up front rather than read back later:
             // `ExoPlayer.audioSessionId` stays AUDIO_SESSION_ID_UNSET until the first audio sink
             // exists.
@@ -59,6 +66,9 @@ abstract class PlayerModule {
                 .setAudioAttributes(AudioAttributes.DEFAULT, /* handleAudioFocus = */ true)
                 .setHandleAudioBecomingNoisy(true)
                 .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
+                .setRenderersFactory(
+                    SonicRenderersFactory(context, arrayOf(equalizerProcessor, beatAnalyzerProcessor))
+                )
                 .build()
                 .apply { setAudioSessionId(sessionId) }
         }

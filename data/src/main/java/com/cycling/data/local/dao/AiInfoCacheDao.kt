@@ -14,4 +14,10 @@ interface AiInfoCacheDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(cacheEntity: AiInfoCacheEntity)
 
+    /** 缓存面板的用量统计。 */
+    @Query("SELECT COUNT(*) FROM ai_info_cache")
+    suspend fun count(): Int
+
+    @Query("DELETE FROM ai_info_cache")
+    suspend fun clear()
 }

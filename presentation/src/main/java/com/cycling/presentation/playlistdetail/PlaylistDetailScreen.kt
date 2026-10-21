@@ -11,10 +11,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cycling.core.ui.components.SymbolIconName
 import com.cycling.domain.model.Song
 import com.cycling.presentation.R
+import com.cycling.presentation.collectiondetail.SongCollectionIntent
 import com.cycling.presentation.components.CollectionDetailScreen
 import com.cycling.presentation.components.CollectCollectionDetailEffects
 import com.cycling.presentation.components.MenuItem
 import com.cycling.presentation.components.PlaylistDescription
+import com.cycling.presentation.components.SongQueueActions
 
 @Composable
 fun PlaylistDetailScreen(
@@ -22,7 +24,8 @@ fun PlaylistDetailScreen(
     onNavigateToPlayer: (Long) -> Unit,
     onPlayShuffled: (List<Song>) -> Unit,
     viewModel: PlaylistDetailViewModel,
-    bottomPadding: Dp = 0.dp
+    bottomPadding: Dp = 0.dp,
+    queueActions: SongQueueActions? = null
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     CollectCollectionDetailEffects(viewModel.uiEffect, onNavigateToPlayer, onPlayShuffled)
@@ -46,6 +49,8 @@ fun PlaylistDetailScreen(
         onNavigateBack = onNavigateBack,
         onIntent = viewModel::handleCollectionIntent,
         bottomPadding = bottomPadding,
+        queueActions = queueActions,
+        onToggleFavorite = { viewModel.handleCollectionIntent(SongCollectionIntent.ToggleFavorite(it)) },
         // 仅歌单有"移出"语义：多选栏多出一个移出按钮。
         onRemoveSelected = { viewModel.handleIntent(PlaylistDetailIntent.RemoveSelectedSongs) },
         removeLabel = stringResource(R.string.playlist_detail_batch_remove),
@@ -67,6 +72,7 @@ fun PlaylistDetailScreen(
                 MenuItem(
                     name = removeSongLabel,
                     isDestructive = true,
+                    icon = SymbolIconName.PlaylistRemove,
                     onClick = { viewModel.handleIntent(PlaylistDetailIntent.RemoveSong(song.id)) }
                 )
             )

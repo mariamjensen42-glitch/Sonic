@@ -16,6 +16,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
@@ -34,9 +35,11 @@ import com.cycling.presentation.albums.AlbumsScreen
 import com.cycling.presentation.artistdetail.ArtistDetailScreen
 import com.cycling.presentation.artistdetail.ArtistDetailViewModel
 import com.cycling.presentation.artists.ArtistsScreen
+import com.cycling.presentation.components.SongQueueActions
 import com.cycling.presentation.folder.FolderScreen
 import com.cycling.presentation.home.HomeScreen
 import com.cycling.presentation.home.HomeViewModel
+import com.cycling.presentation.leaderboard.LeaderboardScreen
 import com.cycling.presentation.lyrics.LyricsScreen
 import com.cycling.presentation.mymusic.MyMusicScreen
 import com.cycling.presentation.mymusic.MyMusicViewModel
@@ -51,6 +54,7 @@ import com.cycling.presentation.songdetail.SongDetailScreen
 import com.cycling.presentation.songdetail.SongDetailViewModel
 import com.cycling.presentation.songs.SongsScreen
 import com.cycling.presentation.songs.SongsViewModel
+import com.cycling.presentation.stats.StatsScreen
 
 /**
  * 主壳导航图。
@@ -75,6 +79,12 @@ fun AppNavGraph(
     val openPlayerOnPlay = playerViewModel.openPlayerOnPlay.collectAsStateWithLifecycle()
     fun navigateToPlayer() {
         if (openPlayerOnPlay.value) navigator.navigate(Screen.Player)
+    }
+
+    // 各列表共用的歌曲动作：队列交给播放器，详情走导航。传进每个带曲目列表的页面，
+    // 于是"下一首播放 / 加入队列"在专辑、歌手、歌单、收藏里都可达。
+    val songQueueActions = remember(playerViewModel, navigator) {
+        buildSongQueueActions(navigator, playerViewModel)
     }
 
     LaunchedEffect(Unit) {
@@ -136,7 +146,12 @@ fun AppNavGraph(
                 },
                 onNavigateToSearch = { navigator.navigate(Screen.Search) },
                 onNavigateToSongs = { navigator.navigate(LibraryDestination.Songs) },
-                bottomPadding = bottomContentPadding
+                onNavigateToStats = { navigator.navigate(Screen.Stats) },
+                onNavigateToLeaderboard = { navigator.navigate(Screen.Leaderboard) },
+                bottomPadding = bottomContentPadding,
+                queueActions = songQueueActions,
+                // 「我喜欢」盖住整个 tab，不是一个导航路由：底栏让位只能由页面自己报上来。
+                onBottomBarHiddenChange = navigationState::requestBottomBarHidden
             )
         }
 
@@ -171,7 +186,8 @@ fun AppNavGraph(
                 uiState = uiState.value,
                 onIntent = playerViewModel::handleIntent,
                 onNavigateBack = { navigator.goBack() },
-                onNavigateToLyrics = { navigator.navigate(Screen.Lyrics) }
+                onNavigateToLyrics = { navigator.navigate(Screen.Lyrics) },
+                beatFlow = playerViewModel.beat
             )
         }
 
@@ -202,6 +218,24 @@ fun AppNavGraph(
                 artist = key.artist,
                 onNavigateBack = { navigator.goBack() },
                 onNavigateToApiKeyConfig = { navigator.navigate(SettingsDestination.Main) }
+            )
+        }
+
+        entry<Screen.Stats> { _ ->
+            StatsScreen(
+                viewModel = hiltViewModel(),
+                onNavigateBack = { navigator.goBack() },
+                onNavigateToPlayer = { navigateToPlayer() },
+                onNavigateToLeaderboard = { navigator.navigate(Screen.Leaderboard) }
+            )
+        }
+
+        entry<Screen.Leaderboard> { _ ->
+            LeaderboardScreen(
+                viewModel = hiltViewModel(),
+                onNavigateBack = { navigator.goBack() },
+                onNavigateToPlayer = { navigateToPlayer() },
+                onNavigateToStats = { navigator.navigate(Screen.Stats) }
             )
         }
 
@@ -262,6 +296,8 @@ private fun EntryProviderScope<NavKey>.libraryEntries(
     playerViewModel: com.cycling.presentation.player.PlayerViewModel,
     navigateToPlayer: () -> Unit
 ) {
+    // 库内页面（专辑/歌手/歌单/我的音乐）共用同一套歌曲动作，和各 tab 根保持一份实现。
+    val queueActions = buildSongQueueActions(navigator, playerViewModel)
     entry<LibraryDestination.Songs> { _ ->
         val songsViewModel: SongsViewModel = hiltViewModel()
         val songsState by songsViewModel.uiState.collectAsStateWithLifecycle()
@@ -312,7 +348,10 @@ private fun EntryProviderScope<NavKey>.libraryEntries(
                 navigator.navigate(LibraryDestination.PlaylistDetail(playlistId))
             },
             onNavigateToSearch = { navigator.navigate(Screen.Search) },
-            onNavigateToSongs = { navigator.navigate(LibraryDestination.Songs) }
+            onNavigateToSongs = { navigator.navigate(LibraryDestination.Songs) },
+            onNavigateToStats = { navigator.navigate(Screen.Stats) },
+            onNavigateToLeaderboard = { navigator.navigate(Screen.Leaderboard) },
+            queueActions = queueActions
         )
     }
 
@@ -358,7 +397,8 @@ private fun EntryProviderScope<NavKey>.libraryEntries(
                     com.cycling.presentation.player.PlayerIntent.ToggleShuffleMode
                 )
                 navigateToPlayer()
-            }
+            },
+            queueActions = queueActions
         )
     }
 
@@ -388,7 +428,8 @@ private fun EntryProviderScope<NavKey>.libraryEntries(
                     com.cycling.presentation.player.PlayerIntent.ToggleShuffleMode
                 )
                 navigateToPlayer()
-            }
+            },
+            queueActions = queueActions
         )
     }
 
@@ -418,7 +459,8 @@ private fun EntryProviderScope<NavKey>.libraryEntries(
                     com.cycling.presentation.player.PlayerIntent.ToggleShuffleMode
                 )
                 navigateToPlayer()
-            }
+            },
+            queueActions = queueActions
         )
     }
 }
@@ -432,3 +474,22 @@ private fun EntryProviderScope<NavKey>.settingsEntries(navigator: Navigator) {
         )
     }
 }
+
+/**
+ * 构造列表里通用的歌曲动作：队列交给播放器，详情走导航。
+ *
+ * 两个入口（tab 根的「音乐库」和库内被推入的页面）都从这里取，避免同一套动作写两份、
+ * 慢慢漂移成"有的列表能插队、有的不能"。
+ */
+private fun buildSongQueueActions(
+    navigator: Navigator,
+    playerViewModel: com.cycling.presentation.player.PlayerViewModel
+): SongQueueActions = SongQueueActions(
+    onPlayNext = {
+        playerViewModel.handleIntent(com.cycling.presentation.player.PlayerIntent.PlayNext(it))
+    },
+    onAddToQueue = {
+        playerViewModel.handleIntent(com.cycling.presentation.player.PlayerIntent.AddToQueue(it))
+    },
+    onViewDetail = { navigator.navigate(Screen.SongDetail(it.id)) }
+)

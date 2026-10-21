@@ -3,10 +3,6 @@ package com.cycling.presentation.widget
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.net.Uri
-import android.provider.MediaStore
-import android.util.Size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -15,7 +11,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.net.toUri
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
@@ -53,6 +48,7 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
+import com.cycling.core.ui.theme.CoverArtworkLoader
 import com.cycling.core.ui.theme.SonicSeed
 import com.cycling.core.ui.theme.sonColorSchemeOf
 import com.cycling.domain.model.PlayerState
@@ -510,51 +506,13 @@ private fun rememberWidgetArtwork(artwork: String?, size: Int): Bitmap? {
             null
         } else {
             withContext(Dispatchers.IO) {
-                runCatching { loadArtwork(context, artwork.toUri(), size) }
+                runCatching { CoverArtworkLoader.load(context, artwork, sizePx = size) }
                     .onFailure { Timber.w(it, "widget: artwork load failed for %s", artwork) }
                     .getOrNull()
             }
         }
     }
     return bitmap
-}
-
-/**
- * 封面读取。`Song.albumArt` 是 MediaStore 的 albums 行，直接 openInputStream 会抛
- * `no such column: _data`，必须借一首该专辑的曲目走 `loadThumbnail`。
- */
-private fun loadArtwork(context: Context, uri: Uri, size: Int): Bitmap? {
-    val source = albumArtThumbnailSource(context, uri) ?: uri
-    return runCatching {
-        context.contentResolver.loadThumbnail(source, Size(size, size), null)
-    }.recoverCatching {
-        context.contentResolver.openInputStream(uri)?.use(BitmapFactory::decodeStream)
-    }.getOrNull()
-}
-
-private fun albumArtThumbnailSource(context: Context, uri: Uri): Uri? {
-    if (uri.scheme != "content") return null
-    if (!uri.toString().startsWith("${MediaStore.Audio.Albums.EXTERNAL_CONTENT_URI}/")) return null
-    val albumId = runCatching { android.content.ContentUris.parseId(uri) }.getOrNull() ?: return null
-
-    return runCatching {
-        context.contentResolver.query(
-            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-            arrayOf(MediaStore.Audio.Media._ID),
-            "${MediaStore.Audio.Media.ALBUM_ID} = ?",
-            arrayOf(albumId.toString()),
-            null
-        )?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                android.content.ContentUris.withAppendedId(
-                    MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                    cursor.getLong(0)
-                )
-            } else {
-                null
-            }
-        }
-    }.getOrNull()
 }
 
 private fun openAppIntent(context: Context): Intent =

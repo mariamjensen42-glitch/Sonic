@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
@@ -67,6 +68,7 @@ class SongsViewModel @Inject constructor(
             is SongsIntent.AddToPlaylist -> addToPlaylist(intent.playlistId)
             is SongsIntent.DismissAddToPlaylistDialog -> dismissAddToPlaylistDialog()
             is SongsIntent.CreatePlaylistAndAddSong -> createPlaylistAndAddSong(intent.name)
+            is SongsIntent.ToggleFavorite -> toggleFavorite(intent.song)
             is SongsIntent.EnterSelectionMode -> enterSelectionMode()
             is SongsIntent.ExitSelectionMode -> exitSelectionMode()
             is SongsIntent.ToggleSelection -> toggleSelection(intent.songId)
@@ -93,10 +95,17 @@ class SongsViewModel @Inject constructor(
     private fun loadSongs() {
         Timber.d("loadSongs: starting")
         viewModelScope.launch {
-            songRepository.getAllSongs().collect { songs ->
-                Timber.d("loadSongs: loaded ${songs.size} songs")
-                _uiState.update { it.copy(songs = songs, isLoading = false) }
-            }
+            songRepository.getAllSongs()
+                .catch { error ->
+                    // 少了这一段，这一页会永远停在载入态：Flow 挂了就再没人把 isLoading 置回去。
+                    Timber.e(error, "loadSongs: failed")
+                    _uiState.update { it.copy(isLoading = false) }
+                    _uiEffect.emit(SongsEffect.ShowToast(R.string.songs_vm_load_failed))
+                }
+                .collect { songs ->
+                    Timber.d("loadSongs: loaded ${songs.size} songs")
+                    _uiState.update { it.copy(songs = songs, isLoading = false) }
+                }
         }
     }
 
@@ -167,10 +176,19 @@ class SongsViewModel @Inject constructor(
     private fun addToPlaylist(playlistId: Long) {
         val song = _uiState.value.songToAdd ?: return
         viewModelScope.launch {
-            playlistRepository.addSongToPlaylist(playlistId, song.id)
-            _uiEffect.emit(SongsEffect.ShowToast(R.string.playlist_added_to))
+            val added = playlistRepository.addSongToPlaylist(playlistId, song.id)
+            _uiEffect.emit(
+                SongsEffect.ShowToast(
+                    if (added > 0) R.string.playlist_added_to else R.string.playlist_song_already_added
+                )
+            )
             dismissAddToPlaylistDialog()
         }
+    }
+
+    /** 行菜单里的收藏：直接按 song.id 改库，和播放器当前放的是哪首无关。 */
+    private fun toggleFavorite(song: Song) {
+        viewModelScope.launch { songRepository.toggleFavorite(song.id) }
     }
 
     private fun createPlaylistAndAddSong(name: String) {
@@ -226,9 +244,16 @@ class SongsViewModel @Inject constructor(
         val songIds = _uiState.value.selectedSongIds.toList()
         if (songIds.isEmpty()) return
         viewModelScope.launch {
-            playlistRepository.addSongsToPlaylist(playlistId, songIds)
+            // 报真正写进去的数量：勾了 10 首、其中 3 首本来就在这张单里，只会写进 7 行。
+            val added = playlistRepository.addSongsToPlaylist(playlistId, songIds)
             _uiState.update { it.copy(showBatchAddToPlaylistDialog = false) }
-            _uiEffect.emit(SongsEffect.ShowToast(R.string.songs_batch_added_to_playlist, songIds.size))
+            _uiEffect.emit(
+                if (added > 0) {
+                    SongsEffect.ShowToast(R.string.songs_batch_added_to_playlist, added)
+                } else {
+                    SongsEffect.ShowToast(R.string.playlist_song_already_added)
+                }
+            )
             exitSelectionMode()
         }
     }
@@ -237,11 +262,19 @@ class SongsViewModel @Inject constructor(
         val songIds = _uiState.value.selectedSongIds.toList()
         viewModelScope.launch {
             val playlistId = playlistRepository.createPlaylist(name)
-            if (songIds.isNotEmpty()) {
+            val added = if (songIds.isEmpty()) {
+                0
+            } else {
                 playlistRepository.addSongsToPlaylist(playlistId, songIds)
             }
             _uiState.update { it.copy(showBatchAddToPlaylistDialog = false) }
-            _uiEffect.emit(SongsEffect.ShowToast(R.string.songs_batch_added_to_playlist, songIds.size))
+            _uiEffect.emit(
+                if (added > 0) {
+                    SongsEffect.ShowToast(R.string.songs_batch_added_to_playlist, added)
+                } else {
+                    SongsEffect.ShowToast(R.string.playlist_created_and_added)
+                }
+            )
             exitSelectionMode()
         }
     }

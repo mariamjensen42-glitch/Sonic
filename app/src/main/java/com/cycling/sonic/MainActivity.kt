@@ -10,7 +10,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -39,17 +39,25 @@ import com.cycling.presentation.permissions.MediaLibraryPermission
 import com.cycling.presentation.player.MiniPlayer
 import com.cycling.presentation.player.PlayerIntent
 import com.cycling.presentation.player.PlayerViewModel
-import com.cycling.presentation.player.rememberArtworkTheme
+import com.cycling.presentation.player.rememberArtworkBackdrop
 import com.cycling.sonic.viewmodel.MainViewModel
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    /**
+     * 应用级引导（接播放器、首次灌库）加上前台增量刷新。
+     *
+     * 用 Activity 的委托而不是只靠组合里的 `hiltViewModel()`：媒体库变更发生在应用之外，
+     * 回到前台是最自然的触发点，那时还没有任何页面要求过一次重组。
+     */
+    private val mainViewModel: MainViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            val mainViewModel: MainViewModel = hiltViewModel()
             val playerViewModel: PlayerViewModel = hiltViewModel()
             val playerUiState by playerViewModel.uiState.collectAsStateWithLifecycle()
             val context = LocalContext.current
@@ -87,13 +95,15 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // 封面种子色驱动的整套配色方案；取色与色调映射都在后台线程完成。
-            val artworkTheme = rememberArtworkTheme(
+            // 封面只喂播放页 / 歌词页的动态色面；应用主题本身跟随系统壁纸，
+            // 不再按当前歌曲的封面重新着色（换歌时全应用重新着色没有意义）。
+            // filePath 是兜底：MediaStore 的 albums 行读不到封面时，从音频文件里读内嵌图。
+            val artworkBackdrop = rememberArtworkBackdrop(
                 imageUrl = playerUiState.currentSong?.albumArt,
-                darkTheme = isSystemInDarkTheme()
+                filePath = playerUiState.currentSong?.path
             )
 
-            SonicTheme(colorScheme = artworkTheme.colorScheme) {
+            SonicTheme(backdropColors = artworkBackdrop) {
                 val navigationState = rememberNavigationState(
                     startRoute = Screen.Home,
                     topLevelRoutes = setOf(Screen.Home, Screen.Library)
@@ -108,6 +118,19 @@ class MainActivity : ComponentActivity() {
                     playerUiState = playerUiState
                 )
             }
+        }
+    }
+
+    /**
+     * 回到前台时增量刷新媒体库。
+     *
+     * 外部拷进来的歌、别处删掉的歌，不该逼用户跑去设置里手动按一次扫描。没有媒体权限时
+     * 绝不进来 —— 那时 MediaStore 查不到东西，扫描的剪枝逻辑会把整个库清空。
+     */
+    override fun onStart() {
+        super.onStart()
+        if (MediaLibraryPermission.isGranted(this)) {
+            mainViewModel.refreshLibraryOnForeground()
         }
     }
 }
@@ -130,7 +153,8 @@ private fun MainScreen(
 ) {
     val currentSong = playerUiState.currentSong
     val hasMiniPlayer = currentSong != null
-    val showBottomBar by navigationState.showBottomBar
+    // 派生值：路由本身允许（栈顶是 tab 根）且页面没有主动收起（如「我喜欢」）。
+    val showBottomBar = navigationState.showBottomBar
     val miniPlayerVisible = hasMiniPlayer && showBottomBar
 
     // 导航栏与迷你播放器浮在内容之上，内容区自行预留底部留白

@@ -81,6 +81,7 @@ abstract class CollectionDetailViewModel(
             is SongCollectionIntent.ClearSelection ->
                 _uiState.update { it.copy(selectedSongIds = emptySet()) }
             is SongCollectionIntent.BatchSetFavorite -> batchSetFavorite(intent.isFavorite)
+            is SongCollectionIntent.ToggleFavorite -> toggleFavorite(intent.song)
         }
     }
 
@@ -120,9 +121,9 @@ abstract class CollectionDetailViewModel(
         val songIds = _uiState.value.songs.map { it.id }
         if (songIds.isEmpty()) return
         viewModelScope.launch {
-            playlistRepository.addSongsToPlaylist(targetPlaylistId, songIds)
+            val added = playlistRepository.addSongsToPlaylist(targetPlaylistId, songIds)
             dismissAddToPlaylistDialog()
-            _uiEffect.emit(CollectionDetailEffect.ShowToast(R.string.collection_detail_added_toast))
+            _uiEffect.emit(addedToPlaylistToast(added))
         }
     }
 
@@ -130,12 +131,30 @@ abstract class CollectionDetailViewModel(
         val songIds = _uiState.value.songs.map { it.id }
         viewModelScope.launch {
             val newId = playlistRepository.createPlaylist(name)
-            if (songIds.isNotEmpty()) {
+            val added = if (songIds.isEmpty()) {
+                0
+            } else {
                 playlistRepository.addSongsToPlaylist(newId, songIds)
             }
             dismissAddToPlaylistDialog()
-            _uiEffect.emit(CollectionDetailEffect.ShowToast(R.string.collection_detail_added_toast))
+            _uiEffect.emit(addedToPlaylistToast(added))
         }
+    }
+
+    /**
+     * 报**实际写进去的数量**。去重之后"想加 10 首、其中 3 首本来就在"只写进 7 行，
+     * 拿 10 报数就是假的；一行都没写进去时更不能说"已添加"。
+     */
+    private fun addedToPlaylistToast(added: Int): CollectionDetailEffect.ShowToast =
+        if (added > 0) {
+            CollectionDetailEffect.ShowToast(R.string.songs_batch_added_to_playlist, added)
+        } else {
+            CollectionDetailEffect.ShowToast(R.string.playlist_song_already_added)
+        }
+
+    /** 行菜单里的收藏：按 song.id 改库，不经过播放器。 */
+    private fun toggleFavorite(song: Song) {
+        viewModelScope.launch { songRepository.toggleFavorite(song.id) }
     }
 
     private fun batchSetFavorite(isFavorite: Boolean) {

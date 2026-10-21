@@ -6,15 +6,21 @@ import com.cycling.data.local.dao.AiInfoCacheDao
 import com.cycling.data.local.dao.LyricsCacheDao
 import com.cycling.data.local.dao.LyricsIndexDao
 import com.cycling.data.local.dao.LyricsOverrideDao
+import com.cycling.data.local.dao.PlayEventDao
 import com.cycling.data.local.dao.PlaylistDao
 import com.cycling.data.local.dao.SearchHistoryDao
 import com.cycling.data.local.dao.SongDao
+import com.cycling.data.local.dao.SongMetadataDao
 import com.cycling.data.local.dao.SongStateDao
 import com.cycling.data.local.database.AppDatabase
 import com.cycling.data.local.database.MIGRATION_1_2
 import com.cycling.data.local.database.MIGRATION_2_3
 import com.cycling.data.local.database.MIGRATION_3_4
 import com.cycling.data.local.database.MIGRATION_4_5
+import com.cycling.data.local.database.MIGRATION_5_6
+import com.cycling.data.local.database.MIGRATION_6_7
+import com.cycling.data.local.database.MIGRATION_7_8
+import com.cycling.data.local.database.MIGRATION_8_9
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -36,7 +42,10 @@ object DatabaseModule {
             AppDatabase::class.java,
             "sonic_database"
         )
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+            .addMigrations(
+                MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
+                MIGRATION_7_8, MIGRATION_8_9
+            )
             // Downgrades only happen on a sideloaded older build; there is nothing to preserve.
             .fallbackToDestructiveMigrationOnDowngrade()
             .build()
@@ -45,6 +54,11 @@ object DatabaseModule {
     @Provides
     fun provideSongDao(database: AppDatabase): SongDao {
         return database.songDao()
+    }
+
+    @Provides
+    fun provideSongMetadataDao(database: AppDatabase): SongMetadataDao {
+        return database.songMetadataDao()
     }
 
     @Provides
@@ -80,5 +94,10 @@ object DatabaseModule {
     @Provides
     fun provideLyricsIndexDao(database: AppDatabase): LyricsIndexDao {
         return database.lyricsIndexDao()
+    }
+
+    @Provides
+    fun providePlayEventDao(database: AppDatabase): PlayEventDao {
+        return database.playEventDao()
     }
 }

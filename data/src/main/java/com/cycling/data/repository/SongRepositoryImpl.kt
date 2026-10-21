@@ -120,6 +120,23 @@ class SongRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun upsertOnlineSong(song: Song) {
+        val sourceKey = song.onlineSourceKey ?: return
+        val songId = song.onlineSongId ?: return
+        songDao.upsertOnlineSong(
+            id = song.id,
+            title = song.title,
+            artist = song.artist,
+            album = song.album,
+            duration = song.duration,
+            mimeType = song.mimeType,
+            albumArt = song.albumArt,
+            onlineSourceKey = sourceKey,
+            onlineSongId = songId,
+            now = System.currentTimeMillis()
+        )
+    }
+
     override suspend fun toggleFavorite(songId: Long): Boolean {
         val song = songDao.getSongById(songId)
         if (song == null) {

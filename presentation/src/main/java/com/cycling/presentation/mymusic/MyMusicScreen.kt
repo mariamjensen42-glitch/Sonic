@@ -3,8 +3,8 @@
 package com.cycling.presentation.mymusic
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -29,8 +29,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenuPopup
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalIconButton
@@ -53,6 +52,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -80,7 +80,6 @@ import com.cycling.core.ui.components.M3SymbolIcon
 import com.cycling.core.ui.components.SymbolIconName
 import com.cycling.core.ui.components.M3Artwork
 import com.cycling.core.ui.theme.LocalSonExtendedColors
-import com.cycling.core.ui.theme.SonicTheme
 import com.cycling.core.ui.theme.SonLayout
 import com.cycling.core.ui.theme.SonSizes
 import com.cycling.core.ui.theme.SonSpacing
@@ -89,11 +88,15 @@ import com.cycling.domain.model.Song
 import com.cycling.presentation.R
 import com.cycling.presentation.components.CollectionActions
 import com.cycling.presentation.components.CollectionHero
+import com.cycling.presentation.components.MenuItem
+import com.cycling.presentation.components.MenuItemGroup
 import com.cycling.presentation.components.PlaylistDescription
 import com.cycling.presentation.components.SonEmptyState
+import com.cycling.presentation.components.SonLoadingState
 import com.cycling.presentation.components.SonSectionHeader
 import com.cycling.presentation.components.SongListItem
-import com.cycling.presentation.player.rememberArtworkTheme
+import com.cycling.presentation.components.SongQueueActions
+import com.cycling.presentation.components.songMenuItems
 
 /** AI 预览列表在底部弹层内的限定高度，保证确认按钮始终可达。 */
 private val previewListHeight = 280.dp
@@ -106,12 +109,30 @@ fun MyMusicScreen(
     onNavigateToPlaylistDetail: (Long) -> Unit,
     onNavigateToSearch: () -> Unit,
     onNavigateToSongs: () -> Unit = {},
-    bottomPadding: Dp = 0.dp
+    /** 听歌足迹：统计与排行榜。两者都是 pushed 页面，由外壳负责导航。 */
+    onNavigateToStats: () -> Unit = {},
+    onNavigateToLeaderboard: () -> Unit = {},
+    bottomPadding: Dp = 0.dp,
+    /** 队列与详情动作，由外壳接线；收藏页每首歌的菜单因此也有「下一首播放 / 加入队列」。 */
+    queueActions: SongQueueActions? = null,
+    /**
+     * 底栏让位回调。「我喜欢」是 tab 内部的全屏子视图而不是一条导航路由，导航层看不出
+     * 它和 tab 根的区别，所以由这一页在进入/退出子视图时告诉外壳。
+     */
+    onBottomBarHiddenChange: (Boolean) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showCreateDialog by remember { mutableStateOf(false) }
     // 音乐库是工具型页面：标题时刻只由 large flexible 顶栏承担，内容区保持安静。
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+
+    // 收藏列表有自己的顶栏，是盖住整个 tab 的一页：底栏在这一页让位。
+    // onDispose 里必须放回来 —— 页面被移出组合时若还留着 true，底栏就再也回不来了。
+    val favoritesOpen = uiState.showFavoriteSongs
+    DisposableEffect(favoritesOpen) {
+        onBottomBarHiddenChange(favoritesOpen)
+        onDispose { onBottomBarHiddenChange(false) }
+    }
 
     val context = LocalContext.current
 
@@ -125,6 +146,13 @@ fun MyMusicScreen(
                 }
             }
         }
+    }
+
+    // 收藏列表是「音乐库」里的子视图，不是独立导航目的地：系统返回要回到歌单列表。
+    // 不拦的话一按就离开整个 tab，而 ViewModel 的 showFavoriteSongs 还是 true，
+    // 下次再进「音乐库」仍然停在这一页。
+    BackHandler(enabled = uiState.showFavoriteSongs) {
+        viewModel.handleIntent(MyMusicIntent.BackToPlaylists)
     }
 
     if (showCreateDialog) {
@@ -212,7 +240,8 @@ fun MyMusicScreen(
                 onNavigateBack = { viewModel.handleIntent(MyMusicIntent.BackToPlaylists) },
                 onShuffle = { viewModel.handleIntent(MyMusicIntent.ShuffleFavoriteSongs) },
                 onToggleDescription = { viewModel.handleIntent(MyMusicIntent.ToggleFavoriteDescription) },
-                onToggleFavorite = { viewModel.handleIntent(MyMusicIntent.ToggleFavorite(it)) }
+                onToggleFavorite = { viewModel.handleIntent(MyMusicIntent.ToggleFavorite(it)) },
+                queueActions = queueActions
             )
         } else {
             PlaylistsContent(
@@ -220,6 +249,8 @@ fun MyMusicScreen(
                 isLoading = uiState.isLoading,
                 onAllSongsClick = onNavigateToSongs,
                 onFavoriteSongsClick = { viewModel.handleIntent(MyMusicIntent.FavoriteSongsClick) },
+                onStatsClick = onNavigateToStats,
+                onLeaderboardClick = onNavigateToLeaderboard,
                 onPlaylistClick = { viewModel.handleIntent(MyMusicIntent.PlaylistClick(it)) },
                 onRename = { viewModel.handleIntent(MyMusicIntent.ShowRenameDialog(it)) },
                 onDelete = { viewModel.handleIntent(MyMusicIntent.DeletePlaylist(it)) },
@@ -247,180 +278,248 @@ private fun FavoritesContent(
     onNavigateBack: () -> Unit,
     onShuffle: () -> Unit,
     onToggleDescription: () -> Unit,
-    onToggleFavorite: (Song) -> Unit
+    onToggleFavorite: (Song) -> Unit,
+    queueActions: SongQueueActions? = null
 ) {
     when {
-        isLoading -> LoadingBox()
-        songs.isEmpty() -> SonEmptyState(
-            icon = SymbolIconName.Favorite,
-            title = stringResource(R.string.mymusic_empty_favorites_title),
-            subtitle = stringResource(R.string.mymusic_empty_favorites_subtitle)
-        )
-        else -> {
-            val artworkTheme = rememberArtworkTheme(
-                imageUrl = songs.firstOrNull()?.albumArt,
-                darkTheme = isSystemInDarkTheme()
+        isLoading -> FavoritesStandaloneScaffold(
+            title = stringResource(R.string.mymusic_title_favorites),
+            onNavigateBack = onNavigateBack
+        ) { SonLoadingState() }
+
+        songs.isEmpty() -> FavoritesStandaloneScaffold(
+            title = stringResource(R.string.mymusic_title_favorites),
+            onNavigateBack = onNavigateBack
+        ) {
+            SonEmptyState(
+                icon = SymbolIconName.Favorite,
+                title = stringResource(R.string.mymusic_empty_favorites_title),
+                subtitle = stringResource(R.string.mymusic_empty_favorites_subtitle)
             )
+        }
+
+        else -> {
             val listState = rememberLazyListState()
 
-            SonicTheme(colorScheme = artworkTheme.colorScheme) {
-                BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                    val heroSide = maxWidth
-                    val density = LocalDensity.current
-                    val collapse = remember(heroSide, density, listState) {
-                        derivedStateOf {
-                            val sidePx = with(density) { heroSide.toPx() }
-                            if (sidePx <= 0f) {
-                                0f
+            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                val heroSide = maxWidth
+                val density = LocalDensity.current
+                val collapse = remember(heroSide, density, listState) {
+                    derivedStateOf {
+                        val sidePx = with(density) { heroSide.toPx() }
+                        if (sidePx <= 0f) {
+                            0f
+                        } else {
+                            val offsetPx = if (listState.firstVisibleItemIndex == 0) {
+                                listState.firstVisibleItemScrollOffset
                             } else {
-                                val offsetPx = if (listState.firstVisibleItemIndex == 0) {
-                                    listState.firstVisibleItemScrollOffset
-                                } else {
-                                    sidePx.toInt()
-                                }
-                                (offsetPx.toFloat() / sidePx).coerceIn(0f, 1f)
+                                sidePx.toInt()
                             }
+                            (offsetPx.toFloat() / sidePx).coerceIn(0f, 1f)
                         }
                     }
+                }
 
-                    val extended = LocalSonExtendedColors.current
-                    Scaffold(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-                        topBar = {
-                            CenterAlignedTopAppBar(
-                                title = {
-                                    val titleAlpha = ((collapse.value - 0.45f) / 0.25f).coerceIn(0f, 1f)
-                                    if (titleAlpha > 0f) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            M3Artwork(
-                                                artwork = songs.firstOrNull()?.albumArt,
-                                                placeholderIcon = SymbolIconName.Favorite,
-                                                shape = MaterialTheme.shapes.small,
-                                                modifier = Modifier
-                                                    .size(SonSizes.appBarArtwork)
-                                                    .graphicsLayer { alpha = titleAlpha }
-                                            )
-                                            Spacer(Modifier.size(SonSpacing.small))
-                                            Text(
-                                                text = stringResource(R.string.mymusic_title_favorites),
-                                                style = MaterialTheme.typography.titleMediumEmphasized,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis,
-                                                modifier = Modifier.graphicsLayer { alpha = titleAlpha }
-                                            )
-                                        }
+                val extended = LocalSonExtendedColors.current
+                Scaffold(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentWindowInsets = WindowInsets(0, 0, 0, 0),
+                    topBar = {
+                        CenterAlignedTopAppBar(
+                            title = {
+                                val titleAlpha = ((collapse.value - 0.45f) / 0.25f).coerceIn(0f, 1f)
+                                if (titleAlpha > 0f) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        M3Artwork(
+                                            artwork = songs.firstOrNull()?.albumArt,
+                                            placeholderIcon = SymbolIconName.Favorite,
+                                            shape = MaterialTheme.shapes.small,
+                                            modifier = Modifier
+                                                .size(SonSizes.appBarArtwork)
+                                                .graphicsLayer { alpha = titleAlpha }
+                                        )
+                                        Spacer(Modifier.size(SonSpacing.small))
+                                        Text(
+                                            text = stringResource(R.string.mymusic_title_favorites),
+                                            style = MaterialTheme.typography.titleMediumEmphasized,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.graphicsLayer { alpha = titleAlpha }
+                                        )
                                     }
-                                },
-                                navigationIcon = {
-                                    FilledTonalIconButton(
-                                        onClick = onNavigateBack,
-                                        colors = IconButtonDefaults.filledTonalIconButtonColors(
-                                            // 同 CollectionDetail：压在封面上的图标要有 0.60 的托底，
-                                            // 亮封面上的白图标才看得清。
-                                            containerColor = extended.artworkScrim.copy(alpha = 0.60f),
-                                            contentColor = extended.onArtwork
+                                }
+                            },
+                            navigationIcon = {
+                                FilledTonalIconButton(
+                                    onClick = onNavigateBack,
+                                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                        // 同 CollectionDetail：压在封面上的图标要有 0.60 的托底，
+                                        // 亮封面上的白图标才看得清。
+                                        containerColor = extended.artworkScrim.copy(alpha = 0.60f),
+                                        contentColor = extended.onArtwork
+                                    )
+                                ) {
+                                    M3SymbolIcon(
+                                        name = SymbolIconName.ArrowBack,
+                                        filled = true,
+                                        contentDescription = stringResource(R.string.mymusic_back_desc)
+                                    )
+                                }
+                            },
+                            colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                                containerColor = lerp(
+                                    Color.Transparent,
+                                    MaterialTheme.colorScheme.surface,
+                                    (collapse.value * 1.6f).coerceIn(0f, 1f)
+                                ),
+                                scrolledContainerColor = MaterialTheme.colorScheme.surface,
+                                navigationIconContentColor = lerp(
+                                    extended.onArtwork,
+                                    MaterialTheme.colorScheme.onSurface,
+                                    collapse.value
+                                ),
+                                titleContentColor = lerp(
+                                    extended.onArtwork,
+                                    MaterialTheme.colorScheme.onSurface,
+                                    collapse.value
+                                )
+                            )
+                        )
+                    }
+                ) { _ ->
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(
+                            bottom = SonLayout.bottomBarClearance + bottomPadding
+                        )
+                    ) {
+                        item(key = "favorites-hero") {
+                            CollectionHero(
+                                name = stringResource(R.string.mymusic_title_favorites),
+                                subtitle = stringResource(
+                                    R.string.collection_detail_song_count,
+                                    songs.size
+                                ),
+                                artwork = songs.firstOrNull()?.albumArt,
+                                placeholderIcon = SymbolIconName.Favorite,
+                                side = heroSide,
+                                collapse = collapse
+                            )
+                        }
+
+                        item(key = "favorites-actions") {
+                            // 收藏曲目不属于任何歌单，「添加到歌单」不挂。
+                            CollectionActions(
+                                onPlayAll = { songs.firstOrNull()?.let(onSongClick) },
+                                onShuffle = onShuffle,
+                                onAddToPlaylist = null
+                            )
+                        }
+
+                        item(key = "favorites-description") {
+                            PlaylistDescription(
+                                description = description,
+                                expanded = isDescriptionExpanded,
+                                isGenerating = isDescriptionGenerating,
+                                onToggle = onToggleDescription,
+                                modifier = Modifier.padding(
+                                    horizontal = SonLayout.screenMargin,
+                                    vertical = SonSpacing.small
+                                )
+                            )
+                        }
+
+                        itemsIndexed(songs, key = { _, song -> song.id }) { _, song ->
+                            // 每行自己的展开状态：菜单开着时点别处就关，开第二行时第一行自动收起。
+                            var menuExpanded by remember(song.id) { mutableStateOf(false) }
+                            SongListItem(
+                                song = song,
+                                subtitle = song.artist,
+                                isCurrentSong = song.id == currentSongId,
+                                // quiet surface：收藏列表同样不画分割线。
+                                showDivider = false,
+                                // 心形已经在行尾，菜单里不再重复一条「收藏」。
+                                showMoreButton = queueActions != null,
+                                moreMenuExpanded = menuExpanded,
+                                onMoreClick = { menuExpanded = true },
+                                onMoreDismiss = { menuExpanded = false },
+                                moreMenuItems = songMenuItems(song, queueActions),
+                                onClick = { onSongClick(song) },
+                                trailingContent = {
+                                    IconButton(
+                                        onClick = { onToggleFavorite(song) },
+                                        colors = IconButtonDefaults.iconButtonColors(
+                                            contentColor = MaterialTheme.colorScheme.primary
                                         )
                                     ) {
                                         M3SymbolIcon(
-                                            name = SymbolIconName.ArrowBack,
+                                            name = SymbolIconName.Favorite,
                                             filled = true,
-                                            contentDescription = stringResource(R.string.mymusic_back_desc)
+                                            contentDescription = stringResource(R.string.mymusic_unfavorite_desc)
                                         )
                                     }
-                                },
-                                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                                    containerColor = lerp(
-                                        Color.Transparent,
-                                        MaterialTheme.colorScheme.surface,
-                                        (collapse.value * 1.6f).coerceIn(0f, 1f)
-                                    ),
-                                    scrolledContainerColor = MaterialTheme.colorScheme.surface,
-                                    navigationIconContentColor = lerp(
-                                        extended.onArtwork,
-                                        MaterialTheme.colorScheme.onSurface,
-                                        collapse.value
-                                    ),
-                                    titleContentColor = lerp(
-                                        extended.onArtwork,
-                                        MaterialTheme.colorScheme.onSurface,
-                                        collapse.value
-                                    )
-                                )
+                                }
                             )
-                        }
-                    ) { _ ->
-                        LazyColumn(
-                            state = listState,
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(
-                                bottom = SonLayout.bottomBarClearance + bottomPadding
-                            )
-                        ) {
-                            item(key = "favorites-hero") {
-                                CollectionHero(
-                                    name = stringResource(R.string.mymusic_title_favorites),
-                                    subtitle = stringResource(
-                                        R.string.collection_detail_song_count,
-                                        songs.size
-                                    ),
-                                    artwork = songs.firstOrNull()?.albumArt,
-                                    placeholderIcon = SymbolIconName.Favorite,
-                                    side = heroSide,
-                                    collapse = collapse
-                                )
-                            }
-
-                            item(key = "favorites-actions") {
-                                // 收藏曲目不属于任何歌单，「添加到歌单」不挂。
-                                CollectionActions(
-                                    onPlayAll = { songs.firstOrNull()?.let(onSongClick) },
-                                    onShuffle = onShuffle,
-                                    onAddToPlaylist = null
-                                )
-                            }
-
-                            item(key = "favorites-description") {
-                                PlaylistDescription(
-                                    description = description,
-                                    expanded = isDescriptionExpanded,
-                                    isGenerating = isDescriptionGenerating,
-                                    onToggle = onToggleDescription,
-                                    modifier = Modifier.padding(
-                                        horizontal = SonLayout.screenMargin,
-                                        vertical = SonSpacing.small
-                                    )
-                                )
-                            }
-
-                            itemsIndexed(songs, key = { _, song -> song.id }) { _, song ->
-                                SongListItem(
-                                    song = song,
-                                    subtitle = song.artist,
-                                    isCurrentSong = song.id == currentSongId,
-                                    // quiet surface：收藏列表同样不画分割线。
-                                    showDivider = false,
-                                    onClick = { onSongClick(song) },
-                                    trailingContent = {
-                                        IconButton(
-                                            onClick = { onToggleFavorite(song) },
-                                            colors = IconButtonDefaults.iconButtonColors(
-                                                contentColor = MaterialTheme.colorScheme.primary
-                                            )
-                                        ) {
-                                            M3SymbolIcon(
-                                                name = SymbolIconName.Favorite,
-                                                filled = true,
-                                                contentDescription = stringResource(R.string.mymusic_unfavorite_desc)
-                                            )
-                                        }
-                                    }
-                                )
-                            }
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * 收藏页「没有封面可压」时的形态：载入中、或一首都没喜欢。
+ *
+ * 这里的顶栏必须是实底、标题常显。内容态那种透明顶栏是**压在 hero 封面上的**，标题与返回
+ * 按钮靠封面托住；一旦没有 hero，页面就只剩一段空态文字 —— 没有标题、没有返回，用户只能
+ * 用系统手势退出整个「音乐库」。而「音乐库」自己的大标题栏在收藏子视图里是隐藏的，所以
+ * 这个缺口没人补。
+ */
+@Composable
+private fun FavoritesStandaloneScaffold(
+    title: String,
+    onNavigateBack: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.surface,
+        // 与收藏页内容态同一套：状态栏交给顶栏，内容从顶栏下沿开始。
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = {
+                    Text(
+                        text = title,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        M3SymbolIcon(
+                            name = SymbolIconName.ArrowBack,
+                            filled = true,
+                            contentDescription = stringResource(R.string.mymusic_back_desc)
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface
+                )
+            )
+        }
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) {
+            content()
         }
     }
 }
@@ -469,11 +568,6 @@ private fun SongList(
     }
 }
 
-@Composable
-private fun LoadingBox() {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { LoadingIndicator() }
-}
-
 // ════════════════════════════════════════════════════════
 // 播放列表
 // ════════════════════════════════════════════════════════
@@ -484,6 +578,8 @@ private fun PlaylistsContent(
     isLoading: Boolean,
     onAllSongsClick: () -> Unit,
     onFavoriteSongsClick: () -> Unit,
+    onStatsClick: () -> Unit,
+    onLeaderboardClick: () -> Unit,
     onPlaylistClick: (Playlist) -> Unit,
     onRename: (Playlist) -> Unit,
     onDelete: (Playlist) -> Unit,
@@ -491,7 +587,7 @@ private fun PlaylistsContent(
     contentModifier: Modifier = Modifier
 ) {
     when {
-        isLoading -> LoadingBox()
+        isLoading -> SonLoadingState()
         playlists.isEmpty() -> LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -502,6 +598,7 @@ private fun PlaylistsContent(
         ) {
             item { AllSongsItem(onClick = onAllSongsClick) }
             item { FavoriteSongsItem(onClick = onFavoriteSongsClick) }
+            item { ListeningSection(onStatsClick = onStatsClick, onLeaderboardClick = onLeaderboardClick) }
             item { SonSectionHeader(title = stringResource(R.string.mymusic_section_playlists)) }
             item { EmptyPlaylistsHint() }
         }
@@ -515,6 +612,7 @@ private fun PlaylistsContent(
         ) {
             item { AllSongsItem(onClick = onAllSongsClick) }
             item { FavoriteSongsItem(onClick = onFavoriteSongsClick) }
+            item { ListeningSection(onStatsClick = onStatsClick, onLeaderboardClick = onLeaderboardClick) }
             item { SonSectionHeader(title = stringResource(R.string.mymusic_section_playlists)) }
             items(playlists, key = { it.id }) { playlist ->
                 PlaylistItem(
@@ -525,6 +623,38 @@ private fun PlaylistsContent(
                 )
             }
         }
+    }
+}
+
+/**
+ * 听歌足迹的两个入口。
+ *
+ * 和「全部歌曲 / 我喜欢」并排放在音乐库顶部，而不是塞进设置页：统计是"我的音乐"的一部分，
+ * 用户是在看自己的收藏和歌单时顺手想到"我到底听了多少"。
+ */
+@Composable
+private fun ListeningSection(
+    onStatsClick: () -> Unit,
+    onLeaderboardClick: () -> Unit
+) {
+    Column {
+        SonSectionHeader(title = stringResource(R.string.mymusic_section_listening))
+        LibraryShortcutItem(
+            icon = SymbolIconName.BarChart,
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+            title = stringResource(R.string.mymusic_stats_label),
+            subtitle = stringResource(R.string.mymusic_stats_subtitle),
+            onClick = onStatsClick
+        )
+        LibraryShortcutItem(
+            icon = SymbolIconName.GraphicEq,
+            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            title = stringResource(R.string.mymusic_leaderboard_label),
+            subtitle = stringResource(R.string.mymusic_leaderboard_subtitle),
+            onClick = onLeaderboardClick
+        )
     }
 }
 
@@ -675,19 +805,22 @@ private fun PlaylistItem(
                         contentDescription = stringResource(R.string.mymusic_more_desc)
                     )
                 }
-                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.mymusic_rename)) },
-                        onClick = { showMenu = false; onRename() }
-                    )
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                text = stringResource(R.string.mymusic_delete),
-                                color = MaterialTheme.colorScheme.error
+                DropdownMenuPopup(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                    MenuItemGroup(
+                        items = listOf(
+                            MenuItem(
+                                name = stringResource(R.string.mymusic_rename),
+                                icon = SymbolIconName.Edit,
+                                onClick = onRename
+                            ),
+                            MenuItem(
+                                name = stringResource(R.string.mymusic_delete),
+                                isDestructive = true,
+                                icon = SymbolIconName.Delete,
+                                onClick = onDelete
                             )
-                        },
-                        onClick = { showMenu = false; onDelete() }
+                        ),
+                        onDismiss = { showMenu = false }
                     )
                 }
             }

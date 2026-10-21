@@ -7,6 +7,7 @@ import com.cycling.data.local.entity.LyricsCacheEntity
 import com.cycling.data.local.entity.LyricsOverrideEntity
 import com.cycling.data.local.lyrics.EmbeddedLyricsHelper
 import com.cycling.data.local.lyrics.LyricsFileHelper
+import com.cycling.data.store.LyricsCacheGenerationStore
 import com.cycling.domain.lyrics.provider.OnlineLyrics
 import com.cycling.domain.lyrics.provider.OnlineLyricsProvider
 import com.cycling.domain.lyrics.model.karaoke.KaraokeLine
@@ -35,6 +36,7 @@ class LyricsRepositoryImplTest {
     private lateinit var lyricsCacheDao: LyricsCacheDao
     private lateinit var lyricsOverrideDao: LyricsOverrideDao
     private lateinit var lyricsIndexDao: LyricsIndexDao
+    private lateinit var cacheGenerationStore: LyricsCacheGenerationStore
     private lateinit var settingsRepository: SettingsRepository
     private lateinit var netEase: OnlineLyricsProvider
     private lateinit var lrclib: OnlineLyricsProvider
@@ -66,6 +68,7 @@ class LyricsRepositoryImplTest {
         lyricsCacheDao = mockk()
         lyricsOverrideDao = mockk()
         lyricsIndexDao = mockk(relaxed = true)
+        cacheGenerationStore = mockk()
         settingsRepository = mockk()
         netEase = mockk()
         lrclib = mockk()
@@ -76,6 +79,11 @@ class LyricsRepositoryImplTest {
         every { settingsRepository.lyricsProviderOrder } returns
             flowOf(listOf(LyricsProvider.NETEASE, LyricsProvider.LRCLIB))
 
+        // The store is far past the current generation: these tests are about lookups, not about
+        // the one-time cache migration (covered separately below).
+        coEvery { cacheGenerationStore.get() } returns Int.MAX_VALUE
+        coEvery { cacheGenerationStore.set(any()) } returns Unit
+        coEvery { lyricsCacheDao.clear() } returns Unit
         coEvery { lyricsFileHelper.getLyricsContent(any()) } returns null
         coEvery { embeddedLyricsHelper.extractLyrics(any()) } returns null
         coEvery { lyricsCacheDao.get(any()) } returns null
@@ -90,6 +98,7 @@ class LyricsRepositoryImplTest {
             lyricsCacheDao,
             lyricsOverrideDao,
             lyricsIndexDao,
+            cacheGenerationStore,
             settingsRepository,
             setOf(netEase, lrclib)
         )
@@ -217,6 +226,7 @@ class LyricsRepositoryImplTest {
         val result = repository.getLyrics(song)
 
         assertEquals(LyricsSource.ONLINE, result.source)
+        assertEquals(LyricsProvider.NETEASE, result.provider)
         assertTrue(result.syncedLyrics?.lines?.isNotEmpty() == true)
         coVerify(exactly = 0) { netEase.fetch(any()) }
         coVerify(exactly = 0) { lrclib.fetch(any()) }
@@ -308,6 +318,7 @@ class LyricsRepositoryImplTest {
         val result = repository.getLyrics(song)
 
         assertEquals(LyricsSource.ONLINE, result.source)
+        assertEquals(LyricsProvider.NETEASE, result.provider)
         assertEquals(2, result.syncedLyrics?.lines?.size)
         coVerify {
             lyricsCacheDao.put(
@@ -425,6 +436,7 @@ class LyricsRepositoryImplTest {
         val result = repository.selectLyricsCandidate(song, candidate)
 
         assertEquals(LyricsSource.ONLINE, result.source)
+        assertEquals(LyricsProvider.NETEASE, result.provider)
         assertTrue(result.syncedLyrics?.isWordByWord == true)
         coVerify { lyricsCacheDao.put(match { it.rawContent == yrc && it.source == "netease" }) }
     }
@@ -471,6 +483,42 @@ class LyricsRepositoryImplTest {
 
         assertEquals(LyricsSource.FILE, result.source)
         coVerify(exactly = 0) { netEase.fetch(any()) }
+    }
+
+    // ── provider-generation migration ────────────────────────────────
+
+    @Test
+    fun `a provider-generation bump clears the downloaded cache exactly once`() = runTest {
+        // 新增在线来源之后，旧来源留下的缓存会一直赢到 TTL 到期，新来源对已放过的歌等于不存在。
+        coEvery { cacheGenerationStore.get() } returns LYRICS_CACHE_GENERATION - 1
+        coEvery { lyricsFileHelper.getLyricsContent(song.path) } returns lrc
+        val migrated = LyricsRepositoryImpl(
+            embeddedLyricsHelper,
+            lyricsFileHelper,
+            lyricsCacheDao,
+            lyricsOverrideDao,
+            lyricsIndexDao,
+            cacheGenerationStore,
+            settingsRepository,
+            setOf(netEase, lrclib)
+        )
+
+        migrated.getLyrics(song)
+        migrated.getLyrics(song)
+
+        coVerify(exactly = 1) { lyricsCacheDao.clear() }
+        coVerify(exactly = 1) { cacheGenerationStore.set(LYRICS_CACHE_GENERATION) }
+    }
+
+    @Test
+    fun `an up-to-date cache generation leaves the cache alone`() = runTest {
+        coEvery { cacheGenerationStore.get() } returns LYRICS_CACHE_GENERATION
+        coEvery { lyricsFileHelper.getLyricsContent(song.path) } returns lrc
+
+        repository.getLyrics(song)
+
+        coVerify(exactly = 0) { lyricsCacheDao.clear() }
+        coVerify(exactly = 0) { cacheGenerationStore.set(any()) }
     }
 
     private fun cachedEntity(

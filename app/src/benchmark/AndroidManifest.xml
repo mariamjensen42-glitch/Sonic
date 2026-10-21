@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    只挂在 benchmark 变体上：宏基准要在不可调试的构建上让 shell 做 AOT 编译、抓 perfetto
+    trace，这需要 profileable；正式包不需要这个能力，所以不放进主清单。
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <profileable android:shell="true" />
+    </application>
+
+</manifest>

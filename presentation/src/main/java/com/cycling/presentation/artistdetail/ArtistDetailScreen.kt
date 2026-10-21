@@ -15,6 +15,7 @@ import com.cycling.core.ui.theme.SonSizes
 import com.cycling.presentation.R
 import com.cycling.presentation.components.CollectionDetailScreen
 import com.cycling.presentation.components.CollectCollectionDetailEffects
+import com.cycling.presentation.components.SongQueueActions
 
 @Composable
 fun ArtistDetailScreen(
@@ -22,7 +23,8 @@ fun ArtistDetailScreen(
     onNavigateToPlayer: (Long) -> Unit,
     onPlayShuffled: (List<com.cycling.domain.model.Song>) -> Unit,
     viewModel: ArtistDetailViewModel,
-    bottomPadding: Dp = 0.dp
+    bottomPadding: Dp = 0.dp,
+    queueActions: SongQueueActions? = null
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     CollectCollectionDetailEffects(viewModel.uiEffect, onNavigateToPlayer, onPlayShuffled)
@@ -36,6 +38,7 @@ fun ArtistDetailScreen(
         onNavigateBack = onNavigateBack,
         onIntent = viewModel::handleCollectionIntent,
         bottomPadding = bottomPadding,
+        queueActions = queueActions,
         // 歌手页的特有差异：行尾心形收藏，直连歌手自己的意图。
         songTrailing = { song ->
             val isLiked = song.id in uiState.likedSongIds

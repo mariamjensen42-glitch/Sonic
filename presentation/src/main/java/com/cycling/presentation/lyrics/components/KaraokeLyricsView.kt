@@ -1,5 +1,6 @@
 package com.cycling.presentation.lyrics.components
 
+import android.animation.ValueAnimator
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.ExperimentalSharedTransitionApi
@@ -32,6 +33,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -58,9 +60,18 @@ import com.cycling.presentation.lyrics.utils.modifier.dynamicFadingEdge
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
 
 /** 行尾滚动余量：让最后几行也能滚到高亮位置。 */
 private val ScrollTailHeight = 2000.dp
+
+/**
+ * 目标行离视口首行超过这么多行时，直接跳过去而不是滚动过去。
+ *
+ * 正常播放每次只前进一行（动画跟手）；拖动进度条、切歌、重新对齐则可能是几十行 —— 那一段
+ * 动画会边滚边组合中间所有行，是「歌词页一进来就卡」的来源。
+ */
+private const val MAX_ANIMATED_SCROLL_LINES = 2
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
@@ -68,6 +79,7 @@ fun KaraokeLyricsView(
     listState: LazyListState,
     lyrics: SyncedLyrics,
     currentPosition: () -> Int,
+    isPlaying: Boolean,
     onLineClicked: (ISyncedLine) -> Unit,
     onLinePressed: (ISyncedLine) -> Unit,
     modifier: Modifier = Modifier,
@@ -80,6 +92,8 @@ fun KaraokeLyricsView(
     textColor: Color = Color.Unspecified,
     breathingDotsDefaults: KaraokeBreathingDotsDefaults = KaraokeBreathingDotsDefaults(),
     useBlurEffect: Boolean = true,
+    /** 行文本在可用宽度内居中；关掉就是按语言方向靠起始侧。 */
+    alignCenter: Boolean = false,
     offset: Dp = SonSpacing.extraLarge,
 ) {
     val density = LocalDensity.current
@@ -146,8 +160,13 @@ fun KaraokeLyricsView(
     // 每帧 tick：只被绘制阶段读取，用于逐帧刷新进度而不触发重组。
     // 只有 Animating 状态的行会去读它，静态行不会每帧失效，
     // 离屏层 / 模糊效果因此可以复用，也避免每帧重做 saveLayer
+    //
+    // 只在**真正在播放**时跑，并且尊重系统动画缩放。暂停时没有行在读它（实测 0 帧），
+    // tick 只是每 vsync 空唤醒一次；系统关动画时它却会让整页继续按刷新率重绘
+    // （`animator_duration_scale=0` 实测仍是 124 fps）—— 那时本该停在第一帧。
     val frameTick = remember { mutableIntStateOf(0) }
-    LaunchedEffect(Unit) {
+    LaunchedEffect(isPlaying) {
+        if (!isPlaying || ValueAnimator.getDurationScale() <= 0f) return@LaunchedEffect
         while (isActive) {
             withFrameNanos { frameTick.intValue++ }
         }
@@ -242,30 +261,44 @@ fun KaraokeLyricsView(
 
     val scrollInCode = remember { mutableStateOf(false) }
 
+    // 进页面 / 换歌词后的第一次对齐是否已经做过。
+    // 第一次必须是**瞬移**，不能动画：从第 0 行「滚」到当前行会一边滚一边组合中间每一行
+    // （每行都要做音节测量、渐隐遮罩、模糊层），几十行的距离能卡住好几帧到几百毫秒 ——
+    // 用户看到的就是「进歌词页时很卡地滚到当前歌词」。
+    var initialAligned by remember(lyrics) { mutableStateOf(false) }
+
     LaunchedEffect(
         firstFocusedLineIndex,
         layoutCache,
         stableOffsetPx,
     ) {
-        if (!scrollInCode.value) {
-            val items = listState.layoutInfo.visibleItemsInfo
-            val targetItem = items.firstOrNull { it.index == firstFocusedLineIndex }
-            val scrollOffset =
-                (targetItem?.offset?.minus(listState.layoutInfo.viewportStartOffset + stableOffsetPx))?.toFloat()
-            try {
-                scrollInCode.value = true
-                if (scrollOffset != null) {
-                    listState.animateScrollBy(
-                        scrollOffset,
-                        SonMotionTiming.scrollSpec()
-                    )
-                } else {
-                    listState.animateScrollToItem(firstFocusedLineIndex, -stableOffsetPx)
+        if (scrollInCode.value) return@LaunchedEffect
+        val target = firstFocusedLineIndex
+        val targetItem = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == target }
+        try {
+            scrollInCode.value = true
+            when {
+                // 第一次对齐：直接跳到当前行
+                !initialAligned -> {
+                    initialAligned = true
+                    listState.scrollToItem(target, -stableOffsetPx)
                 }
-            } catch (_: Exception) {
-            } finally {
-                scrollInCode.value = false
+                // 目标行已经在屏幕上：只做小幅修正，动画跟手
+                targetItem != null -> {
+                    val scrollOffset =
+                        (targetItem.offset -
+                            (listState.layoutInfo.viewportStartOffset + stableOffsetPx)).toFloat()
+                    listState.animateScrollBy(scrollOffset, SonMotionTiming.scrollSpec())
+                }
+                // 拖动进度条或跨越多行：同样直接跳，别让列表一行行滚过去
+                abs(target - listState.firstVisibleItemIndex) > MAX_ANIMATED_SCROLL_LINES -> {
+                    listState.scrollToItem(target, -stableOffsetPx)
+                }
+                else -> listState.animateScrollToItem(target, -stableOffsetPx)
             }
+        } catch (_: Exception) {
+        } finally {
+            scrollInCode.value = false
         }
     }
 
@@ -320,6 +353,7 @@ fun KaraokeLyricsView(
                             endTimeMs = if (showDotsIntro) firstLine!!.start else line.start,
                             currentTimeProvider = animatedTimeProvider,
                             defaults = breathingDotsDefaults,
+                            center = alignCenter,
                             modifier = Modifier.padding(vertical = SonSpacing.medium)
                         )
                     }
@@ -376,6 +410,7 @@ fun KaraokeLyricsView(
                                 LyricsLineItem(
                                     isFocused = isCurrentFocusLine,
                                     isRightAligned = isVisualRightAligned,
+                                    isCentered = alignCenter,
                                     onLineClicked = { onLineClicked(line) },
                                     onLinePressed = { onLinePressed(line) },
                                     blurRadius = { blurRadiusState.value },
@@ -389,6 +424,7 @@ fun KaraokeLyricsView(
                                         normalLineTextStyle = stableNormalTextStyle,
                                         accompanimentLineTextStyle = stableAccompanimentTextStyle,
                                         activeColor = activeTextColor,
+                                        alignCenter = alignCenter,
                                         precalculatedLayouts = layoutCache.value?.get(index)
                                     )
                                 }
@@ -435,6 +471,7 @@ fun KaraokeLyricsView(
                                     LyricsLineItem(
                                         isFocused = isCurrentFocusLine,
                                         isRightAligned = isVisualRightAligned,
+                                        isCentered = alignCenter,
                                         onLineClicked = { onLineClicked(line) },
                                         onLinePressed = { onLinePressed(line) },
                                         blurRadius = { blurRadiusState.value },
@@ -448,6 +485,7 @@ fun KaraokeLyricsView(
                                             normalLineTextStyle = stableNormalTextStyle,
                                             accompanimentLineTextStyle = stableAccompanimentTextStyle,
                                             activeColor = activeTextColor,
+                                            alignCenter = alignCenter,
                                             precalculatedLayouts = layoutCache.value?.get(index)
                                         )
                                     }
@@ -460,6 +498,7 @@ fun KaraokeLyricsView(
                             LyricsLineItem(
                                 isFocused = isCurrentFocusLine,
                                 isRightAligned = isLineRtl,
+                                isCentered = alignCenter,
                                 onLineClicked = { onLineClicked(line) },
                                 onLinePressed = { onLinePressed(line) },
                                 blurRadius = { blurRadiusState.value },
@@ -471,6 +510,7 @@ fun KaraokeLyricsView(
                                     isLineRtl = isLineRtl,
                                     textStyle = stableNormalTextStyle.copy(lineHeight = 1.2.em),
                                     textColor = if (isCurrentFocusLine) activeTextColor else mutedTextColor,
+                                    alignCenter = alignCenter,
                                 )
                             }
                         }

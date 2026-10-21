@@ -4,6 +4,7 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
@@ -47,13 +48,16 @@ fun KaraokeBreathingDots(
     currentTimeProvider: () -> Int,
     modifier: Modifier = Modifier,
     defaults: KaraokeBreathingDotsDefaults = KaraokeBreathingDotsDefaults(),
+    /** 歌词行居中时，间奏点也跟着居中，否则会单独黏在左边。 */
+    center: Boolean = false,
 ) {
     val extended = LocalSonExtendedColors.current
     val dotColor =
         if (defaults.breathingDotsColor == Color.Unspecified) extended.lyricsInactive
         else defaults.breathingDotsColor
 
-    Box(modifier) {
+    // 撑满宽度，居中对齐才有参照；非居中时 Canvas 仍贴起始侧，观感不变。
+    Box(modifier.fillMaxWidth()) {
         val size = with(LocalDensity.current) { defaults.size.toPx() }
         val margin = with(LocalDensity.current) { defaults.margin.toPx() }
         val totalWidth = size * defaults.number + margin * (defaults.number - 1)
@@ -61,9 +65,9 @@ fun KaraokeBreathingDots(
         Canvas(
             Modifier
                 .align(
-                    when (alignment) {
-                        KaraokeAlignment.Start -> Alignment.TopStart
-                        KaraokeAlignment.End -> Alignment.TopEnd
+                    when {
+                        center -> Alignment.TopCenter
+                        alignment == KaraokeAlignment.End -> Alignment.TopEnd
                         else -> Alignment.TopStart
                     }
                 )

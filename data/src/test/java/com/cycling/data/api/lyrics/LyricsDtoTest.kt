@@ -1,5 +1,7 @@
 package com.cycling.data.api.lyrics
 
+import com.cycling.data.api.lyrics.dto.AmllGetResponseDto
+import com.cycling.data.api.lyrics.dto.AmllSearchResponseDto
 import com.cycling.data.api.lyrics.dto.LrclibTrackDto
 import com.cycling.data.api.lyrics.dto.NetEaseLyricResponse
 import com.cycling.data.api.lyrics.dto.NetEaseSearchResponse
@@ -137,5 +139,74 @@ class LyricsDtoTest {
         val lyric = json.decodeFromString<NetEaseLyricResponse>(payload).lrc?.lyric
 
         assertEquals("", lyric)
+    }
+
+    @Test
+    fun `decodes an AMLL search response`() {
+        val payload = """
+            {
+              "status": 200,
+              "data": {
+                "items": [
+                  {
+                    "id": 7192686136682066,
+                    "filename": "1730652389036-69615623-d1511ea9.ttml",
+                    "createdAt": 1730652389036,
+                    "musicNames": ["晴天"],
+                    "artistNames": ["周杰伦"],
+                    "albumNames": ["叶惠美"],
+                    "ncmMusicIds": ["186016"],
+                    "authorUsernames": ["Sikz1218"]
+                  }
+                ],
+                "pagination": {"page": 1, "pageSize": 50, "total": 1, "totalPages": 1, "hasMore": false}
+              }
+            }
+        """.trimIndent()
+
+        val items = json.decodeFromString<AmllSearchResponseDto>(payload).data?.items.orEmpty()
+
+        assertEquals(1, items.size)
+        assertEquals(7192686136682066L, items[0].id)
+        assertEquals(listOf("周杰伦"), items[0].artistNames)
+        assertEquals(listOf("叶惠美"), items[0].albumNames)
+        assertEquals(listOf("Sikz1218"), items[0].authorUsernames)
+        // The search endpoint never sends the lyric body; only the get endpoint does.
+        assertNull(items[0].lyrics)
+    }
+
+    @Test
+    fun `decodes an AMLL get response with its TTML body`() {
+        val payload = """
+            {
+              "status": 200,
+              "data": {
+                "id": 7192686136682066,
+                "musicNames": ["晴天"],
+                "artistNames": ["周杰伦"],
+                "albumNames": ["叶惠美"],
+                "lyrics": "<tt xmlns=\"http://www.w3.org/ns/ttml\"><body/></tt>",
+                "format": "ttml"
+              }
+            }
+        """.trimIndent()
+
+        val data = json.decodeFromString<AmllGetResponseDto>(payload).data
+
+        assertEquals("<tt xmlns=\"http://www.w3.org/ns/ttml\"><body/></tt>", data?.lyrics)
+    }
+
+    @Test
+    fun `an AMLL error is a status and message with no data`() {
+        val payload = """{"status": 404, "error": "Not Found", "message": "No lyrics matched."}"""
+
+        assertNull(json.decodeFromString<AmllGetResponseDto>(payload).data)
+    }
+
+    @Test
+    fun `an AMLL search with no matches decodes to an empty list`() {
+        val payload = """{"status": 200, "data": {"items": [], "pagination": {"total": 0}}}"""
+
+        assertTrue(json.decodeFromString<AmllSearchResponseDto>(payload).data?.items.orEmpty().isEmpty())
     }
 }

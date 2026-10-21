@@ -16,7 +16,8 @@
 - **播放**：Media3 ExoPlayer 1.9.0 + MediaSessionService（前台服务后台播放）
 - **图片**：Coil 3.1.0
 - **导航**：Navigation 3（`androidx.navigation3`）+ `@Serializable` 类型安全路由
-- **其他**：kotlinx-coroutines/serialization、OkHttp、Timber（日志）、mp3agic（音频元数据）、palette-ktx（取色）
+- **其他**：kotlinx-coroutines/serialization、OkHttp、Timber（日志）、mp3agic（MP3 标签/歌词）、
+  kotlinx-io（`:taglib` 的字节流/文件抽象）、palette-ktx（取色）
 - **JDK**：17（`jvmToolchain(17)`）；**compileSdk**：37（+ `compileSdkMinor = 1`，因 material3 1.5.0-alpha29
   与 Compose 1.13.0-alpha01 的 AAR 要求 `minCompileSdk = 37`）；**targetSdk**：36；**minSdk**：30
 - **AGP**：9.3.0
@@ -40,6 +41,7 @@
 ./gradlew :data:test
 ./gradlew :presentation:test
 ./gradlew connectedAndroidTest   # 仪器测试（需连接设备）
+./gradlew :benchmark:connectedBenchmarkAndroidTest   # 性能基准（macrobenchmark，需连接设备）
 
 # 代码规范检查
 ./gradlew lint                   # Android Lint
@@ -47,11 +49,13 @@
 
 ## Architecture
 
-四个 Gradle 模块（`settings.gradle.kts` 中 `:app :domain :data :presentation`），依赖方向严格单向：
+六个 Gradle 模块（`settings.gradle.kts` 中 `:app :domain :data :presentation :taglib :benchmark`），依赖方向严格单向：
 
 ```
 app → presentation → domain ← data
 app → domain, app → data
+data → taglib（多格式标签库，vendored）
+benchmark ⇢ app（com.android.test，targetProjectPath，不在产品依赖链上）
 ```
 
 - **app** (`com.cycling.sonic`)：`MainActivity`、`SonicApplication`、`MainViewModel`（主题）。仅装配，不含业务逻辑。
@@ -60,20 +64,31 @@ app → domain, app → data
   - `repository/` — 仓库**接口**（`interface XxxRepository`，返回 `Flow<T>` 或 `suspend`）
   - `usecase/` — 用例（`class XxxUseCase @Inject constructor`，`operator fun invoke`）
   - `lyrics/` — 歌词子系统：`parser/`（`ILyricsParser` 接口 + LRC/TTML/Syllable 等实现）、`model/`、`exporter/`、`utils/`
-- **data** (`com.cycling.data`)：依赖 `:domain`，实现所有 repository。
+- **data** (`com.cycling.data`)：依赖 `:domain` 与 `:taglib`，实现所有 repository。
   - `local/` — `database/`(`AppDatabase`)、`dao/`、`entity/`、`mediastore/`、`scanner/`、`lyrics/`、`metadata/`
-  - `api/` — 远程 API：DeepSeek（`DeepSeekApiService` 类 + `dto/`）、在线歌词（`api/lyrics/`，`OnlineLyricsProvider` 的 LRCLIB / NetEase 实现 + `dto/`）
+    （`metadata/AudioMetadataHelper.kt` 是标签读写入口：MP3 用 mp3agic，FLAC/OGG/M4A 用 `:taglib`）
+  - `api/` — 远程 API：DeepSeek（`DeepSeekApiService` 类 + `dto/`）、在线歌词（`api/lyrics/`，`OnlineLyricsProvider` 的 AMLL / 网易云 / QQ 音乐 / 酷狗 / LRCLIB 实现 + `dto/`）、在线封面与元数据（`api/cover/`）、在线目录搜索（`api/search/`，网易云 / QQ / 酷狗 / 酷我 / 咪咕 → 带平台 id 的 `MusicInfo`）
   - `player/` — `PlayerManager`、`PlayerService`（Media3 MediaSessionService）
   - `repository/` — `XxxRepositoryImpl`（`@Singleton`，`@Inject constructor`）
   - `mapper/` — Entity ↔ Domain Model 映射（`Mappers.kt`）
   - `store/` — DataStore 封装（`ApiKeyStore`、`AiInfoCacheStore`）
+  - `cache/` — 缓存上限的检查与淘汰（`CacheJanitor`：超上限按占用从大到小**整目录**清空，由 `SonicApplication` 启动时跑一次、之后每小时一次）
   - `di/` — Hilt 模块（`RepositoryModule` 用 `@Binds`，`DatabaseModule`/`PlayerModule`/`AiModule` 用 `@Provides`）
+- **taglib** (`com.cycling.salt.audiotag`)：从本地 SaltAudioTag 工程的 `core` 模块整包搬入的
+  多格式音频标签库（LGPL-2.1，见 `taglib/LICENSE` 与每个源文件头）。读写 MP3 / FLAC /
+  OGG-Vorbis / MP4(M4A)，Opus 只读。换用/升级时整包替换，不要在这里写业务逻辑，也不要让
+  `:domain` / `:presentation` 直接依赖它 —— 只有 `:data` 的 `AudioMetadataHelper` 使用。
 - **presentation** (`com.cycling.presentation` + `com.cycling.core.ui`)：依赖 `:domain`，含 Compose UI。
   - `presentation/<feature>/` — 每个功能一个包，内含 `XxxContract.kt`（UiState/Intent/Effect）、`XxxViewModel.kt`、`XxxScreen.kt`
   - `presentation/navigation/` — `Screen`/`LibraryDestination`/`SettingsDestination`（`sealed interface : NavKey`）、`AppNavGraph`、`Navigator`
   - `presentation/lyrics/` — 卡拉OK 歌词 UI（`components/`、`utils/`）
-  - `core/ui/theme/` — Material 3 Expressive 主题系统：`Theme.kt`（`SonicTheme`）、`Color.kt`、`Hct.kt`、`TonalPalette.kt`、`Typography.kt`、`Shape.kt`、`MotionTiming.kt`、`Spacing.kt`、`ArtColorExtractor.kt`
+  - `core/ui/theme/` — Material 3 Expressive 主题系统：`Theme.kt`（`SonicTheme`）、`Color.kt`、`Hct.kt`、`TonalPalette.kt`、`Typography.kt`、`Shape.kt`、`MotionTiming.kt`、`Spacing.kt`、`ArtColorExtractor.kt`（`androidx.palette` 取封面颜色）、`CoverArtworkLoader.kt`（封面位图读取：MediaStore 缩略图 → 图片流 → 内嵌封面）、`SonColorField.kt`（静态色面）、`SonDynamicBackdrop.kt`（播放页 / 歌词页的动态色面）
   - `core/ui/components/` — 仅放 Material 未提供的组合组件（当前只有 `MediaCards.kt`：`M3Artwork`、`M3MediaCard`、`M3ArtistCard`）。Material 已提供的组件一律直接用 `androidx.compose.material3`，不要再包一层
+- **benchmark** (`com.cycling.benchmark`)：`com.android.test` 宏基准模块，`targetProjectPath = ":app"`，
+  `experimentalProperties["android.experimental.self-instrumenting"] = true`；只含 Macrobenchmark
+  测试（冷启动、设置页滚动），不含产品代码。被测变体是 `:app` 的 `benchmark` 构建类型（release
+  形态 + debug 签名），该变体额外带 `app/src/benchmark/AndroidManifest.xml` 的 `profileable`。
+  跑法与指标含义见 `docs/benchmarking.md`。
 
 ### MVI 数据流
 ```
@@ -98,9 +113,11 @@ app → domain, app → data
 全应用只使用 Material 3 Expressive，**不存在任何旧风格残留**。设计系统的唯一入口是
 `core/ui/theme/`，页面不得自带样式常量：
 
-- **主题**：只能通过 `SonicTheme` 装配。配色来源优先级：显式 `colorScheme`（封面种子色，见
-  `rememberArtworkTheme`）→ 系统动态取色 → 品牌种子色 `SonicSeed`。三条路径都收敛到
+- **主题**：只能通过 `SonicTheme` 装配。配色来源优先级：系统壁纸动态取色（默认）→ 品牌种子色
+  `SonicSeed`；显式 `colorScheme` 只作为特例覆盖，正常页面不要传。三条路径都收敛到
   `SonTonalScheme` 的 HCT 色调映射，不要绕开它直接拼颜色。
+  **封面不参与配色**：封面只经 `rememberArtworkBackdrop` 产出 `backdropColors`，供播放页 /
+  歌词页的 `SonDynamicBackdrop` 使用；其余页面一律跟随壁纸。
 - **颜色**：只能取自 `MaterialTheme.colorScheme.*`；M3 角色无法表达时才用
   `LocalSonExtendedColors.current`（封面占位、封面之上内容、歌词高亮、波形）。
   **禁止**在页面里写 `Color(0x...)`/`Color.White`/`Color.Gray`（`Color.Transparent` 仅用于表达真透明）。
@@ -113,9 +130,14 @@ app → domain, app → data
 - **间距与尺寸**：只能用 `SonSpacing` / `SonSizes` / `SonLayout`。
 - **动效**：弹簧只从 `MaterialTheme.motionScheme` 取（`defaultSpatialSpec` / `fastSpatialSpec` /
   `slowSpatialSpec` 与对应 effects 三档），场景与档位的对应见 `docs/design/motion.md`。
-  **禁止** `tween(300)`、`spring(dampingRatio = 0.8f, ...)` 这类裸参数；唯一例外是歌词的自动滚动与
-  伴奏行进出（`SonMotionTiming` 的时序 token，见 `docs/design/motion.md`）。
+  **禁止** `tween(300)`、`spring(dampingRatio = 0.8f, ...)` 这类裸参数；唯一例外是歌词的自动滚动、
+  伴奏行进出，以及播放页 / 歌词页的动态色面（`SonMotionTiming` 的时序 token，见 `docs/design/motion.md`
+  与 ADR-0005）。
   `MotionScheme.expressive()` 已由主题注入。
+  **常驻动画必须自己收口**：`LinearWavyProgressIndicator` 的波浪（会长时间停在屏幕上的进度条
+  直接用静态 `LinearProgressIndicator`）、歌词逐字 tick、动态色面都会按屏幕
+  刷新率无限重绘整页 —— 暂停（界面静止）时 `dumpsys gfxinfo <pkg>` 必须是 0 帧，系统动画缩放为 0 时
+  必须停在第一帧（判定与写法见 `docs/design/motion.md`）。
 - **交互反馈**：**禁止** `indication = null`；直接 `Modifier.clickable(onClick = ...)` 即由 Material
   提供 ripple 与 state layer。Expressive 的按压反馈是**形状变形**，Material 组件（`Button`、
   `IconButton`、`ListItem`、`SegmentedButton`）内部已经实现，页面不要再手写形变或缩放。
@@ -133,6 +155,11 @@ app → domain, app → data
   `M3Indicator` / `M3TextField` / `M3Chip` / `M3Navigation` / `M3Interaction` 已全部删除）。
 - **底部留白**：底部导航与迷你播放器是浮层，可滚动内容必须预留
   `SonLayout.bottomBarClearance`（迷你播放器可见时再加 `SonLayout.miniPlayerClearance`）。
+- **载入态**：本地数据（Room `Flow`、DataStore、MediaStore 查询）几乎瞬间就到，**禁止**用裸
+  `LoadingIndicator` 做整屏载入 —— 每进一次页面闪一帧转圈，用户看到的是卡顿。整屏载入用
+  `SonLoadingState`（`presentation/components/ExpressiveScaffold.kt`，延迟 240ms 才现身，
+  快于阈值时什么都不画）；需要自己搭载入 UI 的行内场景用 `rememberLoadingIndicatorVisible()`
+  取「该不该现身」。只有真等网络 / AI / 扫描的地方才直接显示 `LoadingIndicator`。
 - **`ListItem` 两个重载的主内容槽名不同**（易踩）：非交互重载用 `headlineContent`；
   带 `onClick` / `selected` / `checked` 的可交互重载主内容槽叫 **`content`**
   （同时它还有 `shapes` / `elevation` / `contentPadding`）。写可点击列表行时用
@@ -169,12 +196,16 @@ app → domain, app → data
 - ViewModel 测试用 `TestDispatcherRule`（`presentation/util/`）替换 `Dispatchers.Main`，`runTest { advanceUntilIdle() }`。
 - 测试方法名用反引号 `` `init loads search history`() `` 风格。
 - 测试目录镜像 main 包结构。
+- 性能基准（Macrobenchmark）只在 `:benchmark` 里，需要设备、不进 `test` 任务；跑法与指标读法见
+  `docs/benchmarking.md`。
 
 ## Notes
 
 <!-- 临时补充区，快速记录后续发现 -->
 - `spotify-clone-jetpack-compose-main/` 为参考项目目录，不参与构建。
-- Release 签名需 `key.properties`（含 `storeFile/storePassword/keyAlias/keyPassword`），缺失时回退默认 keystore。
+- Release 签名按优先级解析：环境变量 `SONIC_STORE_FILE` / `SONIC_STORE_PASSWORD` / `SONIC_KEY_ALIAS` /
+  `SONIC_KEY_PASSWORD`（CI）→ 仓库根 `key.properties`（本地；`storeFile` 相对 `:app`，现值为
+  `../sonic-release.keystore`）→ debug 签名兜底（本地能出包，会打 warning，产物不可发布）。
 
 ## Agent skills
 

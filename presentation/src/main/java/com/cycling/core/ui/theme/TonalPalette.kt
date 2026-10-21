@@ -165,8 +165,13 @@ class SonTonalScheme internal constructor(
         /**
          * 近灰封面的 HCT chroma 阈值。低于它时色相不可靠，用品牌色相兜底；
          * 阈值只在这里出现一次，页面不判断封面彩度。
+         *
+         * 必须**低于** `ArtColorExtractor` 的 `MIN_SEED_CHROMA`（12）：那里会把种子色的
+         * 彩度抬到 12 再交进来，阈值若比 12 高，抬完的种子依然被判成「灰封面」，
+         * 于是淡封面（奶油、灰蓝、莫兰迪色）永远回落到品牌紫 —— 那正是「背景不像封面」
+         * 的根因。这里只拦真正无彩度的封面（纯灰、纯白/黑）。
          */
-        const val GRAYSCALE_CHROMA_THRESHOLD = 16.0
+        const val GRAYSCALE_CHROMA_THRESHOLD = 8.0
 
         /**
          * 解析种子色相：chroma 低于 [GRAYSCALE_CHROMA_THRESHOLD] 时退回品牌色相，

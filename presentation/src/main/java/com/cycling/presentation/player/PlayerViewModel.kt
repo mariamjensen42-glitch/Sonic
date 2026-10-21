@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cycling.domain.model.LyricsCandidate
 import com.cycling.domain.model.LyricsSource
+import com.cycling.domain.model.PlayerEvent
 import com.cycling.domain.model.RepeatMode
 import com.cycling.domain.model.Song
 import com.cycling.domain.repository.PlayerRepository
@@ -24,13 +25,16 @@ import kotlinx.coroutines.launch
 import com.cycling.presentation.R
 import timber.log.Timber
 import javax.inject.Inject
+import com.cycling.domain.model.BeatState
+import com.cycling.domain.repository.AudioReactiveRepository
 
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
     private val playerRepository: PlayerRepository,
     private val songRepository: SongRepository,
     private val settingsRepository: SettingsRepository,
-    private val getLyricsUseCase: GetLyricsUseCase
+    private val getLyricsUseCase: GetLyricsUseCase,
+    private val audioReactiveRepository: AudioReactiveRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PlayerUiState())
@@ -46,6 +50,12 @@ class PlayerViewModel @Inject constructor(
     val openPlayerOnPlay: StateFlow<Boolean> = settingsRepository.openPlayerOnPlay
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
+    /**
+     * 播放页律动用的节拍快照。不放进 uiState：约 30Hz 的更新会让整页跟着重组。
+     */
+    val beat: StateFlow<BeatState> = audioReactiveRepository.beat
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), BeatState.Idle)
+
     private var lastLyricsSongPath: String? = null
 
     /**
@@ -56,6 +66,29 @@ class PlayerViewModel @Inject constructor(
     init {
         observePlayerState()
         observePlaybackSettings()
+        observePlaybackEvents()
+    }
+
+    /**
+     * 播放失败只提示一次。是否已经跳到下一首由播放实现层决定（见 `PlayerEvent.PlaybackFailed`），
+     * 这里只负责把话说清楚 —— 文件被删/损坏时界面若无反应，用户会以为播放器卡死了。
+     */
+    private fun observePlaybackEvents() {
+        viewModelScope.launch {
+            playerRepository.events.collect { event ->
+                when (event) {
+                    is PlayerEvent.PlaybackFailed -> _uiEffect.emit(
+                        PlayerEffect.ShowToast(
+                            if (event.skipped) {
+                                R.string.player_playback_failed_skipped
+                            } else {
+                                R.string.player_playback_failed
+                            }
+                        )
+                    )
+                }
+            }
+        }
     }
 
     /**
@@ -77,6 +110,41 @@ class PlayerViewModel @Inject constructor(
                 _uiState.update { it.copy(sleepTimerRemainingMs = remaining) }
             }
         }
+        viewModelScope.launch {
+            settingsRepository.playerSpectrumEnabled.collect { enabled ->
+                _uiState.update { it.copy(playerSpectrumEnabled = enabled) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.hiResBadge.collect { badge ->
+                _uiState.update { it.copy(hiResBadge = badge) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.hiResBadgeCustomUri.collect { uri ->
+                _uiState.update { it.copy(hiResBadgeCustomUri = uri) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.lyricsTextSizeSp.collect { sp ->
+                _uiState.update { it.copy(lyricsTextSizeSp = sp) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.lyricsAlignCenter.collect { enabled ->
+                _uiState.update { it.copy(lyricsAlignCenter = enabled) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.lyricsGlowEnabled.collect { enabled ->
+                _uiState.update { it.copy(lyricsGlowEnabled = enabled) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.lyricsBlurEnabled.collect { enabled ->
+                _uiState.update { it.copy(lyricsBlurEnabled = enabled) }
+            }
+        }
     }
 
     private fun observePlayerState() {
@@ -91,8 +159,15 @@ class PlayerViewModel @Inject constructor(
                         // 的默认值抹掉，必须像 viewMode 一样显式带过来。
                         showPlaybackSettings = prev.showPlaybackSettings,
                         playbackSpeed = prev.playbackSpeed,
+                        playerSpectrumEnabled = prev.playerSpectrumEnabled,
                         sleepTimerRemainingMs = prev.sleepTimerRemainingMs,
                         sleepTimerMinutes = prev.sleepTimerMinutes,
+                        hiResBadge = prev.hiResBadge,
+                        hiResBadgeCustomUri = prev.hiResBadgeCustomUri,
+                        lyricsTextSizeSp = prev.lyricsTextSizeSp,
+                        lyricsAlignCenter = prev.lyricsAlignCenter,
+                        lyricsGlowEnabled = prev.lyricsGlowEnabled,
+                        lyricsBlurEnabled = prev.lyricsBlurEnabled,
                         lyrics = if (songChanged) null else prev.lyrics,
                         isLoadingLyrics = if (songChanged) false else prev.isLoadingLyrics,
                         hasLyrics = if (songChanged) false else prev.hasLyrics,
@@ -286,10 +361,6 @@ class PlayerViewModel @Inject constructor(
                 Timber.d("handleIntent: ClearQueue")
                 clearQueue()
             }
-            is PlayerIntent.ToggleQueue -> {
-                Timber.d("handleIntent: ToggleQueue")
-                toggleQueue()
-            }
             is PlayerIntent.UpdateProgress -> { }
             is PlayerIntent.ToggleFavorite -> {
                 Timber.d("handleIntent: ToggleFavorite")
@@ -340,6 +411,24 @@ class PlayerViewModel @Inject constructor(
             is PlayerIntent.CancelSleepTimer -> {
                 Timber.d("handleIntent: CancelSleepTimer")
                 playerRepository.cancelSleepTimer()
+            }
+            is PlayerIntent.SetPlayerSpectrumEnabled -> {
+                Timber.d("handleIntent: SetPlayerSpectrumEnabled - ${intent.enabled}")
+                viewModelScope.launch {
+                    settingsRepository.setPlayerSpectrumEnabled(intent.enabled)
+                }
+            }
+            is PlayerIntent.SetLyricsTextSizeSp -> {
+                viewModelScope.launch { settingsRepository.setLyricsTextSizeSp(intent.sp) }
+            }
+            is PlayerIntent.SetLyricsAlignCenter -> {
+                viewModelScope.launch { settingsRepository.setLyricsAlignCenter(intent.enabled) }
+            }
+            is PlayerIntent.SetLyricsGlowEnabled -> {
+                viewModelScope.launch { settingsRepository.setLyricsGlowEnabled(intent.enabled) }
+            }
+            is PlayerIntent.SetLyricsBlurEnabled -> {
+                viewModelScope.launch { settingsRepository.setLyricsBlurEnabled(intent.enabled) }
             }
         }
     }
@@ -410,10 +499,6 @@ class PlayerViewModel @Inject constructor(
 
     private fun clearQueue() {
         playerRepository.clearQueue()
-    }
-
-    private fun toggleQueue() {
-        _uiState.update { it.copy(showQueue = !it.showQueue) }
     }
 
     private fun toggleFavorite() {

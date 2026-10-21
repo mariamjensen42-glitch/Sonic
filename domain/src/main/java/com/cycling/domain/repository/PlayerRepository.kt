@@ -1,5 +1,6 @@
 package com.cycling.domain.repository
 
+import com.cycling.domain.model.PlayerEvent
 import com.cycling.domain.model.PlayerState
 import com.cycling.domain.model.RepeatMode
 import com.cycling.domain.model.Song
@@ -7,6 +8,14 @@ import kotlinx.coroutines.flow.Flow
 
 interface PlayerRepository {
     val playerState: Flow<PlayerState>
+
+    /**
+     * 播放侧的一次性事件（当前只有"这首歌放不出来"）。
+     *
+     * 没有 replay：它描述的是"刚刚发生了一次失败"，界面收到后提示一次即可；实现层已经
+     * 决定了要不要跳过这首继续放，见 [PlayerEvent.PlaybackFailed.skipped]。
+     */
+    val events: Flow<PlayerEvent>
     
     fun playSong(song: Song, queue: List<Song> = emptyList())
     

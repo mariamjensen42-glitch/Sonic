@@ -64,7 +64,7 @@ import java.time.LocalTime
 /**
  * 首页（试点 2，#19）。
  *
- * 构图语法：一个 hero（最近播放的非对称大卡 + 封面派生的 primaryContainer 光晕）+ 一个
+ * 构图语法：一个 hero（最近播放的非对称大卡 + primaryContainer 光晕）+ 一个
  * 官方 `ButtonGroup` 组成的快速入口簇 + 若干安静的分区横滑；标题时刻由
  * `LargeFlexibleTopAppBar` 的 display 级问候语承担。没有 FAB —— 导航外壳已定标准
  * `NavigationBar` 且不引入 FAB（#5），主页面的动作簇落在内容里而不是右下角。

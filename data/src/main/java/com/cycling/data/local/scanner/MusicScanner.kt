@@ -52,9 +52,18 @@ class MusicScanner @Inject constructor(
             )
             Timber.d("saveSongsToDatabase: starting to save ${songs.size} songs to database")
             
+            // 已入库、且文件没被替换过的曲目不必再读一遍元数据：MediaMetadataRetriever 每首一次，
+            // 全库重读是秒级开销，而回到前台的增量刷新每次启动都会跑。只有新歌、或者 dateModified
+            // 变了的文件（被替换 / 重新编码）才真的去读。
+            val knownFiles = songLibraryWriter.knownSongFiles()
             val songsWithBitrate = songs.map { song ->
                 async {
-                    val bitrate = mediaStoreHelper.extractBitrate(song.path)
+                    val known = knownFiles[song.id]
+                    val bitrate = if (known != null && known.dateModified == song.dateModified) {
+                        known.bitrate
+                    } else {
+                        mediaStoreHelper.extractBitrate(song.path)
+                    }
                     song.copy(bitrate = bitrate)
                 }
             }.awaitAll()

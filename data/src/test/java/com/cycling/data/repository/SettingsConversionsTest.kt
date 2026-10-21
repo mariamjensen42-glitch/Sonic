@@ -34,19 +34,49 @@ class SettingsConversionsTest {
     }
 
     @Test
-    fun `lyrics provider order keeps the stored order`() {
+    fun `lyrics provider order keeps the stored order and appends providers it predates`() {
         assertEquals(
-            listOf(LyricsProvider.LRCLIB, LyricsProvider.NETEASE),
+            listOf(
+                LyricsProvider.LRCLIB,
+                LyricsProvider.NETEASE,
+                LyricsProvider.AMLL,
+                LyricsProvider.QQ_MUSIC,
+                LyricsProvider.KUGOU
+            ),
             SettingsConversions.parseLyricsProviders("LRCLIB,NETEASE")
         )
     }
 
     @Test
     fun `lyrics provider parsing drops unknown names and never returns empty`() {
-        assertEquals(listOf(LyricsProvider.LRCLIB), SettingsConversions.parseLyricsProviders("SPOTIFY,LRCLIB"))
+        // "SPOTIFY" is not a provider: the known name survives, the rest are appended after it.
+        assertEquals(
+            listOf(
+                LyricsProvider.LRCLIB,
+                LyricsProvider.AMLL,
+                LyricsProvider.NETEASE,
+                LyricsProvider.QQ_MUSIC,
+                LyricsProvider.KUGOU
+            ),
+            SettingsConversions.parseLyricsProviders("SPOTIFY,LRCLIB")
+        )
         // An empty result would silently disable online lyrics, so the default takes over.
         assertEquals(DEFAULT_LYRICS_PROVIDER_ORDER, SettingsConversions.parseLyricsProviders(null))
         assertEquals(DEFAULT_LYRICS_PROVIDER_ORDER, SettingsConversions.parseLyricsProviders("NOPE"))
+    }
+
+    @Test
+    fun `a provider repeated in the stored order is listed once`() {
+        assertEquals(
+            listOf(
+                LyricsProvider.NETEASE,
+                LyricsProvider.AMLL,
+                LyricsProvider.QQ_MUSIC,
+                LyricsProvider.KUGOU,
+                LyricsProvider.LRCLIB
+            ),
+            SettingsConversions.parseLyricsProviders("NETEASE,NETEASE")
+        )
     }
 
     @Test

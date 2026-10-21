@@ -17,32 +17,72 @@ android {
         applicationId = "com.cycling.sonic"
         minSdk = 30
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
         create("release") {
-            val storeFileEnv = System.getenv("SONIC_STORE_FILE")
-            if (storeFileEnv != null) {
-                storeFile = file(storeFileEnv)
-                storePassword = System.getenv("SONIC_STORE_PASSWORD") ?: ""
-                keyAlias = System.getenv("SONIC_KEY_ALIAS") ?: ""
-                keyPassword = System.getenv("SONIC_KEY_PASSWORD") ?: ""
+            // 签名材料按这个优先级解析：
+            //   1. 环境变量（CI：SONIC_STORE_FILE / _PASSWORD / _KEY_ALIAS / _KEY_PASSWORD）
+            //   2. 仓库根的 key.properties（本地开发）
+            // 两者都没有时这里留空，由 buildTypes.release 回落到 debug 签名 —— 否则
+            // validateSigningRelease 会直接失败，连本地打一次包都做不到。
+            val envStoreFile = System.getenv("SONIC_STORE_FILE")
+            val propsFile = rootProject.file("key.properties")
+            val props = mutableMapOf<String, String>()
+            if (propsFile.exists()) {
+                propsFile.readLines().forEach { raw ->
+                    val line = raw.trim()
+                    if (line.isNotEmpty() && !line.startsWith("#") && line.contains("=")) {
+                        props[line.substringBefore("=").trim()] = line.substringAfter("=").trim()
+                    }
+                }
+            }
+
+            val storePath: String? = envStoreFile ?: props["storeFile"]
+            if (storePath != null) {
+                // key.properties 里的路径相对 :app（仓库根的 keystore 写作 ../sonic-release.keystore）
+                storeFile = file(storePath)
+                storePassword = System.getenv("SONIC_STORE_PASSWORD") ?: props["storePassword"] ?: ""
+                keyAlias = System.getenv("SONIC_KEY_ALIAS") ?: props["keyAlias"] ?: ""
+                keyPassword = System.getenv("SONIC_KEY_PASSWORD") ?: props["keyPassword"] ?: ""
             }
         }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8 全量优化：dex 体积与类数量的下降直接换来更短的类加载/验证时间，
+            // 也就是冷启动里"代码不慢、装载慢"的那一段。压缩规则见 proguard-rules.pro。
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("release")
+            // 没有 release 密钥时用 debug 签名，保证本地能出包；但会留一条 warning，
+            // 免得把 debug 签名的产物当成正式包发出去。
+            val releaseSigning = signingConfigs.getByName("release")
+            signingConfig = if (releaseSigning.storeFile != null) {
+                releaseSigning
+            } else {
+                logger.warn(
+                    "Sonic: 未找到 release 签名（环境变量或仓库根 key.properties），" +
+                        "本次 release 构建使用 debug 签名，不能用于发布。"
+                )
+                signingConfigs.getByName("debug")
+            }
+        }
+        // 宏基准（:benchmark）的目标变体：产物形态与 release 一致（不可调试、**混淆**），
+        // 但用 debug 签名，这样 connectedBenchmarkAndroidTest 不依赖 release keystore 就能装。
+        create("benchmark") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            // 其余模块没有 benchmark 变体，依赖解析回落到 release。
+            matchingFallbacks += listOf("release")
         }
     }
     compileOptions {

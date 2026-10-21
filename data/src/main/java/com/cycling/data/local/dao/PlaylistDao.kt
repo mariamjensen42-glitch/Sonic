@@ -44,21 +44,50 @@ interface PlaylistDao {
     @Query("UPDATE playlists SET description = :description, dateModified = :dateModified WHERE id = :id")
     suspend fun updatePlaylistDescription(id: Long, description: String?, dateModified: Long)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    /**
+     * IGNORE 而不是 REPLACE：撞上 `(playlistId, songId)` 唯一索引时，REPLACE 是先删旧行
+     * 再插新行 —— 等于把这首歌挪到队尾；IGNORE 则保持它原来的位置不动。
+     */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertPlaylistSong(playlistSong: PlaylistSongEntity)
 
+    /**
+     * 单首添加，返回真正写进去的行数（0 = 这首歌本来就在单里）。
+     *
+     * `(playlistId, songId)` 上有唯一索引，一首歌在一张歌单里只占一行（歌单页用
+     * `song.id` 当 LazyColumn 的 key，重复行会闪退）。调用方拿返回值报真实数量，
+     * 而不是拿"想加几首"当结果。
+     */
     @Transaction
-    suspend fun addSongToPlaylist(playlistId: Long, songId: Long) {
-        val maxPosition = getMaxPosition(playlistId) ?: -1
-        insertPlaylistSong(PlaylistSongEntity(playlistId = playlistId, songId = songId, position = maxPosition + 1))
+    suspend fun addSongToPlaylist(playlistId: Long, songId: Long): Int {
+        if (songId in getPlaylistSongIds(playlistId)) return 0
+        val position = (getMaxPosition(playlistId) ?: -1) + 1
+        insertPlaylistSong(PlaylistSongEntity(playlistId = playlistId, songId = songId, position = position))
+        return 1
     }
 
+    /**
+     * 批量添加同一套规则，返回真正写进去的行数：跳过歌单里已有的，也跳过本批次内重复的 id。
+     *
+     * 先查一遍、而不是只靠唯一索引去挡，是为了让 position 保持连续：否则"添加 10 首、
+     * 其中 3 首已在单里"会让新歌的 position 跳掉一段空号。
+     */
     @Transaction
-    suspend fun addSongsToPlaylist(playlistId: Long, songIds: List<Long>) {
-        val maxPosition = getMaxPosition(playlistId) ?: -1
-        songIds.forEachIndexed { index, songId ->
-            insertPlaylistSong(PlaylistSongEntity(playlistId = playlistId, songId = songId, position = maxPosition + 1 + index))
+    suspend fun addSongsToPlaylist(playlistId: Long, songIds: List<Long>): Int {
+        if (songIds.isEmpty()) return 0
+        val existing = getPlaylistSongIds(playlistId).toMutableSet()
+        var position = (getMaxPosition(playlistId) ?: -1) + 1
+        var added = 0
+        songIds.forEach { songId ->
+            if (songId in existing) return@forEach
+            existing += songId
+            insertPlaylistSong(
+                PlaylistSongEntity(playlistId = playlistId, songId = songId, position = position)
+            )
+            position++
+            added++
         }
+        return added
     }
 
     @Query("SELECT MAX(position) FROM playlist_songs WHERE playlistId = :playlistId")

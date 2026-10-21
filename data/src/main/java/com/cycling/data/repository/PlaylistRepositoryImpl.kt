@@ -94,12 +94,12 @@ class PlaylistRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun addSongToPlaylist(playlistId: Long, songId: Long) {
-        playlistDao.addSongToPlaylist(playlistId, songId)
+    override suspend fun addSongToPlaylist(playlistId: Long, songId: Long): Int {
+        return playlistDao.addSongToPlaylist(playlistId, songId)
     }
 
-    override suspend fun addSongsToPlaylist(playlistId: Long, songIds: List<Long>) {
-        playlistDao.addSongsToPlaylist(playlistId, songIds)
+    override suspend fun addSongsToPlaylist(playlistId: Long, songIds: List<Long>): Int {
+        return playlistDao.addSongsToPlaylist(playlistId, songIds)
     }
 
     override suspend fun moveSong(playlistId: Long, fromIndex: Int, toIndex: Int) {

@@ -8,8 +8,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cycling.core.ui.components.SymbolIconName
 import com.cycling.presentation.R
+import com.cycling.presentation.collectiondetail.SongCollectionIntent
 import com.cycling.presentation.components.CollectionDetailScreen
 import com.cycling.presentation.components.CollectCollectionDetailEffects
+import com.cycling.presentation.components.SongQueueActions
 
 @Composable
 fun AlbumDetailScreen(
@@ -17,7 +19,8 @@ fun AlbumDetailScreen(
     onNavigateToPlayer: (Long) -> Unit,
     onPlayShuffled: (List<com.cycling.domain.model.Song>) -> Unit,
     viewModel: AlbumDetailViewModel,
-    bottomPadding: Dp = 0.dp
+    bottomPadding: Dp = 0.dp,
+    queueActions: SongQueueActions? = null
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     CollectCollectionDetailEffects(viewModel.uiEffect, onNavigateToPlayer, onPlayShuffled)
@@ -31,6 +34,8 @@ fun AlbumDetailScreen(
         backContentDescription = stringResource(R.string.album_detail_back_desc),
         onNavigateBack = onNavigateBack,
         onIntent = viewModel::handleCollectionIntent,
-        bottomPadding = bottomPadding
+        bottomPadding = bottomPadding,
+        queueActions = queueActions,
+        onToggleFavorite = { viewModel.handleCollectionIntent(SongCollectionIntent.ToggleFavorite(it)) }
     )
 }

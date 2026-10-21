@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.cycling.domain.repository.AlbumRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
@@ -23,6 +24,12 @@ class AlbumsViewModel @Inject constructor(
                 albums = albums,
                 isLoading = false
             )
+        }
+        .catch { error ->
+            // MediaStore 查询失败时退化成空列表：界面上就是个空态，下次进页面会重新查。
+            // 不兜这一下的话，isLoading 会永远停在默认的 true。
+            Timber.e(error, "getAllAlbums: failed")
+            emit(AlbumsUiState(isLoading = false))
         }
         .stateIn(
             viewModelScope,

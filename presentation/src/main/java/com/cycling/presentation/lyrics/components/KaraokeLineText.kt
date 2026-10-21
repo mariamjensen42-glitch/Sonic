@@ -1,7 +1,6 @@
 package com.cycling.presentation.lyrics.components
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -42,9 +41,7 @@ import com.cycling.domain.lyrics.model.karaoke.KaraokeAlignment
 import com.cycling.domain.lyrics.model.karaoke.KaraokeLine
 import com.cycling.presentation.lyrics.utils.LayerPaint
 import com.cycling.presentation.lyrics.utils.easing.Bounce
-import com.cycling.presentation.lyrics.utils.easing.DipAndRise
 import com.cycling.presentation.lyrics.utils.easing.Swell
-import com.cycling.presentation.lyrics.utils.isPunctuation
 import com.cycling.presentation.lyrics.utils.isRtl
 import kotlin.math.roundToInt
 
@@ -221,7 +218,7 @@ private fun DrawScope.drawRowText(
     drawColor: Color,
     currentTimeMs: Int,
 ) {
-    rowLayouts.forEachIndexed { index, syllableLayout ->
+    rowLayouts.forEach { syllableLayout ->
         val wordAnimInfo = syllableLayout.wordAnimInfo
 
         if (wordAnimInfo != null) {
@@ -244,16 +241,13 @@ private fun DrawScope.drawRowText(
                 val awesomeStartTime = (earliestStartTime + (latestStartTime - earliestStartTime) * charRatio).toLong()
                 val awesomeProgress = ((currentTimeMs - awesomeStartTime).toFloat() / awesomeDuration).coerceIn(0f, 1f)
 
-                val floatOffset = 4f * DipAndRise(
-                    dip = ((0.5 * (wordAnimInfo.wordDuration - fastCharAnimationThresholdMs * numCharsInWord) / 1000)).coerceIn(0.0, 0.5)
-                ).transform(1.0f - awesomeProgress)
                 val scale = 1f + Swell(
                     (0.1 * (wordAnimInfo.wordDuration - fastCharAnimationThresholdMs * numCharsInWord) / 1000).coerceIn(0.0, 0.1)
                 ).transform(awesomeProgress)
 
                 val centeredOffsetX = (charBox.width - singleCharLayoutResult.size.width) / 2f
                 val xPos = syllableLayout.position.x + charBox.left + centeredOffsetX
-                val yPos = syllableLayout.position.y + charBox.top + floatOffset
+                val yPos = syllableLayout.position.y + charBox.top
 
                 val blurRadius = 10f * Bounce.transform(awesomeProgress)
                 // 模糊半径为 0 时阴影完全被字形覆盖，直接跳过，
@@ -277,36 +271,10 @@ private fun DrawScope.drawRowText(
                 }
             }
         } else {
-            val driverLayout = if (syllableLayout.syllable.content.trim().isPunctuation()) {
-                var searchIndex = index - 1
-                while (searchIndex >= 0) {
-                    val candidate = rowLayouts[searchIndex]
-                    if (!candidate.syllable.content.trim().isPunctuation()) {
-                        break
-                    }
-                    searchIndex--
-                }
-                if (searchIndex < 0) syllableLayout else rowLayouts[searchIndex]
-            } else {
-                syllableLayout
-            }
-
-            val animationFixedDuration = 700f
-            val timeSinceStart = currentTimeMs - driverLayout.syllable.start
-            val animationProgress = (timeSinceStart / animationFixedDuration).coerceIn(0f, 1f)
-
-            val maxOffsetY = 4f
-            val floatCurveValue = LinearOutSlowInEasing.transform(1f - animationProgress)
-            val floatOffset = maxOffsetY * floatCurveValue
-
-            val finalPosition = syllableLayout.position.copy(
-                y = syllableLayout.position.y + floatOffset
-            )
-
             drawText(
                 textLayoutResult = syllableLayout.textLayoutResult,
                 color = drawColor,
-                topLeft = finalPosition,
+                topLeft = syllableLayout.position,
             )
         }
     }
@@ -322,6 +290,8 @@ fun KaraokeLineText(
     accompanimentLineTextStyle: TextStyle = LocalTextStyle.current,
     activeColor: Color = Color.Unspecified,
     precalculatedLayouts: List<SyllableLayout>? = null,
+    /** 行文本在可用宽度内居中；关掉就按语言方向靠起始侧。 */
+    alignCenter: Boolean = false,
     textMeasurer: TextMeasurer = rememberTextMeasurer()
 ) {
     val isLineRtl = remember(line.syllables) { line.syllables.any { it.content.isRtl() } }
@@ -333,12 +303,20 @@ fun KaraokeLineText(
         }
     }
 
-    val translationTextAlign = remember(isRightAligned) {
-        if (isRightAligned) TextAlign.End else TextAlign.Start
+    val translationTextAlign = remember(isRightAligned, alignCenter) {
+        when {
+            alignCenter -> TextAlign.Center
+            isRightAligned -> TextAlign.End
+            else -> TextAlign.Start
+        }
     }
 
-    val columnHorizontalAlignment = remember(isRightAligned) {
-        if (isRightAligned) Alignment.End else Alignment.Start
+    val columnHorizontalAlignment = remember(isRightAligned, alignCenter) {
+        when {
+            alignCenter -> Alignment.CenterHorizontally
+            isRightAligned -> Alignment.End
+            else -> Alignment.Start
+        }
     }
 
     // 已唱/未唱的刷色都来自主题角色，调用方不传就取"当前行高亮"色
@@ -400,13 +378,14 @@ fun KaraokeLineText(
             }
 
             val finalLineLayouts = remember(wrappedLines, availableWidthPx, lineHeight,
-                isLineRtl, isRightAligned) {
+                isLineRtl, isRightAligned, alignCenter) {
                 calculateStaticLineLayout(
                     wrappedLines = wrappedLines,
                     isLineRightAligned = isRightAligned,
                     canvasWidth = availableWidthPx,
                     lineHeight = lineHeight,
-                    isRtl = isLineRtl
+                    isRtl = isLineRtl,
+                    isLineCentered = alignCenter
                 )
             }
 

@@ -1,6 +1,7 @@
 package com.cycling.core.ui.theme
 
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
@@ -35,7 +36,20 @@ data class SonExtendedColors(
     /** 波形/振幅图形。 */
     val waveform: Color,
     /** 波形已播放部分。 */
-    val waveformActive: Color
+    val waveformActive: Color,
+    /**
+     * 小金标的金色渐变（起 → 止）。
+     *
+     * 压在封面图上，两种主题下都必须是这一种金色 —— 它表达的是「这枚标志长什么样」，
+     * 不是页面的语义层级，所以不参与主题推导。
+     */
+    val hiResBadgeGold: Color,
+    val hiResBadgeGoldDeep: Color,
+    /** 无线小金标的银色渐变（起 → 止）。 */
+    val hiResBadgeSilver: Color,
+    val hiResBadgeSilverDeep: Color,
+    /** 小金标之上的文字色。 */
+    val onHiResBadge: Color
 )
 
 internal val SonDarkExtendedColors = SonExtendedColors(
@@ -46,7 +60,12 @@ internal val SonDarkExtendedColors = SonExtendedColors(
     lyricsActive = Color(0xFFFFFFFF),
     lyricsInactive = Color(0xFF938F99),
     waveform = Color(0xFF49454F),
-    waveformActive = Color(0xFFD0BCFF)
+    waveformActive = Color(0xFFD0BCFF),
+    hiResBadgeGold = Color(0xFFFFD75E),
+    hiResBadgeGoldDeep = Color(0xFFE3A008),
+    hiResBadgeSilver = Color(0xFFF1F3F5),
+    hiResBadgeSilverDeep = Color(0xFFB4BCC6),
+    onHiResBadge = Color(0xFF241A00)
 )
 
 internal val SonLightExtendedColors = SonExtendedColors(
@@ -57,7 +76,24 @@ internal val SonLightExtendedColors = SonExtendedColors(
     lyricsActive = Color(0xFF1D1B20),
     lyricsInactive = Color(0xFF79747E),
     waveform = Color(0xFFCAC4D0),
-    waveformActive = Color(0xFF6750A4)
+    waveformActive = Color(0xFF6750A4),
+    hiResBadgeGold = Color(0xFFFFD75E),
+    hiResBadgeGoldDeep = Color(0xFFE3A008),
+    hiResBadgeSilver = Color(0xFFF1F3F5),
+    hiResBadgeSilverDeep = Color(0xFFB4BCC6),
+    onHiResBadge = Color(0xFF241A00)
 )
 
 val LocalSonExtendedColors = staticCompositionLocalOf { SonDarkExtendedColors }
+
+/**
+ * 封面派生的动态色面颜色（1~3 个封面上真实存在的颜色）。
+ *
+ * 与 [SonExtendedColors] 的区别：那个是按明暗固定的语义色，这个是**每首歌**变的，
+ * 由 `rememberArtworkBackdrop` 从封面位图取色、`SonicTheme` 注入。空表示当前没有封面
+ * （或封面接近灰阶），动态色面回退到配色方案里的 container 角色。
+ *
+ * 它**只**影响播放页 / 歌词页的动态色面；应用主题的配色跟随系统壁纸，不从这里来。
+ * 颜色只能从这个 local 或 `MaterialTheme.colorScheme` 来 —— 页面不自己取封面、不自己拼色。
+ */
+val LocalSonBackdropColors = compositionLocalOf { emptyList<Color>() }

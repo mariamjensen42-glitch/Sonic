@@ -17,6 +17,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import kotlin.coroutines.cancellation.CancellationException
 
 @HiltViewModel(assistedFactory = PlaylistDetailViewModel.Factory::class)
 class PlaylistDetailViewModel @AssistedInject constructor(
@@ -71,18 +72,27 @@ class PlaylistDetailViewModel @AssistedInject constructor(
         }
 
         viewModelScope.launch {
-            playlistRepository.getSongsInPlaylist(playlistId).collect { songs ->
-                Timber.d("loadPlaylist: loaded ${songs.size} songs")
-                // 配色由主题层按当前封面统一派生，这里不再单独取色。
-                _uiState.update {
-                    it.copy(
-                        songs = songs,
-                        isLoading = false,
-                        // 歌单封面取第一首曲目的封面，与旧版界面行为一致。
-                        artwork = songs.firstOrNull()?.albumArt
-                    )
+            try {
+                playlistRepository.getSongsInPlaylist(playlistId).collect { songs ->
+                    Timber.d("loadPlaylist: loaded ${songs.size} songs")
+                    // 配色由主题层按当前封面统一派生，这里不再单独取色。
+                    _uiState.update {
+                        it.copy(
+                            songs = songs,
+                            isLoading = false,
+                            // 歌单封面取第一首曲目的封面，与旧版界面行为一致。
+                            artwork = songs.firstOrNull()?.albumArt
+                        )
+                    }
+                    maybeGenerateDescription()
                 }
-                maybeGenerateDescription()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                // 不兜这一下，isLoading 会停在默认的 true —— 页面永远转圈，没有任何出口。
+                Timber.e(error, "loadPlaylist: failed for playlistId=$playlistId")
+                _uiState.update { it.copy(isLoading = false) }
+                _uiEffect.emit(CollectionDetailEffect.ShowToast(R.string.collection_vm_load_failed))
             }
         }
     }

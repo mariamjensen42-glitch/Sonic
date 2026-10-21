@@ -6,6 +6,9 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -60,8 +63,11 @@ import com.cycling.core.ui.theme.SonSpacing
 import com.cycling.domain.model.AudioMetadata
 import com.cycling.domain.model.Song
 import com.cycling.presentation.R
+import com.cycling.presentation.components.LyricsCandidatesSheet
 import com.cycling.presentation.components.PlaylistPickerDialog
+import com.cycling.presentation.components.SonLoadingState
 import com.cycling.presentation.components.formatDuration
+import com.cycling.presentation.components.rememberLoadingIndicatorVisible
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -81,6 +87,14 @@ fun SongDetailScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+
+    // The photo picker returns a URI whose read grant only lives as long as this process; the
+    // repository copies the bytes into app-private storage right away, so that is enough.
+    val coverImagePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        uri?.let { viewModel.handleIntent(SongDetailIntent.ApplyLocalCover(it.toString())) }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.uiEffect.collect { effect ->
@@ -178,14 +192,8 @@ fun SongDetailScreen(
         }
     ) { paddingValues ->
         if (uiState.isLoading) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentAlignment = Alignment.Center
-            ) {
-                LoadingIndicator()
-            }
+            // 歌曲详情来自 Room，几乎瞬间就到：延迟现身，避免每进一次都闪一帧转圈。
+            SonLoadingState(modifier = Modifier.padding(paddingValues))
         } else {
             uiState.song?.let { song ->
                 Column(
@@ -198,14 +206,7 @@ fun SongDetailScreen(
                         EditModeContent(
                             song = song,
                             uiState = uiState,
-                            onTitleChange = { viewModel.handleIntent(SongDetailIntent.UpdateTitle(it)) },
-                            onArtistChange = { viewModel.handleIntent(SongDetailIntent.UpdateArtist(it)) },
-                            onAlbumChange = { viewModel.handleIntent(SongDetailIntent.UpdateAlbum(it)) },
-                            onYearChange = { viewModel.handleIntent(SongDetailIntent.UpdateYear(it)) },
-                            onGenreChange = { viewModel.handleIntent(SongDetailIntent.UpdateGenre(it)) },
-                            onLyricsChange = { viewModel.handleIntent(SongDetailIntent.UpdateLyrics(it)) },
-                            onSave = { viewModel.handleIntent(SongDetailIntent.SaveChanges) },
-                            onCancel = { viewModel.handleIntent(SongDetailIntent.ExitEditMode) }
+                            onIntent = viewModel::handleIntent
                         )
                     } else {
                         ViewModeContent(
@@ -214,7 +215,8 @@ fun SongDetailScreen(
                             onPlay = { viewModel.handleIntent(SongDetailIntent.PlaySong) },
                             onFavorite = { viewModel.handleIntent(SongDetailIntent.ToggleFavorite) },
                             onAddToPlaylist = { viewModel.handleIntent(SongDetailIntent.AddToPlaylist) },
-                            onEditLyrics = { viewModel.handleIntent(SongDetailIntent.EnterEditMode) }
+                            onEditLyrics = { viewModel.handleIntent(SongDetailIntent.EnterEditMode) },
+                            onShowLyricsInfo = { viewModel.handleIntent(SongDetailIntent.OpenLyricsInfo) }
                         )
                     }
                 }
@@ -231,6 +233,54 @@ fun SongDetailScreen(
         },
         onCreateNewPlaylist = { viewModel.handleIntent(SongDetailIntent.CreatePlaylistAndAddSong(it)) }
     )
+
+    if (uiState.showLyricsCandidates) {
+        LyricsCandidatesSheet(
+            candidates = uiState.lyricsCandidates,
+            isLoading = uiState.isLoadingLyricsCandidates,
+            onSelect = { viewModel.handleIntent(SongDetailIntent.SelectLyricsCandidate(it)) },
+            onDismiss = { viewModel.handleIntent(SongDetailIntent.DismissLyricsCandidates) },
+            hintRes = R.string.song_detail_lyrics_candidates_hint
+        )
+    }
+
+    if (uiState.showLyricsInfoDialog) {
+        LyricsInfoDialog(
+            info = uiState.lyricsInfo,
+            editable = uiState.isEditMode,
+            onApplyMetadata = { viewModel.handleIntent(SongDetailIntent.ApplyLyricsMetadata(it)) },
+            onFillSongInfo = { viewModel.handleIntent(SongDetailIntent.FillSongInfoFromLyricsMetadata(it)) },
+            onDismiss = { viewModel.handleIntent(SongDetailIntent.DismissLyricsInfo) }
+        )
+    }
+
+    if (uiState.showCoverPicker) {
+        CoverPickerSheet(
+            candidates = uiState.onlineCandidates,
+            isLoading = uiState.isLoadingOnlineCandidates,
+            isApplying = uiState.isApplyingCover,
+            hasCustomCover = uiState.song?.hasCustomAlbumArt == true,
+            onPickLocal = {
+                coverImagePicker.launch(
+                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                )
+            },
+            onRetry = { viewModel.handleIntent(SongDetailIntent.RetryOnlineSearch) },
+            onClear = { viewModel.handleIntent(SongDetailIntent.ClearCustomCover) },
+            onSelectCandidate = { viewModel.handleIntent(SongDetailIntent.SelectCoverCandidate(it)) },
+            onDismiss = { viewModel.handleIntent(SongDetailIntent.DismissCoverPicker) }
+        )
+    }
+
+    if (uiState.showMetadataCandidates) {
+        MetadataCandidatesSheet(
+            candidates = uiState.onlineCandidates,
+            isLoading = uiState.isLoadingOnlineCandidates,
+            onSelect = { viewModel.handleIntent(SongDetailIntent.SelectMetadataCandidate(it)) },
+            onRetry = { viewModel.handleIntent(SongDetailIntent.RetryOnlineSearch) },
+            onDismiss = { viewModel.handleIntent(SongDetailIntent.DismissMetadataCandidates) }
+        )
+    }
 }
 
 @Composable
@@ -240,7 +290,8 @@ private fun ViewModeContent(
     onPlay: () -> Unit,
     onFavorite: () -> Unit,
     onAddToPlaylist: () -> Unit,
-    onEditLyrics: () -> Unit
+    onEditLyrics: () -> Unit,
+    onShowLyricsInfo: () -> Unit
 ) {
     // 头部色面：封面背后一层 primaryContainer 光晕，到封面下沿收干净；
     // 标题以下（歌词、文件属性）全部落在 surface 上，信息密度不受影响。
@@ -264,7 +315,8 @@ private fun ViewModeContent(
     LyricsSection(
         lyrics = uiState.lyrics,
         isLoading = uiState.isLoadingLyrics,
-        onEditLyrics = onEditLyrics
+        onEditLyrics = onEditLyrics,
+        onShowLyricsInfo = onShowLyricsInfo
     )
 
     SongInfoSection(song = song, audioMetadata = uiState.audioMetadata)
@@ -278,12 +330,16 @@ private fun ViewModeContent(
  *
  * 折叠而不是全展开：一首歌的歌词往往比页面其余部分加起来还长，默认摊开会把音频信息、文件信息
  * 挤到很远的地方。阈值之外给一个展开按钮，两种需求都能满足。
+ *
+ * 标题右侧的「歌词信息」是整个歌词区块的入口：来源、格式、行数与 LRC 头部标签都在那个面板里，
+ * 页面上不再摊开第二套信息行。
  */
 @Composable
 private fun LyricsSection(
     lyrics: List<LyricsDisplayLine>,
     isLoading: Boolean,
-    onEditLyrics: () -> Unit
+    onEditLyrics: () -> Unit,
+    onShowLyricsInfo: () -> Unit
 ) {
     var expanded by rememberSaveable { mutableStateOf(false) }
 
@@ -292,16 +348,40 @@ private fun LyricsSection(
             .fillMaxWidth()
             .padding(horizontal = SonLayout.screenMargin)
     ) {
-        InfoSectionTitle(stringResource(R.string.song_detail_section_lyrics))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = SonLayout.sectionTitleGap),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            InfoSectionTitle(
+                text = stringResource(R.string.song_detail_section_lyrics),
+                modifier = Modifier
+            )
+            TextButton(onClick = onShowLyricsInfo) {
+                M3SymbolIcon(
+                    name = SymbolIconName.Checklist,
+                    filled = true,
+                    contentDescription = null,
+                    modifier = Modifier.size(SonSizes.buttonIcon)
+                )
+                Spacer(modifier = Modifier.width(SonSpacing.extraSmall))
+                Text(text = stringResource(R.string.song_detail_lyrics_info))
+            }
+        }
 
         when {
-            lyrics.isEmpty() && isLoading -> Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = SonSpacing.large),
-                contentAlignment = Alignment.Center
-            ) {
-                LoadingIndicator(modifier = Modifier.size(SonSizes.iconLarge))
+            // 歌词通常来自本地 sidecar / 内嵌标签 / 缓存，瞬间就到；真去网络查时才值得显示转圈。
+            lyrics.isEmpty() && isLoading -> if (rememberLoadingIndicatorVisible()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = SonSpacing.large),
+                    contentAlignment = Alignment.Center
+                ) {
+                    LoadingIndicator(modifier = Modifier.size(SonSizes.iconLarge))
+                }
             }
 
             lyrics.isEmpty() -> EmptyLyrics(onEditLyrics = onEditLyrics)
@@ -381,14 +461,7 @@ private fun EmptyLyrics(onEditLyrics: () -> Unit) {
 private fun EditModeContent(
     song: Song,
     uiState: SongDetailUiState,
-    onTitleChange: (String) -> Unit,
-    onArtistChange: (String) -> Unit,
-    onAlbumChange: (String) -> Unit,
-    onYearChange: (String) -> Unit,
-    onGenreChange: (String) -> Unit,
-    onLyricsChange: (String) -> Unit,
-    onSave: () -> Unit,
-    onCancel: () -> Unit
+    onIntent: (SongDetailIntent) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -405,12 +478,45 @@ private fun EditModeContent(
                 .padding(top = SonSpacing.medium)
         )
 
+        // 封面是立即生效的一次选择，没有草稿状态，所以入口放在封面上而不是表单末尾。
+        TextButton(
+            onClick = { onIntent(SongDetailIntent.OpenCoverPicker) },
+            modifier = Modifier.align(Alignment.CenterHorizontally)
+        ) {
+            M3SymbolIcon(
+                name = SymbolIconName.Edit,
+                filled = true,
+                contentDescription = null,
+                modifier = Modifier.size(SonSizes.buttonIcon)
+            )
+            Spacer(modifier = Modifier.width(SonSpacing.extraSmall))
+            Text(text = stringResource(R.string.song_detail_cover_manage))
+        }
+
+        // 在线信息与封面共用同一批目录搜索结果：这里只把文本字段填进下面的表单，封面仍由上面的
+        // 「更换封面」负责，两个动作互不代劳。放在表单最前面，因为填完之后要往下逐项检查。
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextButton(onClick = { onIntent(SongDetailIntent.OpenMetadataCandidates) }) {
+                M3SymbolIcon(
+                    name = SymbolIconName.AutoAwesome,
+                    filled = true,
+                    contentDescription = null,
+                    modifier = Modifier.size(SonSizes.buttonIcon)
+                )
+                Spacer(modifier = Modifier.width(SonSpacing.extraSmall))
+                Text(text = stringResource(R.string.song_detail_metadata_online_manage))
+            }
+        }
+
         Spacer(modifier = Modifier.height(SonSpacing.large))
 
         EditTextField(
             label = stringResource(R.string.song_detail_title_label),
             value = uiState.editedTitle,
-            onValueChange = onTitleChange,
+            onValueChange = { onIntent(SongDetailIntent.UpdateTitle(it)) },
             placeholder = stringResource(R.string.song_detail_title_placeholder)
         )
 
@@ -419,7 +525,7 @@ private fun EditModeContent(
         EditTextField(
             label = stringResource(R.string.song_detail_artist_label),
             value = uiState.editedArtist,
-            onValueChange = onArtistChange,
+            onValueChange = { onIntent(SongDetailIntent.UpdateArtist(it)) },
             placeholder = stringResource(R.string.song_detail_artist_placeholder)
         )
 
@@ -428,8 +534,17 @@ private fun EditModeContent(
         EditTextField(
             label = stringResource(R.string.song_detail_album_label),
             value = uiState.editedAlbum,
-            onValueChange = onAlbumChange,
+            onValueChange = { onIntent(SongDetailIntent.UpdateAlbum(it)) },
             placeholder = stringResource(R.string.song_detail_album_placeholder)
+        )
+
+        Spacer(modifier = Modifier.height(SonSpacing.medium))
+
+        EditTextField(
+            label = stringResource(R.string.song_detail_album_artist_label),
+            value = uiState.editedAlbumArtist,
+            onValueChange = { onIntent(SongDetailIntent.UpdateAlbumArtist(it)) },
+            placeholder = stringResource(R.string.song_detail_album_artist_placeholder)
         )
 
         Spacer(modifier = Modifier.height(SonSpacing.medium))
@@ -437,7 +552,7 @@ private fun EditModeContent(
         EditTextField(
             label = stringResource(R.string.song_detail_year_label),
             value = uiState.editedYear,
-            onValueChange = onYearChange,
+            onValueChange = { onIntent(SongDetailIntent.UpdateYear(it)) },
             placeholder = stringResource(R.string.song_detail_year_placeholder),
             keyboardType = KeyboardType.Number
         )
@@ -447,15 +562,103 @@ private fun EditModeContent(
         EditTextField(
             label = stringResource(R.string.song_detail_genre_label),
             value = uiState.editedGenre,
-            onValueChange = onGenreChange,
+            onValueChange = { onIntent(SongDetailIntent.UpdateGenre(it)) },
             placeholder = stringResource(R.string.song_detail_genre_placeholder)
         )
 
         Spacer(modifier = Modifier.height(SonSpacing.medium))
 
+        EditTextField(
+            label = stringResource(R.string.song_detail_track_number_label),
+            value = uiState.editedTrackNumber,
+            onValueChange = { onIntent(SongDetailIntent.UpdateTrackNumber(it)) },
+            placeholder = stringResource(R.string.song_detail_track_number_placeholder)
+        )
+
+        Spacer(modifier = Modifier.height(SonSpacing.medium))
+
+        EditTextField(
+            label = stringResource(R.string.song_detail_disc_number_label),
+            value = uiState.editedDiscNumber,
+            onValueChange = { onIntent(SongDetailIntent.UpdateDiscNumber(it)) },
+            placeholder = stringResource(R.string.song_detail_disc_number_placeholder)
+        )
+
+        Spacer(modifier = Modifier.height(SonSpacing.medium))
+
+        EditTextField(
+            label = stringResource(R.string.song_detail_composer_label),
+            value = uiState.editedComposer,
+            onValueChange = { onIntent(SongDetailIntent.UpdateComposer(it)) },
+            placeholder = stringResource(R.string.song_detail_composer_placeholder)
+        )
+
+        Spacer(modifier = Modifier.height(SonSpacing.medium))
+
+        EditTextField(
+            label = stringResource(R.string.song_detail_publisher_label),
+            value = uiState.editedPublisher,
+            onValueChange = { onIntent(SongDetailIntent.UpdatePublisher(it)) },
+            placeholder = stringResource(R.string.song_detail_publisher_placeholder)
+        )
+
+        Spacer(modifier = Modifier.height(SonSpacing.medium))
+
+        EditTextField(
+            label = stringResource(R.string.song_detail_copyright_label),
+            value = uiState.editedCopyright,
+            onValueChange = { onIntent(SongDetailIntent.UpdateCopyright(it)) },
+            placeholder = stringResource(R.string.song_detail_copyright_placeholder)
+        )
+
+        Spacer(modifier = Modifier.height(SonSpacing.medium))
+
+        EditTextField(
+            label = stringResource(R.string.song_detail_comment_label),
+            value = uiState.editedComment,
+            onValueChange = { onIntent(SongDetailIntent.UpdateComment(it)) },
+            placeholder = stringResource(R.string.song_detail_comment_placeholder)
+        )
+
+        Text(
+            text = stringResource(R.string.song_detail_metadata_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = SonSpacing.small, bottom = SonSpacing.medium)
+        )
+
+        // 歌词区块的两个入口：「获取歌词」拉在线版本填进下面的编辑器；「歌词信息」看来源/格式，
+        // 并编辑 LRC 头部标签。两者都只改编辑器里的草稿，落库仍走页面底部的保存。
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextButton(onClick = { onIntent(SongDetailIntent.OpenLyricsCandidates) }) {
+                M3SymbolIcon(
+                    name = SymbolIconName.QueueMusic,
+                    filled = true,
+                    contentDescription = null,
+                    modifier = Modifier.size(SonSizes.buttonIcon)
+                )
+                Spacer(modifier = Modifier.width(SonSpacing.extraSmall))
+                Text(text = stringResource(R.string.song_detail_lyrics_fetch))
+            }
+            TextButton(onClick = { onIntent(SongDetailIntent.OpenLyricsInfo) }) {
+                M3SymbolIcon(
+                    name = SymbolIconName.Checklist,
+                    filled = true,
+                    contentDescription = null,
+                    modifier = Modifier.size(SonSizes.buttonIcon)
+                )
+                Spacer(modifier = Modifier.width(SonSpacing.extraSmall))
+                Text(text = stringResource(R.string.song_detail_lyrics_info))
+            }
+        }
+
         OutlinedTextField(
             value = uiState.editedLyrics,
-            onValueChange = onLyricsChange,
+            onValueChange = { onIntent(SongDetailIntent.UpdateLyrics(it)) },
             label = { Text(text = stringResource(R.string.song_detail_lyrics_label)) },
             placeholder = { Text(text = stringResource(R.string.song_detail_lyrics_placeholder)) },
             supportingText = { Text(text = stringResource(R.string.song_detail_lyrics_hint)) },
@@ -468,7 +671,7 @@ private fun EditModeContent(
         Spacer(modifier = Modifier.height(SonSpacing.large))
 
         Button(
-            onClick = onSave,
+            onClick = { onIntent(SongDetailIntent.SaveChanges) },
             modifier = Modifier.fillMaxWidth(),
             enabled = uiState.hasChanges && !uiState.isSaving
         ) {
@@ -478,7 +681,7 @@ private fun EditModeContent(
         Spacer(modifier = Modifier.height(SonSpacing.mediumSmall))
 
         TextButton(
-            onClick = onCancel,
+            onClick = { onIntent(SongDetailIntent.ExitEditMode) },
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(text = stringResource(R.string.song_detail_cancel))
@@ -634,14 +837,32 @@ private fun SongInfoSection(song: Song, audioMetadata: AudioMetadata?) {
         InfoItem(label = stringResource(R.string.song_detail_file_size), value = formatFileSize(song.size))
 
         audioMetadata?.let { metadata ->
+            if (metadata.albumArtist != null) {
+                InfoItem(label = stringResource(R.string.song_detail_album_artist_label), value = metadata.albumArtist!!)
+            }
             if (metadata.year != null) {
                 InfoItem(label = stringResource(R.string.song_detail_year), value = metadata.year!!)
             }
             if (metadata.genre != null) {
                 InfoItem(label = stringResource(R.string.song_detail_genre), value = metadata.genre!!)
             }
+            if (metadata.trackNumber != null) {
+                InfoItem(label = stringResource(R.string.song_detail_track_number_label), value = metadata.trackNumber!!)
+            }
+            if (metadata.discNumber != null) {
+                InfoItem(label = stringResource(R.string.song_detail_disc_number_label), value = metadata.discNumber!!)
+            }
             if (metadata.composer != null) {
                 InfoItem(label = stringResource(R.string.song_detail_composer), value = metadata.composer!!)
+            }
+            if (metadata.publisher != null) {
+                InfoItem(label = stringResource(R.string.song_detail_publisher_label), value = metadata.publisher!!)
+            }
+            if (metadata.copyright != null) {
+                InfoItem(label = stringResource(R.string.song_detail_copyright_label), value = metadata.copyright!!)
+            }
+            if (metadata.comment != null) {
+                InfoItem(label = stringResource(R.string.song_detail_comment_label), value = metadata.comment!!)
             }
         }
 
@@ -649,7 +870,7 @@ private fun SongInfoSection(song: Song, audioMetadata: AudioMetadata?) {
 
         InfoSectionTitle(stringResource(R.string.song_detail_section_audio))
 
-        val bitrate = audioMetadata?.bitrate ?: song.bitrate
+        val bitrate = audioMetadata?.bitrate?.takeIf { it > 0 } ?: song.bitrate
         InfoItem(label = stringResource(R.string.song_detail_bitrate), value = if (bitrate > 0) "$bitrate kbps" else stringResource(R.string.song_detail_unknown))
 
         audioMetadata?.let { metadata ->
@@ -680,12 +901,15 @@ private fun SongInfoSection(song: Song, audioMetadata: AudioMetadata?) {
 }
 
 @Composable
-private fun InfoSectionTitle(text: String) {
+private fun InfoSectionTitle(
+    text: String,
+    modifier: Modifier = Modifier.padding(bottom = SonLayout.sectionTitleGap)
+) {
     Text(
         text = text,
         style = MaterialTheme.typography.titleMediumEmphasized,
         color = MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.padding(bottom = SonLayout.sectionTitleGap)
+        modifier = modifier
     )
 }
 

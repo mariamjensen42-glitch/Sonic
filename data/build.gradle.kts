@@ -41,6 +41,8 @@ ksp {
 
 dependencies {
     implementation(project(":domain"))
+    // 多格式标签读写（MP3/FLAC/OGG/MP4），替代原先只支持 MP3 的 mp3agic 写入路径。
+    implementation(project(":taglib"))
     
     implementation(libs.androidx.core.ktx)
 
@@ -60,6 +62,11 @@ dependencies {
 
     implementation(libs.okhttp)
     implementation(libs.kotlinx.serialization.json)
+
+    // 在线音源：内嵌 QuickJS 执行用户导入的 LX 音源脚本（AAR 自带 libquickjs.so）。
+    // 它传递的 kotlin-stdlib 会顶到 2.4，而 Hilt 只认到 metadata 2.3 —— 版本统一钉回
+    // 项目 Kotlin 的那一步在根 build.gradle.kts 的 resolutionStrategy 里。
+    implementation(libs.quickjs.android)
 
     implementation(libs.mp3agic)
 

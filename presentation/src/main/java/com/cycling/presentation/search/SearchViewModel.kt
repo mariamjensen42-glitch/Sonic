@@ -2,12 +2,20 @@ package com.cycling.presentation.search
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.cycling.domain.online.model.MusicInfo
+import com.cycling.domain.online.model.MusicQuality
+import com.cycling.domain.online.model.PlaySourceResolution
+import com.cycling.domain.online.model.toSong
+import com.cycling.domain.online.usecase.ResolveOnlinePlaySourceUseCase
+import com.cycling.domain.online.usecase.SearchOnlineMusicUseCase
 import com.cycling.domain.usecase.SearchHistoryUseCase
 import com.cycling.domain.usecase.GetSearchSuggestionsUseCase
 import com.cycling.domain.usecase.SearchAllUseCase
 import com.cycling.domain.repository.PlayerRepository
 import com.cycling.domain.repository.SongRepository
+import com.cycling.presentation.R
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -32,7 +40,9 @@ class SearchViewModel @Inject constructor(
     private val searchHistoryUseCase: SearchHistoryUseCase,
     private val getSearchSuggestionsUseCase: GetSearchSuggestionsUseCase,
     private val playerRepository: PlayerRepository,
-    private val songRepository: SongRepository
+    private val songRepository: SongRepository,
+    private val searchOnlineMusic: SearchOnlineMusicUseCase,
+    private val resolveOnlinePlaySource: ResolveOnlinePlaySourceUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SearchUiState())
@@ -43,6 +53,7 @@ class SearchViewModel @Inject constructor(
 
     private val searchQuery = MutableStateFlow("")
     private var suggestionsJob: Job? = null
+    private var onlineJob: Job? = null
 
     init {
         loadSearchHistory()
@@ -65,12 +76,18 @@ class SearchViewModel @Inject constructor(
                 if (query.isNotBlank()) {
                     performSearch(query)
                 } else {
+                    onlineJob?.cancel()
                     _uiState.update {
                         it.copy(
                             songs = emptyList(),
                             albums = emptyList(),
                             artists = emptyList(),
-                            lyricsMatches = emptyList()
+                            lyricsMatches = emptyList(),
+                            onlineResults = emptyList(),
+                            onlineSearching = false,
+                            onlinePage = 1,
+                            onlineHasMore = false,
+                            onlineLoadingMore = false
                         )
                     }
                 }
@@ -89,6 +106,8 @@ class SearchViewModel @Inject constructor(
             is SearchIntent.ToggleFavorite -> handleToggleFavorite(intent.song)
             is SearchIntent.AlbumClicked -> handleAlbumClick(intent.album)
             is SearchIntent.ArtistClicked -> handleArtistClick(intent.artist)
+            is SearchIntent.OnlineTrackClicked -> playOnline(intent.track)
+            is SearchIntent.LoadMoreOnline -> loadMoreOnline()
             is SearchIntent.ClearSearch -> handleClearSearch()
         }
     }
@@ -199,5 +218,111 @@ class SearchViewModel @Inject constructor(
                 }
             }
             .launchIn(viewModelScope)
+
+        searchOnline(query)
+    }
+
+    /**
+     * 在线结果与本地结果并行跑：本地是 Room，毫秒级；在线要打三个平台的接口，
+     * 串行会让本地结果陪着一起等。失败只把在线区块留空，不影响本地搜索。
+     */
+    private fun searchOnline(query: String) {
+        onlineJob?.cancel()
+        onlineJob = viewModelScope.launch {
+            _uiState.update { it.copy(onlineSearching = true, onlinePage = 1) }
+            // 不能用 runCatching：它会把取消也吞掉，于是「刚被新关键词取消的旧请求」
+            // 反而用空结果覆盖掉新请求的状态。
+            val outcome = try {
+                searchOnlineMusic(query, page = 1)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Timber.w(e, "searchOnline failed: $query")
+                null
+            }
+            _uiState.update {
+                it.copy(
+                    onlineResults = outcome?.tracks.orEmpty(),
+                    onlineHasSources = outcome?.hasSources ?: it.onlineHasSources,
+                    onlineSearching = false,
+                    onlineHasMore = !outcome?.tracks.isNullOrEmpty()
+                )
+            }
+        }
+    }
+
+    /**
+     * 翻下一页：各平台每页 10 条，5 个平台就是 50 条。
+     *
+     * 追加而不是替换，并按 `平台:id` 去重 —— 翻页时接口偶尔会重复给出同一条
+     * （尤其是关键词很短的时候），重复 key 会让 LazyColumn 直接崩。
+     */
+    private fun loadMoreOnline() {
+        val state = _uiState.value
+        val query = state.searchQuery
+        if (query.isBlank() || state.onlineSearching || state.onlineLoadingMore) return
+        if (!state.onlineHasMore) return
+        onlineJob = viewModelScope.launch {
+            _uiState.update { it.copy(onlineLoadingMore = true) }
+            val nextPage = state.onlinePage + 1
+            val outcome = try {
+                searchOnlineMusic(query, page = nextPage)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Timber.w(e, "loadMoreOnline failed: $query page=$nextPage")
+                null
+            }
+            val known = state.onlineResults.map { it.onlineKey }.toSet()
+            val appended = outcome?.tracks.orEmpty().filter { it.onlineKey !in known }
+            _uiState.update {
+                it.copy(
+                    onlineResults = it.onlineResults + appended,
+                    onlinePage = nextPage,
+                    onlineLoadingMore = false,
+                    onlineHasMore = !outcome?.tracks.isNullOrEmpty()
+                )
+            }
+        }
+    }
+
+    /**
+     * 在线歌曲播放：先用平台歌曲 id 让音源脚本取链，再交给既有播放器。
+     *
+     * 档位固定 320k（`EXHIGH`）：插件会自己沿档位向下降级，而更高档位大多要脚本侧的付费授权，
+     * 一上来就试无损只会把「能播」变成「报错」。
+     */
+    private fun playOnline(track: MusicInfo) {
+        if (_uiState.value.resolvingOnlineKey != null) return
+        _uiState.update { it.copy(resolvingOnlineKey = track.onlineKey) }
+        viewModelScope.launch {
+            val resolution = try {
+                resolveOnlinePlaySource(track, MusicQuality.EXHIGH)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                PlaySourceResolution.Failure(e.message ?: "未知错误")
+            }
+            when (resolution) {
+                is PlaySourceResolution.Success -> {
+                    val song = track.toSong(resolution.source)
+                    // 指针入库：在线曲目才能被收藏、进歌单，下次播放时由 PlayerManager 重新取链。
+                    // 取链地址本身不写库 —— 它会过期。
+                    songRepository.upsertOnlineSong(song)
+                    playerRepository.playSong(song, listOf(song))
+                    searchHistoryUseCase.save(_uiState.value.searchQuery)
+                    _uiEffect.emit(SearchEffect.NavigateToPlayer(song.id))
+                }
+
+                is PlaySourceResolution.Failure -> _uiEffect.emit(
+                    SearchEffect.ShowToast(R.string.search_online_failed, resolution.message)
+                )
+
+                PlaySourceResolution.NotConfigured -> _uiEffect.emit(
+                    SearchEffect.ShowToast(R.string.search_online_not_configured)
+                )
+            }
+            _uiState.update { it.copy(resolvingOnlineKey = null) }
+        }
     }
 }

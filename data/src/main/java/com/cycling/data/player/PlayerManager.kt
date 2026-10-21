@@ -1,5 +1,6 @@
 package com.cycling.data.player
 
+import android.os.SystemClock
 import com.cycling.data.di.PlayerDispatcher
 import com.cycling.data.player.engine.EngineState
 import com.cycling.data.player.engine.PlaybackEngine
@@ -7,9 +8,15 @@ import com.cycling.data.player.engine.PlaybackEvent
 import com.cycling.data.player.engine.QueueItem
 import com.cycling.data.player.engine.TransitionReason
 import com.cycling.data.store.PlaybackStateStore
+import com.cycling.domain.model.PlayerEvent
 import com.cycling.domain.model.PlayerState
 import com.cycling.domain.model.RepeatMode
 import com.cycling.domain.model.Song
+import com.cycling.domain.online.model.MusicInfo
+import com.cycling.domain.online.model.MusicQuality
+import com.cycling.domain.online.model.OnlineSource
+import com.cycling.domain.online.model.PlaySourceResolution
+import com.cycling.domain.online.usecase.ResolveOnlinePlaySourceUseCase
 import com.cycling.domain.repository.AudioMetadataRepository
 import com.cycling.domain.repository.PlayerRepository
 import com.cycling.domain.repository.SettingsRepository
@@ -21,13 +28,17 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.pow
 import timber.log.Timber
@@ -54,11 +65,19 @@ class PlayerManager @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val getContinuationSongs: GetContinuationSongsUseCase,
     private val playbackServiceController: PlaybackServiceController,
+    private val playEventRecorder: PlayEventRecorder,
+    private val resolveOnlinePlaySource: ResolveOnlinePlaySourceUseCase,
     @PlayerDispatcher private val dispatcher: CoroutineDispatcher
 ) : PlayerRepository {
 
     private val _playerState = MutableStateFlow(PlayerState())
     override val playerState: StateFlow<PlayerState> = _playerState.asStateFlow()
+
+    private val _events = MutableSharedFlow<PlayerEvent>(
+        extraBufferCapacity = 16,
+        onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST
+    )
+    override val events: SharedFlow<PlayerEvent> = _events.asSharedFlow()
 
     private val supervisorJob = SupervisorJob()
     private val scope = CoroutineScope(supervisorJob + dispatcher)
@@ -87,6 +106,18 @@ class PlayerManager @Inject constructor(
     private var hadNonEmptyQueue = false
     private var restored = false
 
+    /**
+     * 听歌统计：进度循环上一次计时的时刻（[SystemClock.elapsedRealtime]），0 表示这一轮还没开始。
+     *
+     * 用墙上时间而不是播放位置差：位置差在倍速播放时会翻倍，在缓冲时又会不动，
+     * 而"听了多久"应该只跟真的在播的时间有关。
+     */
+    private var lastListenTickAtMs = 0L
+
+    /** 进度循环最后看到的播放位置与总时长，收尾时用来判断是不是听到了结尾。 */
+    private var recordedPositionMs = 0L
+    private var recordedDurationMs = 0L
+
     /** 队列播完后自动续播的开关。默认开，见 [SettingsRepository.autoContinueEnabled]。 */
     private var autoContinueEnabled = true
 
@@ -114,6 +145,10 @@ class PlayerManager @Inject constructor(
 
     /** 每换一首歌自增，用来丢弃上一首还没读完的 ReplayGain 结果。 */
     private var volumeToken = 0
+
+    /** 连续失败次数与上次失败时刻：坏歌成片时（整个目录被删）不能无限自动跳。 */
+    private var consecutivePlaybackErrors = 0
+    private var lastPlaybackErrorAtMs = 0L
 
     init {
         scope.launch { engine.state.collect(::onEngineState) }
@@ -200,11 +235,51 @@ class PlayerManager @Inject constructor(
     private fun onEngineEvent(event: PlaybackEvent) {
         when (event) {
             is PlaybackEvent.ItemChanged -> onItemChanged(event)
+            is PlaybackEvent.Error -> onPlaybackError(event)
             PlaybackEvent.Ended -> {
                 Timber.d("onEngineEvent: playback ended")
+                // 队列放到头了：这一首算"听完"。续播如果接上，下一首的 ItemChanged 会开新记录。
+                playEventRecorder.finish(completed = true, songId = currentSongId)
+                recordedPositionMs = 0L
+                recordedDurationMs = 0L
                 _playerState.update { it.copy(isPlaying = false) }
                 scope.launch { continueQueueIfEnabled() }
             }
+        }
+    }
+
+    /**
+     * 一首歌放不出来时的处理：先上报，再决定要不要跳过。
+     *
+     * 跳过的边界：只在队列里还有下一首、且连续失败没超过 [MAX_AUTO_SKIPS] 时跳。
+     * 一首坏歌不该让整个队列停住，但"整个目录都被删了"也绝不能变成一路狂跳。
+     */
+    private fun onPlaybackError(event: PlaybackEvent.Error) {
+        Timber.e(
+            "onEngineEvent: playback failed id=%s code=%s",
+            event.itemId,
+            event.errorCodeName
+        )
+
+        val now = SystemClock.elapsedRealtime()
+        consecutivePlaybackErrors = if (now - lastPlaybackErrorAtMs > ERROR_STREAK_WINDOW_MS) {
+            1
+        } else {
+            consecutivePlaybackErrors + 1
+        }
+        lastPlaybackErrorAtMs = now
+
+        val engineState = engine.state.value
+        val hasNext = engineState.currentIndex in 0 until engineState.queueIds.lastIndex
+        val canSkip = hasNext && consecutivePlaybackErrors <= MAX_AUTO_SKIPS
+
+        _events.tryEmit(PlayerEvent.PlaybackFailed(songId = event.itemId, skipped = canSkip))
+        if (canSkip) {
+            engine.skipToNext()
+            engine.play()
+        } else {
+            // 停在出错的这一首上，界面据此把"正在播放"的错觉收掉。
+            engine.pause()
         }
     }
 
@@ -222,11 +297,24 @@ class PlayerManager @Inject constructor(
         }
         if (!beginsNewPlay) return
 
+        // 上一次听歌记录收尾：用进度循环最后看到的位置判断是否听到了结尾，再开新的记录。
+        // 必须在 currentSongId 被改写之前发出，否则迟到的一次 Finish 会记到新歌头上。
+        playEventRecorder.finish(
+            completed = recordedDurationMs > 0L &&
+                recordedPositionMs >= recordedDurationMs - END_OF_TRACK_TOLERANCE_MS,
+            songId = currentSongId
+        )
+        recordedPositionMs = 0L
+        recordedDurationMs = 0L
+
         hasCountedPlay = false
         lastPersistedPosition = -1L
         currentSongId = id
         continuationInFlight = false
         id?.let { songId ->
+            songLookup[songId]?.let { song ->
+                playEventRecorder.begin(song, PLAY_EVENT_SOURCE)
+            }
             scope.launch(Dispatchers.IO) { songRepository.updateLastPlayedAt(songId) }
         }
         if (isDifferentItem) {
@@ -277,12 +365,24 @@ class PlayerManager @Inject constructor(
 
     private fun startProgressLoop() {
         if (progressLoopJob?.isActive == true) return
+        // 一轮进度循环就是一段连续的播放：第一拍只对表，从第二拍才开始累计时长。
+        lastListenTickAtMs = 0L
         progressLoopJob = scope.launch {
             while (isActive) {
                 val position = engine.currentPositionMs()
                 val engineState = engine.state.value
                 _playerState.update { it.copy(playbackPosition = position) }
                 checkPlayProgress(position, engineState.durationMs)
+                recordedPositionMs = position
+                recordedDurationMs = engineState.durationMs
+                val nowMs = SystemClock.elapsedRealtime()
+                if (lastListenTickAtMs > 0L && engineState.isPlaying) {
+                    // 单拍上限兜住"主线程被卡住一阵"的情况，否则一次卡顿会记进几十秒。
+                    playEventRecorder.addListened(
+                        (nowMs - lastListenTickAtMs).coerceAtMost(MAX_LISTEN_TICK_GAP_MS)
+                    )
+                }
+                lastListenTickAtMs = nowMs
                 if (rememberPosition &&
                     position > 0 &&
                     abs(position - lastPersistedPosition) >= POSITION_PERSIST_INTERVAL_MS
@@ -349,6 +449,34 @@ class PlayerManager @Inject constructor(
         songs.forEach { songLookup[it.id] = it }
     }
 
+    /**
+     * 在线曲目取链：拿指针换一次可播放地址。
+     *
+     * 指针缺失、平台未知、取链失败都返回 null —— 失败原因交给调用方按"放不出来"处理，
+     * 这里不猜也不重试。
+     */
+    private suspend fun resolveOnlineUri(song: Song): String? {
+        val source = OnlineSource.fromLxKey(song.onlineSourceKey ?: return null) ?: return null
+        val trackId = song.onlineSongId ?: return null
+        val track = MusicInfo(
+            source = source,
+            id = trackId,
+            title = song.title,
+            artist = song.artist,
+            album = song.album,
+            durationSeconds = song.duration / 1000,
+            coverUrl = song.albumArt
+        )
+        return when (val resolution = resolveOnlinePlaySource(track, MusicQuality.EXHIGH)) {
+            is PlaySourceResolution.Success -> resolution.source.url
+            is PlaySourceResolution.Failure -> {
+                Timber.w("resolveOnlineUri: %s 取链失败 —— %s", song.title, resolution.message)
+                null
+            }
+            PlaySourceResolution.NotConfigured -> null
+        }
+    }
+
     private fun toQueueItem(song: Song) = QueueItem(
         id = song.id,
         uri = song.path,
@@ -377,17 +505,41 @@ class PlayerManager @Inject constructor(
 
     override fun playSong(song: Song, queue: List<Song>) {
         scope.launch {
-            val items = if (queue.isNotEmpty()) {
+            // 在线曲目的 path 是空的：指针存在，地址每次播放时才取。
+            // 取链要走网络（脚本启动 + 可播性探测，最长数秒），必须离开 Main，
+            // 否则 @PlayerDispatcher 被占住，界面与引擎回调一起卡住。
+            val playable = if (song.isOnline && song.path.isBlank()) {
+                val url = withContext(Dispatchers.IO) { resolveOnlineUri(song) }
+                if (url == null) {
+                    _events.tryEmit(PlayerEvent.PlaybackFailed(songId = song.id, skipped = false))
+                    return@launch
+                }
+                song.copy(path = url)
+            } else {
+                song
+            }
+
+            // 队列语义不变：空队列表示"播这一首，保留已有队列"。
+            val queueSongs = if (queue.isNotEmpty()) {
                 queue
             } else {
-                // An empty queue means "play this song, keep whatever is already queued".
                 val existing = engine.state.value.queueIds.mapNotNull(songLookup::get)
-                if (existing.any { it.id == song.id }) existing else existing + song
+                if (existing.any { it.id == playable.id }) existing else existing + playable
             }
-            if (items.isEmpty()) return@launch
 
-            registerSongs(items + song)
-            val startIndex = items.indexOfFirst { it.id == song.id }.coerceAtLeast(0)
+            // ponytail: 队列里**尚未解析**的在线曲目这次不参与播放。逐首预取要改引擎的
+            // MediaSource 构造（占位项会先 prepare 失败），那是独立的一次改造；
+            // 当前保证"点哪首播哪首"，宁可队列短也不产生坏项。
+            val items = queueSongs
+                .map { if (it.id == playable.id) playable else it }
+                .filter { !it.isOnline || it.path.isNotBlank() }
+                // 队列里同一首歌只能有一行：队列面板用 song.id 当列表 key，重复行会直接抛
+                // "Key ... was already used" 闪退；随机/上一首的定位也按 id 找，重复只会踩错行。
+                .distinctBy { it.id }
+                .ifEmpty { listOf(playable) }
+
+            registerSongs(items + playable)
+            val startIndex = items.indexOfFirst { it.id == playable.id }.coerceAtLeast(0)
 
             // Re-setting an identical queue would regenerate the shuffle order and lose the
             // user's place in it, so only rebuild the timeline when it actually differs.
@@ -441,6 +593,8 @@ class PlayerManager @Inject constructor(
     }
 
     override fun addToQueue(song: Song) {
+        // 已在队列里就什么都不做：重复行没有意义，还会让队列面板的 song.id key 撞车。
+        if (engine.state.value.queueIds.contains(song.id)) return
         registerSongs(listOf(song))
         engine.addToQueue(toQueueItem(song))
         scope.launch { persistQueuePosition() }
@@ -453,6 +607,17 @@ class PlayerManager @Inject constructor(
             return
         }
         registerSongs(listOf(song))
+
+        // 已经在队列里就把它**挪**到当前曲之后，而不是再插一行。
+        // 目标下标取决于它在当前曲的前面还是后面：往前挪时当前曲会左移一格。
+        val existing = engine.state.value.queueIds.indexOf(song.id)
+        if (existing >= 0) {
+            val target = if (existing > currentIndex) currentIndex + 1 else currentIndex
+            if (existing != target) engine.move(existing, target)
+            scope.launch { persistQueuePosition() }
+            return
+        }
+
         engine.insertNext(toQueueItem(song), currentIndex)
         scope.launch { persistQueuePosition() }
     }
@@ -634,5 +799,20 @@ class PlayerManager @Inject constructor(
 
         /** 静音。ReplayGain 换算出来的倍率也用它做下界，避免 0 与"被压到听不见"混在一起。 */
         const val MIN_VOLUME = 0f
+
+        /** 一轮连续失败里最多自动跳过几首；超过就停下来，避免整库坏文件时一路狂跳。 */
+        const val MAX_AUTO_SKIPS = 3
+
+        /** 两次失败间隔超过它就算新的一轮（一首好歌播了 5 秒以上，之前的失败不该继续累计）。 */
+        const val ERROR_STREAK_WINDOW_MS = 5_000L
+
+        /** 播放位置离结尾这么近就算"听完了"，留出尾奏被跳过、误差几十毫秒的余量。 */
+        const val END_OF_TRACK_TOLERANCE_MS = 1_500L
+
+        /** 单拍最多累计多少听歌时长：主线程卡顿或设备休眠回来时不要一次记进一大段。 */
+        const val MAX_LISTEN_TICK_GAP_MS = 3_000L
+
+        /** 播放事件的来源标记，只用于排查，不参与统计。 */
+        const val PLAY_EVENT_SOURCE = "queue"
     }
 }

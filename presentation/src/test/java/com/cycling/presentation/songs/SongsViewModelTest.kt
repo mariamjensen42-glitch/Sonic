@@ -11,6 +11,7 @@ import com.cycling.domain.repository.PlaylistRepository
 import com.cycling.domain.repository.SongRepository
 import com.cycling.domain.repository.SongsPreferencesRepository
 import com.cycling.domain.usecase.ScanMusicUseCase
+import com.cycling.presentation.R
 import com.cycling.presentation.util.TestDispatcherRule
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -18,6 +19,7 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -252,7 +254,7 @@ class SongsViewModelTest {
     fun `AddToPlaylist adds song and dismisses dialog`() = runTest {
         val song = createSong(id = 1L)
         val playlistId = 10L
-        coEvery { playlistRepository.addSongToPlaylist(playlistId, song.id) } returns Unit
+        coEvery { playlistRepository.addSongToPlaylist(playlistId, song.id) } returns 1
         viewModel = SongsViewModel(
             songRepository, songsPreferencesRepository, playlistRepository, playerRepository, scanMusicUseCase
         )
@@ -273,7 +275,7 @@ class SongsViewModelTest {
         val playlistName = "New Playlist"
         val playlistId = 100L
         coEvery { playlistRepository.createPlaylist(playlistName) } returns playlistId
-        coEvery { playlistRepository.addSongToPlaylist(playlistId, song.id) } returns Unit
+        coEvery { playlistRepository.addSongToPlaylist(playlistId, song.id) } returns 1
         viewModel = SongsViewModel(
             songRepository, songsPreferencesRepository, playlistRepository, playerRepository, scanMusicUseCase
         )
@@ -330,5 +332,74 @@ class SongsViewModelTest {
         advanceUntilIdle()
 
         assertTrue(viewModel.uiState.value.isScanning)
+    }
+
+    // Room 的 Flow 抛异常时没人再把 isLoading 置回去，页面会永远停在载入态。
+    @Test
+    fun `a failing songs flow still clears the loading state`() = runTest {
+        every { songRepository.getAllSongs() } returns flow<List<Song>> {
+            throw IllegalStateException("db is gone")
+        }
+
+        viewModel = SongsViewModel(
+            songRepository, songsPreferencesRepository, playlistRepository, playerRepository, scanMusicUseCase
+        )
+        advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.isLoading)
+    }
+
+    // 去重后一首都没写进去时不能说"已添加"，否则用户点完看到成功提示、再进歌单发现没有新歌。
+    @Test
+    fun `AddToPlaylist says the song is already there when nothing was written`() = runTest {
+        val song = createSong(id = 1L)
+        val playlistId = 10L
+        coEvery { playlistRepository.addSongToPlaylist(playlistId, song.id) } returns 0
+        viewModel = SongsViewModel(
+            songRepository, songsPreferencesRepository, playlistRepository, playerRepository, scanMusicUseCase
+        )
+        advanceUntilIdle()
+
+        viewModel.handleIntent(SongsIntent.ShowAddToPlaylistDialog(song))
+        advanceUntilIdle()
+
+        val effects = mutableListOf<SongsEffect>()
+        val job = launch { viewModel.uiEffect.collect { effects += it } }
+        runCurrent()
+
+        viewModel.handleIntent(SongsIntent.AddToPlaylist(playlistId))
+        advanceUntilIdle()
+        job.cancel()
+
+        assertEquals(listOf(SongsEffect.ShowToast(R.string.playlist_song_already_added)), effects)
+    }
+
+    // 提示里的数字必须是真正写进去的行数：勾了 10 首、其中 3 首本来就在这张单里，只能报 7。
+    @Test
+    fun `BatchAddToPlaylist reports how many rows were actually written`() = runTest {
+        val playlistId = 10L
+        coEvery { playlistRepository.addSongsToPlaylist(playlistId, any()) } returns 7
+        viewModel = SongsViewModel(
+            songRepository, songsPreferencesRepository, playlistRepository, playerRepository, scanMusicUseCase
+        )
+        advanceUntilIdle()
+
+        viewModel.handleIntent(SongsIntent.EnterSelectionMode)
+        viewModel.handleIntent(SongsIntent.ToggleSelection(1L))
+        viewModel.handleIntent(SongsIntent.ToggleSelection(2L))
+        advanceUntilIdle()
+
+        val effects = mutableListOf<SongsEffect>()
+        val job = launch { viewModel.uiEffect.collect { effects += it } }
+        runCurrent()
+
+        viewModel.handleIntent(SongsIntent.BatchAddToPlaylist(playlistId))
+        advanceUntilIdle()
+        job.cancel()
+
+        assertEquals(
+            listOf(SongsEffect.ShowToast(R.string.songs_batch_added_to_playlist, 7)),
+            effects
+        )
     }
 }

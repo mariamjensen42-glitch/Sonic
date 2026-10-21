@@ -21,12 +21,20 @@ internal object SettingsConversions {
     fun parsePlaybackSpeed(raw: String?): Float =
         raw?.toFloatOrNull()?.coerceIn(MIN_PLAYBACK_SPEED, MAX_PLAYBACK_SPEED) ?: DEFAULT_PLAYBACK_SPEED
 
-    /** Unknown names are dropped; an empty result falls back to the default order. */
+    /**
+     * Unknown names are dropped; an empty result falls back to the default order.
+     *
+     * A provider the stored list predates is appended rather than ignored, because the settings
+     * screen can only reorder providers, never remove them — a list that does not mention one was
+     * written before it existed. Appending keeps the new provider out of the way of the priority
+     * order the user already chose, and still makes it reachable from the UI.
+     */
     fun parseLyricsProviders(raw: String?): List<LyricsProvider> {
         val parsed = raw?.split(',')?.mapNotNull { name ->
             LyricsProvider.entries.firstOrNull { it.name == name.trim() }
-        }.orEmpty()
-        return parsed.ifEmpty { DEFAULT_LYRICS_PROVIDER_ORDER }
+        }.orEmpty().distinct()
+        if (parsed.isEmpty()) return DEFAULT_LYRICS_PROVIDER_ORDER
+        return parsed + LyricsProvider.entries.filterNot { it in parsed }
     }
 
     fun encodeLyricsProviders(providers: List<LyricsProvider>): String =

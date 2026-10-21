@@ -97,4 +97,33 @@ class TTMLParserTest {
         val result = AutoParser(LyricsFormatGuesser()).parse("just plain lyrics, no timestamps")
         assertTrue(result.lines.isEmpty())
     }
+
+    /**
+     * AMLL 词库实际返回的形态（captured from `api.amll.dev`，节选两行）。
+     *
+     * 与上面的手写样例有两处不同，都是解析器容易踩的点：标签之间完全不缩进、不换行（`TTMLParser`
+     * 先按行 trimIndent 再 join），并且英文音节之间的空格是 span 之外的裸文本节点 —— 音节内容必须
+     * 带上那个尾随空格，否则「ReSoSo」会粘成一个词。头部也换成了 `amll:meta`，没有 iTunes 翻译表。
+     */
+    private val amllTtml = """
+<?xml version="1.0" encoding="utf-8"?>
+<tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttm="http://www.w3.org/ns/ttml#metadata" xmlns:itunes="http://music.apple.com/lyric-ttml-internal" xmlns:amll="http://www.example.com/ns/amll"><head><metadata xmlns=""><ttm:agent type="person" xml:id="v1"/><amll:meta key="musicName" value="晴天"/></metadata></head><body dur="00:05.000"><div xmlns="" begin="00:01.000" end="00:05.000"><p begin="00:01.000" end="00:03.000" ttm:agent="v1" itunes:key="L1"><span begin="00:01.000" end="00:01.500">故</span><span begin="00:01.500" end="00:02.000">事</span></p><p begin="00:03.000" end="00:05.000" ttm:agent="v1" itunes:key="L2"><span begin="00:03.000" end="00:03.500">Re</span> <span begin="00:03.500" end="00:04.000">So</span></p></div></body></tt>
+""".trimIndent()
+
+    @Test
+    fun `parses the compact TTML that AMLL publishes`() {
+        val result = AutoParser(LyricsFormatGuesser()).parse(amllTtml)
+
+        assertTrue(result.isWordByWord)
+        val lines = result.lines.filterIsInstance<KaraokeLine>()
+        assertEquals(2, lines.size)
+
+        assertEquals(1000, lines[0].start)
+        assertEquals(3000, lines[0].end)
+        assertEquals(listOf("故", "事"), lines[0].syllables.map { it.content })
+        assertEquals(null, lines[0].translation)
+
+        // 英文音节之间的空格来自 span 后面的裸文本节点，末尾那格不能再被 trim 掉。
+        assertEquals(listOf("Re ", "So"), lines[1].syllables.map { it.content })
+    }
 }

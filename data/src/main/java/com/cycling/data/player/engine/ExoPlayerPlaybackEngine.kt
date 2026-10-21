@@ -6,6 +6,7 @@ import androidx.annotation.OptIn
 import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -73,6 +74,15 @@ class ExoPlayerPlaybackEngine @Inject constructor(
             if (playbackState == Player.STATE_ENDED) {
                 _events.tryEmit(PlaybackEvent.Ended)
             }
+        }
+
+        override fun onPlayerError(error: PlaybackException) {
+            _events.tryEmit(
+                PlaybackEvent.Error(
+                    itemId = exoPlayer.currentMediaItem?.mediaId?.toLongOrNull(),
+                    errorCodeName = error.errorCodeName
+                )
+            )
         }
     }
 

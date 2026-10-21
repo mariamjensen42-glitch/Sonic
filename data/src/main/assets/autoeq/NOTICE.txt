@@ -1,0 +1,11 @@
+AutoEq headphone equalization data
+Source: https://github.com/jaakkopasanen/AutoEq
+Revision: 7ae0f56d53074872b028649617a22bbb4232feb7
+Profiles: 8850
+License: MIT, see LICENSE.txt
+
+Catalog format (tab separated, gzip):
+  id, form factor, base64(brand), base64(model), preamp gain dB, filter chain
+
+Filter chain entries are separated by ';' and each reads type,freq, gain dB, Q:
+  L = low shelf, P = peaking, H = high shelf

@@ -57,6 +57,9 @@ sealed interface SongCollectionIntent {
     data object SelectAll : SongCollectionIntent
     data object ClearSelection : SongCollectionIntent
     data class BatchSetFavorite(val isFavorite: Boolean) : SongCollectionIntent
+
+    /** 行菜单里的收藏 / 取消收藏，作用于 [song] 自己。 */
+    data class ToggleFavorite(val song: Song) : SongCollectionIntent
 }
 
 sealed interface CollectionDetailEffect {

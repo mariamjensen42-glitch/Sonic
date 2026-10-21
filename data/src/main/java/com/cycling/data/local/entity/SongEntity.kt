@@ -36,5 +36,14 @@ data class SongEntity(
      * [com.cycling.data.local.scanner.MusicScanner]. The two are merged by
      * [com.cycling.data.mapper.toDomain], which prefers this one.
      */
-    val customAlbumArt: String? = null
+    val customAlbumArt: String? = null,
+
+    /**
+     * 在线曲目的平台键与平台 id。
+     *
+     * 两列都为 null 表示本地文件。扫描器的 stale 判定必须跳过非 null 的行 ——
+     * 它们的 [path] 不在 MediaStore 结果里，否则每次扫描都会被当成"文件已删除"清掉。
+     */
+    val onlineSourceKey: String? = null,
+    val onlineSongId: String? = null
 )

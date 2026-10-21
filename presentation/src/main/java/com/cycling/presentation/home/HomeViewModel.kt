@@ -6,13 +6,18 @@ import com.cycling.domain.repository.PlayerRepository
 import com.cycling.domain.usecase.GetAllAlbumsUseCase
 import com.cycling.domain.usecase.GetAllArtistsUseCase
 import com.cycling.domain.usecase.SongQueryUseCase
+import com.cycling.presentation.R
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -35,12 +40,13 @@ class HomeViewModel @Inject constructor(
     private val _uiEffect = MutableSharedFlow<HomeEffect>()
     val uiEffect: SharedFlow<HomeEffect> = _uiEffect.asSharedFlow()
 
-    private var songsLoaded = false
-    private var albumsLoaded = false
-    private var artistsLoaded = false
-    private var favoritesLoaded = false
-    private var mostPlayedLoaded = false
-    private var recentlyPlayedLoaded = false
+    private var loadJob: Job? = null
+
+    /** 已经交付过的数据源。谁先到谁先画，不等其它源。 */
+    private val deliveredSources = mutableSetOf<String>()
+
+    /** 一轮载入最多报一次失败：六个源同时挂掉也只弹一条提示。 */
+    private var failureReported = false
 
     init {
         loadData()
@@ -97,90 +103,81 @@ class HomeViewModel @Inject constructor(
 
     private fun loadData() {
         Timber.d("loadData: starting")
-        songsLoaded = false
-        albumsLoaded = false
-        artistsLoaded = false
-        favoritesLoaded = false
-        mostPlayedLoaded = false
-        recentlyPlayedLoaded = false
-        
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
-            
-            launch {
-                songQueryUseCase.all().collectLatest { songs ->
-                    Timber.d("loadData: loaded ${songs.size} songs")
-                    _uiState.update { state ->
-                        state.copy(
-                            recentlyAdded = songs.sortedByDescending { it.dateAdded }.take(10)
-                        )
-                    }
-                    songsLoaded = true
-                    checkAllDataLoaded()
-                }
-            }
-            
-            launch {
-                getAllAlbumsUseCase().collectLatest { albums ->
-                    Timber.d("loadData: loaded ${albums.size} albums")
-                    _uiState.update { state ->
-                        state.copy(topAlbums = albums.take(10))
-                    }
-                    albumsLoaded = true
-                    checkAllDataLoaded()
-                }
-            }
-            
-            launch {
-                getAllArtistsUseCase().collectLatest { artists ->
-                    Timber.d("loadData: loaded ${artists.size} artists")
-                    _uiState.update { state ->
-                        state.copy(topArtists = artists.take(10))
-                    }
-                    artistsLoaded = true
-                    checkAllDataLoaded()
-                }
+        loadJob?.cancel()
+        deliveredSources.clear()
+        failureReported = false
+
+        loadJob = viewModelScope.launch {
+            _uiState.update { it.copy(error = null).withLoadingFlag() }
+
+            collectSource(SOURCE_SONGS, songQueryUseCase.all()) { state, songs ->
+                state.copy(recentlyAdded = songs.sortedByDescending { it.dateAdded }.take(PREVIEW_SIZE))
             }
 
-            launch {
-                songQueryUseCase.favorites().collectLatest { favorites ->
-                    Timber.d("loadData: loaded ${favorites.size} favorites")
-                    _uiState.update { state ->
-                        state.copy(favoriteSongs = favorites.take(10))
-                    }
-                    favoritesLoaded = true
-                    checkAllDataLoaded()
-                }
+            collectSource(SOURCE_ALBUMS, getAllAlbumsUseCase()) { state, albums ->
+                state.copy(topAlbums = albums.take(PREVIEW_SIZE))
             }
 
-            launch {
-                songQueryUseCase.mostPlayed().collectLatest { mostPlayed ->
-                    Timber.d("loadData: loaded ${mostPlayed.size} mostPlayed")
-                    _uiState.update { state ->
-                        state.copy(mostPlayed = mostPlayed.take(10))
-                    }
-                    mostPlayedLoaded = true
-                    checkAllDataLoaded()
-                }
+            collectSource(SOURCE_ARTISTS, getAllArtistsUseCase()) { state, artists ->
+                state.copy(topArtists = artists.take(PREVIEW_SIZE))
             }
 
-            launch {
-                songQueryUseCase.recentlyPlayed().collectLatest { recentlyPlayed ->
-                    Timber.d("loadData: loaded ${recentlyPlayed.size} recentlyPlayed")
-                    _uiState.update { state ->
-                        state.copy(recentlyPlayed = recentlyPlayed.take(10))
-                    }
-                    recentlyPlayedLoaded = true
-                    checkAllDataLoaded()
-                }
+            collectSource(SOURCE_FAVORITES, songQueryUseCase.favorites()) { state, favorites ->
+                state.copy(favoriteSongs = favorites.take(PREVIEW_SIZE))
+            }
+
+            collectSource(SOURCE_MOST_PLAYED, songQueryUseCase.mostPlayed()) { state, mostPlayed ->
+                state.copy(mostPlayed = mostPlayed.take(PREVIEW_SIZE))
+            }
+
+            collectSource(SOURCE_RECENTLY_PLAYED, songQueryUseCase.recentlyPlayed()) { state, recentlyPlayed ->
+                state.copy(recentlyPlayed = recentlyPlayed.take(PREVIEW_SIZE))
             }
         }
     }
-    
-    private fun checkAllDataLoaded() {
-        if (songsLoaded && albumsLoaded && artistsLoaded && favoritesLoaded && mostPlayedLoaded && recentlyPlayedLoaded) {
-            _uiState.update { it.copy(isLoading = false) }
+
+    /**
+     * 一个数据源：来了就画，挂了就记一笔并同样算作"已交付"，这样载入态不会永远挂着。
+     *
+     * 定义成 [CoroutineScope] 的扩展是为了让六个源都是 [loadJob] 的子协程：重新载入时
+     * 上一轮的收集器会一起取消，不会越叠越多。
+     */
+    private fun <T> CoroutineScope.collectSource(
+        name: String,
+        flow: Flow<List<T>>,
+        merge: (HomeUiState, List<T>) -> HomeUiState
+    ) {
+        launch {
+            flow
+                .catch { error -> onSourceFailed(name, error) }
+                .collectLatest { items ->
+                    deliveredSources += name
+                    _uiState.update { state -> merge(state, items).withLoadingFlag() }
+                }
         }
+    }
+
+    private suspend fun onSourceFailed(name: String, error: Throwable) {
+        Timber.e(error, "loadData: %s failed", name)
+        deliveredSources += name
+        _uiState.update { it.withLoadingFlag() }
+        if (!failureReported) {
+            failureReported = true
+            _uiEffect.emit(HomeEffect.ShowToast(R.string.home_vm_load_failed))
+        }
+    }
+
+    /**
+     * 载入态只表示"眼下没有任何内容可看"：有内容就立刻放行，哪怕专辑、歌手还在路上；
+     * 六个源全部到齐而且仍然全空，才算真的空库。
+     *
+     * 旧实现要等六个源齐了才放行，首页的最短可见时间因此等于两次 MediaStore 查询里慢的那个。
+     */
+    private fun HomeUiState.withLoadingFlag(): HomeUiState {
+        val hasContent = recentlyPlayed.isNotEmpty() || recentlyAdded.isNotEmpty() ||
+            topAlbums.isNotEmpty() || topArtists.isNotEmpty() ||
+            mostPlayed.isNotEmpty() || favoriteSongs.isNotEmpty()
+        return copy(isLoading = !hasContent && deliveredSources.size < SOURCE_COUNT)
     }
 
     private fun handleSongClick(song: com.cycling.domain.model.Song) {
@@ -206,5 +203,20 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             _uiEffect.emit(effect)
         }
+    }
+
+    private companion object {
+        /** 首页每个分区最多露出的条目数。 */
+        const val PREVIEW_SIZE = 10
+
+        const val SOURCE_SONGS = "songs"
+        const val SOURCE_ALBUMS = "albums"
+        const val SOURCE_ARTISTS = "artists"
+        const val SOURCE_FAVORITES = "favorites"
+        const val SOURCE_MOST_PLAYED = "mostPlayed"
+        const val SOURCE_RECENTLY_PLAYED = "recentlyPlayed"
+
+        /** 上面这组的数量。全部交付仍无内容，才算空库。 */
+        const val SOURCE_COUNT = 6
     }
 }

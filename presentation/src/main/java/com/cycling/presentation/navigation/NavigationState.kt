@@ -63,8 +63,25 @@ class NavigationState(
 ) {
     var topLevelRoute: NavKey by topLevelRoute
 
-    /** Observable state — whether the bottom navigation bar should be visible. */
-    val showBottomBar = mutableStateOf(true)
+    /** 栈顶是不是 tab 根 —— 导航层面自己的判断，只由 [recomputeBottomBarVisibility] 改写。 */
+    private val routeShowsBottomBar = mutableStateOf(true)
+
+    /**
+     * 页面自己请求收起底栏，给 tab 内部的「全屏子视图」用（当前只有「音乐库 → 我喜欢」）。
+     *
+     * 这类子视图不是一条导航路由，导航层看不出它和 tab 根的区别，只能由页面在进入/退出时
+     * 置位；页面必须负责复位，否则底栏会一直藏着 —— 而底栏藏着的时候用户连 tab 都切不了。
+     */
+    private val screenHidesBottomBar = mutableStateOf(false)
+
+    /** 底栏最终可见性：路由允许，且当前页面没有主动收起。 */
+    val showBottomBar: Boolean
+        get() = routeShowsBottomBar.value && !screenHidesBottomBar.value
+
+    /** 页面请求收起 / 放回底栏。 */
+    fun requestBottomBarHidden(hidden: Boolean) {
+        screenHidesBottomBar.value = hidden
+    }
 
     val stacksInUse: List<NavKey>
         get() = if (topLevelRoute == startRoute) {
@@ -81,7 +98,7 @@ class NavigationState(
     fun recomputeBottomBarVisibility() {
         val stack = backStacks[topLevelRoute]
         val top = stack?.lastOrNull() ?: topLevelRoute
-        showBottomBar.value = top in topLevelRoutes
+        routeShowsBottomBar.value = top in topLevelRoutes
     }
 }
 

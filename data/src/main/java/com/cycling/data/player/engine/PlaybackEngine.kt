@@ -75,6 +75,14 @@ data class EngineState(
 sealed interface PlaybackEvent {
     data class ItemChanged(val id: Long?, val reason: TransitionReason) : PlaybackEvent
     data object Ended : PlaybackEvent
+
+    /**
+     * 一首歌放不出来：文件损坏、被删掉、或者解码失败。
+     *
+     * 引擎抛出这个之后会停在 IDLE，**不会自己跳过** —— "坏歌跳过继续放"是队列策略，
+     * 属于 [com.cycling.data.player.PlayerManager]，引擎只负责把事实报上来。
+     */
+    data class Error(val itemId: Long?, val errorCodeName: String?) : PlaybackEvent
 }
 
 /**

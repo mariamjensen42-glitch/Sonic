@@ -13,6 +13,11 @@
 
 这条规则同时回答三件事：色面用哪个角色、边界在哪、morph 落在哪。原型里的 A/C/D/E 作为被否方案保留，用于回看为什么不是它们。
 
+> **修订（ADR-0005，2026-10-20）**：播放页与歌词页改为封面派生的**动态色面**
+> （`core/ui/theme/SonDynamicBackdrop.kt`），不再使用本文件的静态 hero 光晕；§5 里
+> 「D 全屏洗」被否的结论对这两页不再适用（那条针对的是静态铺色，而动态色面会流动、能暂停、
+> 且歌词页额外压暗）。其余页面与本文件 §1 的角色 / 边界规则不变。
+
 ## 1. 色面
 
 ### 1.1 角色
@@ -62,6 +67,7 @@
 
 - **近灰封面**：ArtColorExtractor 仍取最有彩度的 swatch，并把彩度抬到至少 12；但色相不可靠。规则改为 **种子 HCT chroma < 16 时，色相兜底品牌色 SonicSeed**，其余照旧。原型 cover=gray 就是这条规则（灰封面 + 品牌紫调）。阈值 16 是起点，#18 用真实封面库校准；调整只动一个常量。
 - **阈值校准记录（#18，2026-10-18）**：阈值保留 16；单元测试覆盖 15.999 / 16.0 / 48.0；常量是 SonTonalScheme.GRAYSCALE_CHROMA_THRESHOLD，提取器的最低彩度提升 12 不变。Agent 不能跑真机/封面库，设备测量由用户完成：取验收截图集里的近灰、深色、奶油、霓虹四类封面各 3–5 张，跑 scripts/ui-verify.ps1 出图；抽一张封面读 Hct.fromColor(seed).chroma（可在 debug 日志或临时单测里打印）。若 16–20 的灰封面仍出现随机色相，调高阈值；若低彩度彩色封面丢掉自己的色相，调低阈值。每次只改这一个常量并重跑 SonTonalSchemeTest。
+- **阈值再校准（2026-10-20，真机）**：阈值 16 → **8**。16 比提取器抬到的 12 还高，等于「抬过彩度的种子仍然被判成灰」，淡封面（Fearless 的奶油色、Monody 的灰蓝）在真机上全部回落到品牌紫。现在低于 12 才回品牌色相；单元测试改为 7.999 / 8.0 / 12.0 / 48.0。同时 `ArtColorExtractor.backdropOf` 去掉自带彩度门槛，改成直接用 Palette 的档位（详见 ADR-0005 的修订段）。
 - **过饱和封面**：不直接把 swatch 原始色铺到界面。SonTonalScheme 的 primary chroma 固定 48，页面只用角色色；饱和度由 role + alpha 决定，不由封面原图决定。光晕 alpha 上限 0.70（亮）/ 0.62（暗），不再往上加。
 - **过暗封面**：hero 标题/控件的可读性由 artworkScrim（两套主题都是深色）负责，不由光晕负责；光晕的 tone 来自 scheme，不随封面明度变暗。B-dark 样张展示这条：深蓝封面 + 浅青容器光晕。
 - 封面本身不裁切、不重新着色；裁剪只发生在 palette 的 hue/chroma 入口。
@@ -126,7 +132,7 @@
 
 - 新增 **SonColorField**（core/ui/theme）：暴露 hero 光晕的 Brush / Modifier，参数只有 colorScheme、dark、heroBottom；颜色取 primaryContainer，alpha 取主题 token；页面不再拼 Brush。
 - 新增 **SonShapeMorph**（core/ui/theme）：暴露 pressShapeMorph（FAB 用）与 hero fold 的 shape 插值；不新增 Material 转发壳。
-- SonTonalScheme.from / ArtColorExtractor：近灰阈值改为 16，兜底品牌色相；这是唯一允许改 palette 入口的地方。
+- SonTonalScheme.from / ArtColorExtractor：近灰阈值兜底品牌色相（当时定 16，2026-10-20 真机校准为 8，见 1.4）；这是唯一允许改 palette 入口的地方。
 - 不新增颜色 token、不新增 Shape token：播放键用现有 extraLarge ↔ CircleShape，hero 用 RectangleShape ↔ small。
 
 ### 4.2 CollectionDetail

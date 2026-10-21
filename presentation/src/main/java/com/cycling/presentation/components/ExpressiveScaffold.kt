@@ -21,6 +21,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,6 +36,7 @@ import com.cycling.core.ui.components.SymbolIconName
 import com.cycling.core.ui.theme.SonLayout
 import com.cycling.core.ui.theme.SonSizes
 import com.cycling.core.ui.theme.SonSpacing
+import kotlinx.coroutines.delay
 
 /**
  * 分区标题：Expressive 的“字阶跳级”落在这一行。
@@ -153,9 +159,43 @@ fun SonEmptyState(
     }
 }
 
-/** 载入态：整屏居中一个 Expressive 的 [LoadingIndicator]，不另画骨架。 */
+/**
+ * 「载入态该不该现身」：真正等久了才返回 true。
+ *
+ * 本地数据（Room 的 `Flow`、DataStore、MediaStore 查询 + 内存缓存）几乎瞬间到达，从 ViewModel
+ * 到这一帧最多差一次调度。不延迟的话，每进一次这类页面都会闪一帧转圈 —— 用户看到的是「卡了一下」
+ * 而不是「在加载」。240ms 落在「察觉不到」与「需要反馈」之间的常规区间里。
+ *
+ * 给需要自己搭载入 UI 的页面用（转圈 + 一段说明文字、行内小转圈等）；
+ * 只要整屏一个转圈时直接用 [SonLoadingState]。
+ */
 @Composable
-fun SonLoadingState(modifier: Modifier = Modifier) {
+fun rememberLoadingIndicatorVisible(delayMillis: Long = LoadingIndicatorDelayMillis): Boolean {
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(delayMillis)
+        visible = true
+    }
+    return visible
+}
+
+/**
+ * 载入态：整屏居中一个 Expressive 的 [LoadingIndicator]，不另画骨架。
+ *
+ * 延迟 [delayMillis] 才现身，因为本地数据几乎没有等待时间：歌曲、歌单是 Room 的 `Flow`，
+ * 专辑、歌手是 MediaStore 查询加一层内存缓存，数据从 ViewModel 到这一帧最多差一次调度。
+ * 不延迟的话，每进一次这类页面都会闪一帧转圈——看着像卡顿，而不是像加载。
+ *
+ * 比阈值快的情况什么也不画（背景就是空的，和这一帧到下一帧的内容切换难以分辨）；
+ * 真慢的情况（首次 MediaStore 全量查询、SAF 枚举）仍然按时出现。
+ */
+@Composable
+fun SonLoadingState(
+    modifier: Modifier = Modifier,
+    delayMillis: Long = LoadingIndicatorDelayMillis
+) {
+    // 提前返回而不是画一个透明盒子：布局节点本就是空的，不必占位。
+    if (!rememberLoadingIndicatorVisible(delayMillis)) return
     Box(
         modifier = modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
@@ -163,3 +203,10 @@ fun SonLoadingState(modifier: Modifier = Modifier) {
         LoadingIndicator()
     }
 }
+
+/**
+ * 转圈出现的阈值。低于它视为"瞬间完成"，不显示任何载入态。
+ *
+ * 200–300 ms 是这类阈值的常规区间：短于它用户察觉不到等待，长于它才需要反馈。
+ */
+private const val LoadingIndicatorDelayMillis = 240L

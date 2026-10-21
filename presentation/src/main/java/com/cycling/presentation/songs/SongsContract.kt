@@ -35,6 +35,9 @@ sealed interface SongsIntent {
     data object DismissAddToPlaylistDialog : SongsIntent
     data class CreatePlaylistAndAddSong(val name: String) : SongsIntent
 
+    /** 行菜单里的收藏 / 取消收藏，作用于 [song] 自己（不走播放器，当前曲目是谁都行）。 */
+    data class ToggleFavorite(val song: Song) : SongsIntent
+
     // ── 多选 ──
     data object EnterSelectionMode : SongsIntent
     data object ExitSelectionMode : SongsIntent

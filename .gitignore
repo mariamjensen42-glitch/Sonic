@@ -24,3 +24,8 @@ local.properties
 /.trae/
 /.reasonix/
 /.workbuddy/
+
+# Kotlin 编译会话临时目录
+/.kotlin/
+# 每台机器的部署目标选择
+/.idea/deploymentTargetSelector.xml

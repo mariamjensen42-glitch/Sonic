@@ -4,8 +4,12 @@ import com.cycling.data.repository.AiRepositoryImpl
 import com.cycling.data.repository.AlbumRepositoryImpl
 import com.cycling.data.repository.ArtistRepositoryImpl
 import com.cycling.data.repository.AudioMetadataRepositoryImpl
+import com.cycling.data.repository.AutoEqRepositoryImpl
+import com.cycling.data.repository.CacheRepositoryImpl
+import com.cycling.data.repository.CoverRepositoryImpl
 import com.cycling.data.repository.ExcludedFolderRepositoryImpl
 import com.cycling.data.repository.LibraryTransferRepositoryImpl
+import com.cycling.data.repository.ListeningStatsRepositoryImpl
 import com.cycling.data.repository.LyricsRepositoryImpl
 import com.cycling.data.repository.MusicScannerRepositoryImpl
 import com.cycling.data.repository.PlaylistRepositoryImpl
@@ -17,8 +21,12 @@ import com.cycling.domain.repository.AiRepository
 import com.cycling.domain.repository.AlbumRepository
 import com.cycling.domain.repository.ArtistRepository
 import com.cycling.domain.repository.AudioMetadataRepository
+import com.cycling.domain.repository.AutoEqRepository
+import com.cycling.domain.repository.CacheRepository
+import com.cycling.domain.repository.CoverRepository
 import com.cycling.domain.repository.ExcludedFolderRepository
 import com.cycling.domain.repository.LibraryTransferRepository
+import com.cycling.domain.repository.ListeningStatsRepository
 import com.cycling.domain.repository.LyricsRepository
 import com.cycling.domain.repository.MusicScannerRepository
 import com.cycling.domain.repository.PlaylistRepository
@@ -31,6 +39,10 @@ import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
+import com.cycling.data.repository.AudioReactiveRepositoryImpl
+import com.cycling.data.repository.EqualizerRepositoryImpl
+import com.cycling.domain.repository.AudioReactiveRepository
+import com.cycling.domain.repository.EqualizerRepository
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -104,6 +116,12 @@ abstract class RepositoryModule {
 
     @Binds
     @Singleton
+    abstract fun bindCoverRepository(
+        coverRepositoryImpl: CoverRepositoryImpl
+    ): CoverRepository
+
+    @Binds
+    @Singleton
     abstract fun bindSettingsRepository(
         settingsRepositoryImpl: SettingsRepositoryImpl
     ): SettingsRepository
@@ -113,4 +131,34 @@ abstract class RepositoryModule {
     abstract fun bindLibraryTransferRepository(
         libraryTransferRepositoryImpl: LibraryTransferRepositoryImpl
     ): LibraryTransferRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindEqualizerRepository(
+        equalizerRepositoryImpl: EqualizerRepositoryImpl
+    ): EqualizerRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindAutoEqRepository(
+        autoEqRepositoryImpl: AutoEqRepositoryImpl
+    ): AutoEqRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindAudioReactiveRepository(
+        audioReactiveRepositoryImpl: AudioReactiveRepositoryImpl
+    ): AudioReactiveRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindListeningStatsRepository(
+        listeningStatsRepositoryImpl: ListeningStatsRepositoryImpl
+    ): ListeningStatsRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindCacheRepository(
+        cacheRepositoryImpl: CacheRepositoryImpl
+    ): CacheRepository
 }

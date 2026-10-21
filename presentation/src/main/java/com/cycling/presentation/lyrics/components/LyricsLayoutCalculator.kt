@@ -253,7 +253,9 @@ fun calculateStaticLineLayout(
     isLineRightAligned: Boolean,
     canvasWidth: Float,
     lineHeight: Float,
-    isRtl: Boolean
+    isRtl: Boolean,
+    /** 居中：每一行在可用宽度内对称留白。与靠右互斥，靠右优先交给 [isLineRightAligned]。 */
+    isLineCentered: Boolean = false
 ): List<List<SyllableLayout>> {
     val layoutsByWord = mutableMapOf<Int, MutableList<SyllableLayout>>()
 
@@ -261,10 +263,10 @@ fun calculateStaticLineLayout(
         val maxBaselineInLine = wrappedLine.syllables.maxOfOrNull { it.firstBaseline } ?: 0f
         val rowTopY = lineIndex * lineHeight
 
-        val startX = if (isLineRightAligned) {
-            canvasWidth - wrappedLine.totalWidth
-        } else {
-            0f
+        val startX = when {
+            isLineRightAligned -> canvasWidth - wrappedLine.totalWidth
+            isLineCentered -> (canvasWidth - wrappedLine.totalWidth) / 2f
+            else -> 0f
         }
 
         var currentX = if (isRtl) startX + wrappedLine.totalWidth else startX

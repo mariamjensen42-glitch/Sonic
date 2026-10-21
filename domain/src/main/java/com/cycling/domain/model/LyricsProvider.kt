@@ -3,16 +3,28 @@ package com.cycling.domain.model
 /**
  * Where to look for lyrics that are not already on disk.
  *
- * [NETEASE] has much better Chinese coverage but is an unofficial endpoint, so it can rate-limit
- * or change without notice; [LRCLIB] is a documented free service with a strong Western catalogue.
- * The two are tried in the user's configured order, so a NetEase failure degrades to LRCLIB rather
- * than to no lyrics at all.
+ * [AMLL] is the curated TTML DB behind the Apple-Music-like lyric players: every document is
+ * hand-aligned word by word by contributors, which makes it the best answer when it has one, but
+ * it only covers a few thousand tracks — a miss outside that catalogue is the common case, not a
+ * failure.
  *
- * NetEase also offers word-by-word `yrc`, which `:domain`'s `YrcParser` understands — and because
- * it publishes one recording several times over with different documents attached, it is the
- * source whose versions the lyrics screen's picker is mostly there for.
+ * [NETEASE], [QQ_MUSIC] and [KUGOU] are the Chinese catalogues, best coverage first: NetEase
+ * publishes word-by-word `yrc` plus a timed translation, while QQ and Kugou only serve line-level
+ * LRC (QQ adds a translation document) from unofficial web endpoints that can rate-limit or change
+ * without notice. [LRCLIB] is a documented free service with a strong Western catalogue.
+ *
+ * The five are tried in the user's configured order, so one catalogue failing or not having the
+ * track degrades to the next rather than to no lyrics at all.
+ *
+ * NetEase and AMLL both publish word-by-word documents — `yrc` and TTML, which `:domain`'s
+ * `YrcParser` and `TTMLParser` understand. AMLL also publishes one recording several times over,
+ * as different contributors' submissions, which is part of what the lyrics screen's version picker
+ * is for.
  */
 enum class LyricsProvider {
+    AMLL,
     NETEASE,
+    QQ_MUSIC,
+    KUGOU,
     LRCLIB
 }

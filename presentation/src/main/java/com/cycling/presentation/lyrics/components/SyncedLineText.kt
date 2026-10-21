@@ -21,25 +21,37 @@ fun SyncedLineText(
     textStyle: TextStyle,
     textColor: Color,
     modifier: Modifier = Modifier,
+    /** 行文本在可用宽度内居中；关掉就按语言方向靠起始侧。 */
+    alignCenter: Boolean = false,
 ) {
+    val alignment = when {
+        alignCenter -> Alignment.CenterHorizontally
+        isLineRtl -> Alignment.End
+        else -> Alignment.Start
+    }
+    val textAlign = when {
+        alignCenter -> TextAlign.Center
+        isLineRtl -> TextAlign.End
+        else -> TextAlign.Start
+    }
     Column(
         modifier
             .fillMaxWidth()
             .padding(vertical = SonSpacing.small, horizontal = SonSpacing.medium),
-        horizontalAlignment = if (isLineRtl) Alignment.End else Alignment.Start
+        horizontalAlignment = alignment
     ) {
         Text(
             text = line.content,
             style = textStyle,
             color = textColor,
-            textAlign = if (isLineRtl) TextAlign.End else TextAlign.Start
+            textAlign = textAlign
         )
         line.translation?.let {
             Text(
                 text = it,
                 style = MaterialTheme.typography.titleMedium,
                 color = textColor.copy(alpha = 0.6f),
-                textAlign = if (isLineRtl) TextAlign.End else TextAlign.Start
+                textAlign = textAlign
             )
         }
     }

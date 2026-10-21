@@ -15,15 +15,16 @@ with the code, in which case the code wins.** Known drift:
 
 | `AGENTS.md` says | Reality |
 | --- | --- |
-| `core/ui/theme/` = theme objects | `Theme.kt` → `SonicTheme` (one entry point), backed by `Color.kt` + `Hct.kt` + `TonalPalette.kt` (HCT tonal mapping), `Typography.kt`, `Shape.kt`, `MotionTiming.kt`, `Spacing.kt`, `ArtColorExtractor.kt`. There is no `SpotifyTheme`/`SpotifyColors`/`DesignTokens.kt` any more — the UI is Material 3 Expressive only. `core/ui/components/` holds **only** `MediaCards.kt` (`M3Artwork`, `M3MediaCard`, `M3ArtistCard`) plus `navigation/M3BottomNavigationBar`; the former `M3Button`/`M3Card`/`M3ListItem`/`M3Indicator`/`M3TextField`/`M3Chip`/`M3Navigation`/`M3Interaction` wrapper files were deleted — screens call `androidx.compose.material3` directly |
+| `core/ui/theme/` = theme objects | `Theme.kt` → `SonicTheme` (one entry point), backed by `Color.kt` + `Hct.kt` + `TonalPalette.kt` (HCT tonal mapping), `Typography.kt`, `Shape.kt`, `MotionTiming.kt`, `Spacing.kt`, `ArtColorExtractor.kt` (Palette profiles → seed + backdrop colours), `CoverArtworkLoader.kt` (cover bitmap: MediaStore thumbnail → image stream → embedded art), `SonColorField.kt` (static hero glow) and `SonDynamicBackdrop.kt` (flowing backdrop behind the Player and Lyrics screens, ADR-0005). There is no `SpotifyTheme`/`SpotifyColors`/`DesignTokens.kt` any more — the UI is Material 3 Expressive only. `core/ui/components/` holds **only** `MediaCards.kt` (`M3Artwork`, `M3MediaCard`, `M3ArtistCard`) plus `navigation/M3BottomNavigationBar`; the former `M3Button`/`M3Card`/`M3ListItem`/`M3Indicator`/`M3TextField`/`M3Chip`/`M3Navigation`/`M3Interaction` wrapper files were deleted — screens call `androidx.compose.material3` directly |
 | iOS-style components (`IOSListItem`, `IOSButton`, `IOSInsetGrouped`) | Removed. Reusable components are `M3*` under `com.cycling.core.ui.components` |
 | `MainViewModel` manages the theme | It only calls `playerManager.connect()` to bootstrap playback |
 | DeepSeek key injected from `local.properties` via `BuildConfig` | No `buildConfigField` exists anywhere. The key is entered by the user and stored in DataStore |
-| Release signing via `key.properties` | Signing reads env vars `SONIC_STORE_FILE` / `SONIC_STORE_PASSWORD` / `SONIC_KEY_ALIAS` / `SONIC_KEY_PASSWORD`. `key.properties` is dead |
+| Release signing via `key.properties` | 两条路都认：**环境变量优先**（`SONIC_STORE_FILE` / `SONIC_STORE_PASSWORD` / `SONIC_KEY_ALIAS` / `SONIC_KEY_PASSWORD`，CI 用），其次仓库根的 `key.properties`（本地用，`storeFile` 相对 `:app`）。两者都没有时回落 **debug 签名**并打 warning，所以本地 `assembleRelease` 能出包，但产物不能发布 |
 | `domain/.../lyrics/exporter/` exists | Deleted from the working tree |
 | `spotify-clone-jetpack-compose-main/` reference project | Not present |
 | Turbine asserts Flow behaviour | Declared in `:data` and `:presentation`, imported by no test |
 | All UseCases are `@Singleton` with `operator fun invoke` | Only `GetLyricsUseCase` is `@Singleton`; `ScanMusicUseCase`, `SearchHistoryUseCase`, `SongQueryUseCase` expose named methods instead |
+| Metadata reading/writing is mp3agic (MP3) | MP3 still uses mp3agic; FLAC / OGG-Vorbis / MP4(M4A) read+write go through `:taglib`, a vendored copy of the local SaltAudioTag `core` module (LGPL-2.1, `taglib/LICENSE`). Only `:data`'s `AudioMetadataHelper` touches it. Opus is read-only |
 | Root `README.md` / `CONTRIBUTING.md` tech-stack versions | Two Kotlin/Compose generations behind — trust `gradle/libs.versions.toml` |
 
 | `AGENTS.md` says Compose BOM only | `composeBom = "2026.09.00"`, but **`androidx.compose.material3` is explicitly pinned to `1.5.0-alpha29`** in the catalog, overriding the BOM's constraint (the BOM pins material3 1.4.0, which lacks `LoadingIndicator`, `WavyProgressIndicator`, `ListItem(onClick)`, `ButtonShapes`). The pin is deliberate — see the `composeMaterial3` comment in `gradle/libs.versions.toml`. Consequence: `androidx.compose.foundation:foundation` is dragged to `1.13.0-alpha01` by material3's own requirement |
@@ -38,12 +39,12 @@ with the code, in which case the code wins.** Known drift:
 ./gradlew installDebug          # build + install on device/emulator
 ./gradlew test                  # every module's JVM unit tests
 ./gradlew lint                  # Android Lint
-./gradlew :domain:test          # one module (also :data:, :presentation: — :app: has no tests)
+./gradlew :domain:test          # one module (also :data:, :presentation:, :taglib: — :app: has no tests)
 ```
 
-Single test class or method — the three test modules are Android libraries, so the task is
-`testDebugUnitTest`, and `--tests` matches the **literal Kotlin name, spaces included**, hence
-the quoting:
+Single test class or method — the test modules (`:domain`, `:data`, `:presentation`, `:taglib`) are
+Android libraries, so the task is `testDebugUnitTest`, and `--tests` matches the **literal Kotlin
+name, spaces included**, hence the quoting:
 
 ```bash
 ./gradlew :domain:testDebugUnitTest --tests "com.cycling.domain.lyrics.parser.LrcParserTest"
@@ -57,9 +58,24 @@ Instrumented tests exist only in `:data` and need a device:
   -Pandroid.testInstrumentationRunnerArguments.class=com.cycling.data.local.database.DatabaseMigrationTest
 ```
 
-Two facts that make some build config inert: release builds set `isMinifyEnabled = false`, so
-`app/proguard-rules.pro` has no effect; and `android.yml` and `release.yml` both trigger on `v*`
-tags, so tagging a release runs the publish workflow twice.
+Performance benchmarks live in `:benchmark` (AndroidX Macrobenchmark, `com.android.test`,
+`targetProjectPath = ":app"`). They run against `:app`'s `benchmark` build type (release-shaped,
+debug-signed, plus a `profileable` in `app/src/benchmark/AndroidManifest.xml`), need a device, and
+the emulator refuses to run them unless you suppress `EMULATOR`:
+
+```bash
+./gradlew :benchmark:connectedBenchmarkAndroidTest \
+  -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.suppressErrors=EMULATOR,LOW-BATTERY
+```
+
+`docs/benchmarking.md` explains what each test measures.
+
+Release (and the `benchmark` variant that inherits it) now run **R8 with resource shrinking**
+(`isMinifyEnabled = true` / `isShrinkResources = true`), so `app/proguard-rules.pro` is live — the
+rules in it must stay minimal, because every `-keep` gives back part of what R8 buys: the APK went
+from 41.2 MB to 7.1 MB and cold start from 484 ms to 282 ms on the reference device. One build
+config is still inert: `android.yml` and `release.yml` both trigger on `v*` tags, so tagging a
+release runs the publish workflow twice.
 
 ## Architecture
 
@@ -184,17 +200,61 @@ same recording many times over and the entry closest in length does not always c
 word-by-word document, so re-looking has a real chance of upgrading it. That short TTL is also the
 only way a row written before the provider learned to look further ever gets replaced.
 
+A cache row remembers *which* provider answered but not *whether a higher-priority provider has
+been asked*, so adding a provider (or changing the default order) would leave every already-played
+track on the old provider until its TTL ran out — the new source would effectively not exist for
+them. `LyricsCacheGenerationStore` (DataStore `lyrics_cache_meta`) holds a generation counter;
+`LyricsRepositoryImpl.ensureCacheGeneration()` clears `lyrics_cache` once when the stored value is
+behind `LYRICS_CACHE_GENERATION` (bump that constant whenever the provider set or default order
+changes). User-written lyrics live in `lyrics_override` and are untouched; a version the user picked
+by hand is a `lyrics_cache` row and is cleared along with the rest, which is the accepted cost of
+re-resolving with the current sources.
+
 Providers are `OnlineLyricsProvider` implementations under `data/api/lyrics/`, bound as a Hilt
-`Set` by `LyricsModule`: `LrclibLyricsProvider` (`/api/get`, falling back to `/api/search`) and
-`NetEaseLyricsProvider` (search, then `/api/song/lyric`). Both are handed a `LyricsQuery` — title,
-artist, album, duration — which is why `LyricsRepository.getLyrics` takes a whole `Song` rather
-than a path. A provider that returns nothing, throws, or returns content the parser cannot read
-falls through to the next in the list; only a successful, parseable result is cached, under
-`title|artist|duration-in-seconds`. Unsynced `plainLyrics` and instrumentals are deliberately
-rejected (the player can only render a `SyncedLyrics`). NetEase's lyric endpoint returns up to four
-documents — `lrc`, word-by-word `yrc`, and a translation for each (`tlyric`, `ytlrc`) — which
-`mergeNetEaseLyrics` interleaves into one blob; `yrc`/`ytlrc` win when the track has them, so most
-tracks get a timed translation and some also get word-by-word highlighting.
+`Set` by `LyricsModule`: `AmllLyricsProvider` (`/v1/lyrics/search`, then `/v1/lyrics/get?id=`, both on
+`https://api.amll.dev`), `NetEaseLyricsProvider` (search, then `/api/song/lyric`),
+`QQMusicLyricsProvider` (`client_search_cp`, then `fcg_query_lyric_new.fcg`),
+`KugouLyricsProvider` (`krcs.kugou.com/search`, then `lyrics.kugou.com/download`) and
+`LrclibLyricsProvider` (`/api/get`, falling back to `/api/search`). All of them are handed a
+`LyricsQuery` — title, artist, album, duration — which is why `LyricsRepository.getLyrics` takes a
+whole `Song` rather than a path. A provider that returns nothing, throws, or returns content the
+parser cannot read falls through to the next in the list; only a successful, parseable result is
+cached, under `title|artist|duration-in-seconds`. Unsynced `plainLyrics` and instrumentals are
+deliberately rejected (the player can only render a `SyncedLyrics`). NetEase's lyric endpoint returns
+up to four documents — `lrc`, word-by-word `yrc`, and a translation for each (`tlyric`, `ytlrc`) —
+which `mergeNetEaseLyrics` interleaves into one blob; `yrc`/`ytlrc` win when the track has them, so
+most tracks get a timed translation and some also get word-by-word highlighting.
+
+QQ Music and Kugou are **line-level only** and are the same Chinese catalogues the cover providers
+already use, but on different hosts. Both are unofficial web endpoints: Kugou's search takes the
+keywords and answers with uploaded lyric documents (`id` + `accesskey`), and the download serves a
+base64-encoded LRC; QQ's search is the `client_search_cp` call whose DTO the cover provider already
+has (extended with `songmid`), and `fcg_query_lyric_new.fcg` serves a plain or base64 LRC plus an
+optional translation LRC on the same timestamps. That translation is interleaved with
+`mergeQqTranslation` rather than concatenated, because the LRC parser pairs adjacent equal-start
+lines into original + translation. Both need the duration tolerance to separate covers from the real
+recording, since the keyword search returns whatever matches the words. Their word-by-word formats
+(KRC / QRC) are encrypted containers and are not implemented — a second-best document does not earn
+its own parser, and line-level rows are re-checked the next day anyway.
+
+AMLL is the community-curated TTML DB behind the Apple-Music-like lyric players: `/v1/lyrics/search`
+never carries the lyric body, so the provider finds a document by **title only** and then verifies
+the artist locally before downloading it by id. The title-only search is deliberate: the API's own
+`artistName` parameter is unreliable — `musicName=Lemon&artistName=米津玄師` answers empty while
+`artistName=米津` finds the document whose `artistNames` is exactly that name, so a server-side AND
+silently drops lyrics the library has. `selectAmllCandidates` therefore splits both sides on
+collaboration separators (`feat.`, `&`, `、` …), strips punctuation and matches names, and drops any
+submission that does not name the local artist — a common title is shared by many recordings, and
+another artist's lyrics are worse than none. The document is plain Apple Music-style TTML, so
+`TTMLParser` reads it as-is — word by word, with `x-translation` and `x-bg` when the contributors
+supplied them. Two consequences: no new parser was needed, and no duration matching is possible,
+because AMLL's `duration` is the last lyric timestamp rather than the track length — comparing it to
+MediaStore's duration would reject correctly-timed documents for any song with an instrumental
+outro. `rankAmllCandidates` therefore only *orders* submissions by album (same release first) and
+never filters on album; unconditional album filtering would drop a single whose album tag differs
+from the album it also appears on. Playback downloads only the top submission; the version picker
+lists up to `MAX_LYRIC_CHOICES`, labelled with the contributors' GitHub usernames, which is what
+separates two timings of the same recording.
 
 NetEase publishes one recording many times over — an album cut, a compilation, a remaster — and the
 uploads do not all carry `yrc`, so resolving a single song id by length lands on an entry with only
@@ -284,8 +344,21 @@ the test classpath but unused — assert Flows by collecting inside `runTest`.
   renders anyway (verified on device), so treat the log line as noise, not a regression.
   `customAlbumArt` exists in the schema but no UI writes it, so in practice `albumArt` is always
   the MediaStore URI — don't assume a user-settable override is in play.
-- The `rememberPlaybackPosition` setting exists in the UI and repository but `PlayerManager`
-  ignores it, always saving and restoring the queue and position.
+- **Cover-derived colours go through `CoverArtworkLoader`, not Coil.** `rememberArtworkBackdrop`
+  (which feeds only `LocalSonBackdropColors` — the player/lyrics dynamic backdrop; the app theme
+  itself follows the system wallpaper) used to load the cover with `SingletonImageLoader.execute`;
+  that never produced a colour on device — Coil's memory
+  cache may hand back a hardware bitmap (`Palette` throws on those) and the legacy albums row is not
+  readable with `openInputStream` at all. The loader now mirrors the notification/widget path
+  (album → a track of it → `ContentResolver.loadThumbnail`, then image stream, then embedded art)
+  and `ArtColorExtractor` takes `androidx.palette`'s vibrant/muted/dominant profiles **without a
+  chroma gate** — a chroma gate empties the list for pale covers, and the backdrop then falls back
+  to the scheme containers, which look brand-purple rather than like the cover. Keep
+  `SonTonalScheme.GRAYSCALE_CHROMA_THRESHOLD` below `ArtColorExtractor`'s `MIN_SEED_CHROMA` (12):
+  the extractor lifts a muted seed's chroma to 12, so a higher threshold would send every pale cover
+  back to the brand hue. `rememberArtworkBackdrop` logs `backdrop=#......` at INFO — read
+  that line first when the page does not look like its cover.
+
 - `Song.albumArt` is the *effective* artwork (user cover if set, else MediaStore's);
   `hasCustomAlbumArt` says which.
 - `Screen.Library` renders `MyMusicScreen`. `SettingsUiState/Intent/Effect` live inside

@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
@@ -91,9 +92,17 @@ class MyMusicViewModel @Inject constructor(
             }
 
             launch {
-                playlistRepository.getAllPlaylists().collectLatest { playlists ->
-                    _uiState.update { it.copy(playlists = playlists, isLoading = false) }
-                }
+                // isLoading 是由这个 Flow 负责清掉的，所以失败也必须在这里清，
+                // 否则整个"我的音乐"会永远停在载入态。
+                playlistRepository.getAllPlaylists()
+                    .catch { error ->
+                        Timber.e(error, "loadData: playlists failed")
+                        _uiState.update { it.copy(isLoading = false) }
+                        _uiEffect.emit(MyMusicEffect.ShowToast(R.string.mymusic_vm_load_failed))
+                    }
+                    .collectLatest { playlists ->
+                        _uiState.update { it.copy(playlists = playlists, isLoading = false) }
+                    }
             }
 
             launch {

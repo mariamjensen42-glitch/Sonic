@@ -5,6 +5,8 @@ import com.cycling.domain.repository.ArtistRepository
 import com.cycling.domain.repository.PlaylistRepository
 import com.cycling.domain.repository.PlayerRepository
 import com.cycling.domain.repository.SongRepository
+import com.cycling.presentation.R
+import com.cycling.presentation.collectiondetail.CollectionDetailEffect
 import com.cycling.presentation.collectiondetail.CollectionDetailViewModel
 import com.cycling.presentation.navigation.LibraryDestination
 import dagger.assisted.Assisted
@@ -14,6 +16,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import kotlin.coroutines.cancellation.CancellationException
 
 @HiltViewModel(assistedFactory = ArtistDetailViewModel.Factory::class)
 class ArtistDetailViewModel @AssistedInject constructor(
@@ -39,24 +42,33 @@ class ArtistDetailViewModel @AssistedInject constructor(
 
     override fun loadCollection() {
         viewModelScope.launch {
-            val artist = artistRepository.getArtistById(artistId)
-            _uiState.update {
-                it.copy(title = artist?.name, artwork = artist?.artistArt)
-            }
-
-            songRepository.getSongsByArtist(artistId).collect { songs ->
-                Timber.d("loadArtist: loaded ${songs.size} songs")
-                val sortedSongs = songs.sortedBy { it.title }
+            try {
+                val artist = artistRepository.getArtistById(artistId)
                 _uiState.update {
-                    it.copy(
-                        songs = sortedSongs,
-                        isLoading = false,
-                        likedSongIds = sortedSongs
-                            .filter { song -> song.isFavorite }
-                            .map { song -> song.id }
-                            .toSet()
-                    )
+                    it.copy(title = artist?.name, artwork = artist?.artistArt)
                 }
+
+                songRepository.getSongsByArtist(artistId).collect { songs ->
+                    Timber.d("loadArtist: loaded ${songs.size} songs")
+                    val sortedSongs = songs.sortedBy { it.title }
+                    _uiState.update {
+                        it.copy(
+                            songs = sortedSongs,
+                            isLoading = false,
+                            likedSongIds = sortedSongs
+                                .filter { song -> song.isFavorite }
+                                .map { song -> song.id }
+                                .toSet()
+                        )
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                // 不兜这一下，isLoading 会停在默认的 true —— 页面永远转圈，没有任何出口。
+                Timber.e(error, "loadArtist: failed for artistId=$artistId")
+                _uiState.update { it.copy(isLoading = false) }
+                _uiEffect.emit(CollectionDetailEffect.ShowToast(R.string.collection_vm_load_failed))
             }
         }
     }

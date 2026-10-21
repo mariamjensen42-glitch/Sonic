@@ -39,6 +39,14 @@ interface SongRepository {
     suspend fun toggleFavorite(songId: Long): Boolean
 
     /**
+     * 把一首在线曲目的**指针**（平台键 + 平台 id）写进库，让它能像本地曲目一样被收藏、加入歌单。
+     *
+     * 不写任何 URL：取链结果随时会过期，存下来只会变成一堆死链。已存在的那一行保留用户列
+     * （收藏、播放次数、自定义封面）。
+     */
+    suspend fun upsertOnlineSong(song: Song)
+
+    /**
      * Sets the favourite flag on many songs at once.
      *
      * One statement rather than a `toggleFavorite` loop: the loop would read each song before

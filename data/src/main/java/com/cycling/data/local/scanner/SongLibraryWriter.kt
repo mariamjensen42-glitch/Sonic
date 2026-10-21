@@ -1,6 +1,7 @@
 package com.cycling.data.local.scanner
 
 import androidx.room.withTransaction
+import com.cycling.data.local.dao.KnownSongFile
 import com.cycling.data.local.dao.SongDao
 import com.cycling.data.local.database.AppDatabase
 import com.cycling.data.local.entity.SongEntity
@@ -42,13 +43,24 @@ class SongLibraryWriter @Inject constructor(
         }
 
         val livePaths = scanned.mapTo(HashSet(scanned.size)) { it.path }
-        songDao.getAllSongPaths()
+        // 只和本地行比对：在线行的 path 是空串，拿全量路径比对会把它们全部判成 stale。
+        songDao.getLocalSongPaths()
             .filterNot { it in livePaths }
             .chunked(DELETE_CHUNK_SIZE)
             .forEach { stale -> songDao.deleteSongsByPaths(stale) }
 
         scanned.size
     }
+
+    /**
+     * 已入库曲目的 (bitrate, dateModified)，键是 songId。
+     *
+     * 扫描据此跳过逐个文件读元数据：`MediaMetadataRetriever` 每首一次，全库重读是秒级开销，
+     * 而回到前台的增量刷新每次启动都会跑一遍。只有新歌、或被替换过的文件（dateModified 变了）
+     * 才需要真的去读。
+     */
+    suspend fun knownSongFiles(): Map<Long, KnownSongFile> =
+        songDao.getKnownSongFiles().associateBy { it.id }
 
     private suspend fun SongDao.upsert(song: SongEntity) = upsertScannedSong(
         id = song.id,

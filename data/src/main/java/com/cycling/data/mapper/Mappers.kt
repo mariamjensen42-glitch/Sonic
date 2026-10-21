@@ -2,9 +2,11 @@ package com.cycling.data.mapper
 
 import com.cycling.data.local.entity.PlaylistEntity
 import com.cycling.data.local.entity.SongEntity
+import com.cycling.data.local.entity.SongMetadataEntity
 import com.cycling.domain.model.Artist
 import com.cycling.domain.model.Playlist
 import com.cycling.domain.model.Song
+import com.cycling.domain.model.TagUpdate
 
 fun SongEntity.toDomain(): Song {
     return Song(
@@ -28,7 +30,9 @@ fun SongEntity.toDomain(): Song {
         lastPlayedAt = lastPlayedAt,
         bitrate = bitrate,
         rating = rating,
-        hasCustomAlbumArt = customAlbumArt != null
+        hasCustomAlbumArt = customAlbumArt != null,
+        onlineSourceKey = onlineSourceKey,
+        onlineSongId = onlineSongId
     )
 }
 
@@ -59,7 +63,9 @@ fun Song.toEntity(): SongEntity {
         playCount = playCount,
         lastPlayedAt = lastPlayedAt,
         bitrate = bitrate,
-        rating = rating
+        rating = rating,
+        onlineSourceKey = onlineSourceKey,
+        onlineSongId = onlineSongId
     )
 }
 
@@ -72,5 +78,66 @@ fun PlaylistEntity.toDomain(): Playlist {
         numberOfSongs = 0,
         albumArt = null,
         description = description
+    )
+}
+
+/** The stored overrides, as a [TagUpdate] whose non-null fields are the ones the user edited. */
+fun SongMetadataEntity.toTagUpdate(): TagUpdate {
+    return TagUpdate(
+        albumArtist = albumArtist,
+        year = year,
+        genre = genre,
+        trackNumber = trackNumber,
+        discNumber = discNumber,
+        composer = composer,
+        publisher = publisher,
+        copyright = copyright,
+        comment = comment
+    )
+}
+
+/**
+ * Lays [update] over the stored overrides.
+ *
+ * A `null` field in [update] means "the user did not touch this", so the already-stored override
+ * (if any) is kept — otherwise editing one field would quietly drop the others. An empty string
+ * means "clear the override", so the value read from the file shows through again.
+ */
+fun TagUpdate.mergeWith(update: TagUpdate): TagUpdate {
+    return TagUpdate(
+        albumArtist = mergeOverride(albumArtist, update.albumArtist),
+        year = mergeOverride(year, update.year),
+        genre = mergeOverride(genre, update.genre),
+        trackNumber = mergeOverride(trackNumber, update.trackNumber),
+        discNumber = mergeOverride(discNumber, update.discNumber),
+        composer = mergeOverride(composer, update.composer),
+        publisher = mergeOverride(publisher, update.publisher),
+        copyright = mergeOverride(copyright, update.copyright),
+        comment = mergeOverride(comment, update.comment)
+    )
+}
+
+private fun mergeOverride(stored: String?, update: String?): String? = when {
+    update == null -> stored
+    update.isBlank() -> null
+    else -> update
+}
+
+fun TagUpdate.toSongMetadataEntity(
+    songId: Long,
+    updatedAt: Long = System.currentTimeMillis()
+): SongMetadataEntity {
+    return SongMetadataEntity(
+        songId = songId,
+        albumArtist = albumArtist,
+        year = year,
+        genre = genre,
+        trackNumber = trackNumber,
+        discNumber = discNumber,
+        composer = composer,
+        publisher = publisher,
+        copyright = copyright,
+        comment = comment,
+        updatedAt = updatedAt
     )
 }

@@ -7,7 +7,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -85,14 +84,12 @@ import com.cycling.core.ui.theme.SonLayout
 import com.cycling.core.ui.theme.SonShapeMorph
 import com.cycling.core.ui.theme.SonSizes
 import com.cycling.core.ui.theme.SonSpacing
-import com.cycling.core.ui.theme.SonicTheme
 import com.cycling.core.ui.theme.sonColorFieldDetailFade
 import com.cycling.domain.model.Song
 import com.cycling.presentation.R
 import com.cycling.presentation.collectiondetail.CollectionDetailEffect
 import com.cycling.presentation.collectiondetail.CollectionDetailUiState
 import com.cycling.presentation.collectiondetail.SongCollectionIntent
-import com.cycling.presentation.player.rememberArtworkTheme
 import kotlinx.coroutines.flow.SharedFlow
 import kotlin.math.roundToInt
 
@@ -171,6 +168,10 @@ fun CollectionDetailScreen(
     songSubtitle: (Song) -> String? = { null },
     songTrailing: @Composable (Song) -> Unit = {},
     songMoreMenu: (Song) -> List<MenuItem> = { emptyList() },
+    /** 队列与详情动作，由外壳接线；传了之后每首歌的菜单里都有「下一首播放 / 加入队列」。 */
+    queueActions: SongQueueActions? = null,
+    /** 行菜单里的收藏 / 取消收藏；行尾已经有心形的页面（歌手页）不必传。 */
+    onToggleFavorite: ((Song) -> Unit)? = null,
     headerExtra: @Composable (ColumnScope.() -> Unit)? = null,
     emptyText: String? = null,
     /** 传了才开启拖拽排序；专辑/歌手等固定顺序的列表不传，行为完全不变。 */
@@ -196,8 +197,8 @@ fun CollectionDetailScreen(
     }
     BackHandler(enabled = reorderMode) { reorderMode = false }
 
-    // C：整页配色由封面派生。应用级主题跟随的是播放页封面，这里单独覆盖一层。
-    val artworkTheme = rememberArtworkTheme(imageUrl = artwork, darkTheme = isSystemInDarkTheme())
+    // 整页配色跟随系统壁纸（应用级主题），这里不再按封面单独覆盖一层：
+    // 封面只喂播放页 / 歌词页的动态色面，不应该顺带把整页的配色也换掉。
 
     // 头部边长取容器宽度（方形封面 = 宽 = 高），无需测量回调，首帧即正确。
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
@@ -227,185 +228,187 @@ fun CollectionDetailScreen(
             }
         }
 
-        SonicTheme(colorScheme = artworkTheme.colorScheme) {
-            Scaffold(
-                containerColor = MaterialTheme.colorScheme.surface,
-                // 内容自行处理状态栏：顶栏透明，封面必须一路铺到屏幕顶端，
-                // 若沿用 Scaffold 默认的 contentWindowInsets，内容区会被下推一个状态栏高度，
-                // 封面底部就会露出等高的空白带。
-                contentWindowInsets = WindowInsets(0, 0, 0, 0),
-                topBar = {
-                    // 顶栏保持透明；底色由内容层顶部的 surface band 提供。
-                    // 折叠中的 cover 在列表内滚动，不改变顶栏的形状与对齐。
-                    val extended = LocalSonExtendedColors.current
-                    val navigationIconColor = lerp(
-                        extended.onArtwork,
-                        MaterialTheme.colorScheme.onSurface,
-                        collapse.value
-                    )
-                    val actionIconColor = lerp(
-                        extended.onArtwork,
-                        MaterialTheme.colorScheme.onSurfaceVariant,
-                        collapse.value
-                    )
-                    // 图标压在任何封面上都要能看清：每个动作下面垫一层圆形 scrim。
-                    // 0.60 是对着「纯白封面」与「纯黑封面」两端都能留住 4.5:1 的浓度；
-                    // 它必须先于 surface band 退干净（band 在 62.5% 折叠时不透明，
-                    // 这里按 2 倍速率在 50% 归零），否则会留下一个落在实底顶栏上的深色圆点。
-                    val iconScrimAlpha = 0.60f * (1f - collapse.value * 2f).coerceIn(0f, 1f)
-                    val iconContainerColor = extended.artworkScrim.copy(alpha = iconScrimAlpha)
-                    CenterAlignedTopAppBar(
-                        title = {
-                            val headerAlpha = collapse.headerAlpha()
-                            if (headerAlpha > 0f) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    M3Artwork(
-                                        artwork = artwork,
-                                        placeholderIcon = placeholderIcon,
-                                        shape = MaterialTheme.shapes.small,
-                                        modifier = Modifier
-                                            .size(SonSizes.appBarArtwork)
-                                            .graphicsLayer { alpha = headerAlpha }
-                                    )
-                                    Spacer(modifier = Modifier.width(SonSpacing.small))
-                                    Text(
-                                        text = title,
-                                        style = MaterialTheme.typography.titleMediumEmphasized,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
+        Scaffold(
+            containerColor = MaterialTheme.colorScheme.surface,
+            // 内容自行处理状态栏：顶栏透明，封面必须一路铺到屏幕顶端，
+            // 若沿用 Scaffold 默认的 contentWindowInsets，内容区会被下推一个状态栏高度，
+            // 封面底部就会露出等高的空白带。
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
+            topBar = {
+                // 顶栏保持透明；底色由内容层顶部的 surface band 提供。
+                // 折叠中的 cover 在列表内滚动，不改变顶栏的形状与对齐。
+                val extended = LocalSonExtendedColors.current
+                val navigationIconColor = lerp(
+                    extended.onArtwork,
+                    MaterialTheme.colorScheme.onSurface,
+                    collapse.value
+                )
+                val actionIconColor = lerp(
+                    extended.onArtwork,
+                    MaterialTheme.colorScheme.onSurfaceVariant,
+                    collapse.value
+                )
+                // 图标压在任何封面上都要能看清：每个动作下面垫一层圆形 scrim。
+                // 0.60 是对着「纯白封面」与「纯黑封面」两端都能留住 4.5:1 的浓度；
+                // 它必须先于 surface band 退干净（band 在 62.5% 折叠时不透明，
+                // 这里按 2 倍速率在 50% 归零），否则会留下一个落在实底顶栏上的深色圆点。
+                val iconScrimAlpha = 0.60f * (1f - collapse.value * 2f).coerceIn(0f, 1f)
+                val iconContainerColor = extended.artworkScrim.copy(alpha = iconScrimAlpha)
+                CenterAlignedTopAppBar(
+                    title = {
+                        val headerAlpha = collapse.headerAlpha()
+                        if (headerAlpha > 0f) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                M3Artwork(
+                                    artwork = artwork,
+                                    placeholderIcon = placeholderIcon,
+                                    shape = MaterialTheme.shapes.small,
+                                    modifier = Modifier
+                                        .size(SonSizes.appBarArtwork)
+                                        .graphicsLayer { alpha = headerAlpha }
+                                )
+                                Spacer(modifier = Modifier.width(SonSpacing.small))
+                                Text(
+                                    text = title,
+                                    style = MaterialTheme.typography.titleMediumEmphasized,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
                             }
-                        },
-                        navigationIcon = {
-                            // 顶栏透明：图标颜色随折叠进度从 onArtwork 过渡到 onSurface。
-                            DetailTopBarAction(
-                                onClick = {
-                                    when {
-                                        reorderMode -> reorderMode = false
-                                        uiState.selectionMode -> onIntent(
-                                            SongCollectionIntent.ExitSelectionMode
-                                        )
-                                        else -> onNavigateBack()
-                                    }
-                                },
-                                icon = if (reorderMode || uiState.selectionMode) {
-                                    SymbolIconName.Close
-                                } else {
-                                    SymbolIconName.ArrowBack
-                                },
-                                contentDescription = when {
-                                    reorderMode -> stringResource(
-                                        R.string.collection_detail_exit_reorder_desc
+                        }
+                    },
+                    navigationIcon = {
+                        // 顶栏透明：图标颜色随折叠进度从 onArtwork 过渡到 onSurface。
+                        DetailTopBarAction(
+                            onClick = {
+                                when {
+                                    reorderMode -> reorderMode = false
+                                    uiState.selectionMode -> onIntent(
+                                        SongCollectionIntent.ExitSelectionMode
                                     )
-                                    uiState.selectionMode -> stringResource(
-                                        R.string.collection_detail_exit_selection_desc
-                                    )
-                                    else -> backContentDescription
-                                },
-                                contentColor = navigationIconColor,
-                                containerColor = iconContainerColor
-                            )
-                        },
-                        actions = {
-                            when {
-                                uiState.selectionMode -> {
-                                    val allSelected = songs.isNotEmpty() &&
-                                        uiState.selectedSongIds.size == songs.size
-                                    DetailTopBarAction(
-                                        onClick = {
-                                            onIntent(
-                                                if (allSelected) {
-                                                    SongCollectionIntent.ClearSelection
-                                                } else {
-                                                    SongCollectionIntent.SelectAll
-                                                }
-                                            )
-                                        },
-                                        icon = SymbolIconName.SelectAll,
-                                        contentDescription = stringResource(
+                                    else -> onNavigateBack()
+                                }
+                            },
+                            icon = if (reorderMode || uiState.selectionMode) {
+                                SymbolIconName.Close
+                            } else {
+                                SymbolIconName.ArrowBack
+                            },
+                            contentDescription = when {
+                                reorderMode -> stringResource(
+                                    R.string.collection_detail_exit_reorder_desc
+                                )
+                                uiState.selectionMode -> stringResource(
+                                    R.string.collection_detail_exit_selection_desc
+                                )
+                                else -> backContentDescription
+                            },
+                            contentColor = navigationIconColor,
+                            containerColor = iconContainerColor
+                        )
+                    },
+                    actions = {
+                        when {
+                            uiState.selectionMode -> {
+                                val allSelected = songs.isNotEmpty() &&
+                                    uiState.selectedSongIds.size == songs.size
+                                DetailTopBarAction(
+                                    onClick = {
+                                        onIntent(
                                             if (allSelected) {
-                                                R.string.songs_clear_selection_desc
+                                                SongCollectionIntent.ClearSelection
                                             } else {
-                                                R.string.songs_select_all_desc
+                                                SongCollectionIntent.SelectAll
                                             }
-                                        ),
-                                        contentColor = actionIconColor,
-                                        containerColor = iconContainerColor
-                                    )
-                                }
-                                reorderMode -> {
+                                        )
+                                    },
+                                    icon = SymbolIconName.SelectAll,
+                                    contentDescription = stringResource(
+                                        if (allSelected) {
+                                            R.string.songs_clear_selection_desc
+                                        } else {
+                                            R.string.songs_select_all_desc
+                                        }
+                                    ),
+                                    contentColor = actionIconColor,
+                                    containerColor = iconContainerColor
+                                )
+                            }
+                            reorderMode -> {
+                                DetailTopBarAction(
+                                    onClick = { reorderMode = false },
+                                    icon = SymbolIconName.Check,
+                                    contentDescription = stringResource(
+                                        R.string.collection_detail_reorder_done_desc
+                                    ),
+                                    contentColor = actionIconColor,
+                                    containerColor = iconContainerColor
+                                )
+                            }
+                            songs.isNotEmpty() -> {
+                                if (onExport != null) {
                                     DetailTopBarAction(
-                                        onClick = { reorderMode = false },
-                                        icon = SymbolIconName.Check,
+                                        onClick = onExport,
+                                        icon = SymbolIconName.IosShare,
                                         contentDescription = stringResource(
-                                            R.string.collection_detail_reorder_done_desc
+                                            R.string.playlist_detail_export_m3u
                                         ),
                                         contentColor = actionIconColor,
                                         containerColor = iconContainerColor
                                     )
                                 }
-                                songs.isNotEmpty() -> {
-                                    if (onExport != null) {
-                                        DetailTopBarAction(
-                                            onClick = onExport,
-                                            icon = SymbolIconName.IosShare,
-                                            contentDescription = stringResource(
-                                                R.string.playlist_detail_export_m3u
-                                            ),
-                                            contentColor = actionIconColor,
-                                            containerColor = iconContainerColor
-                                        )
-                                    }
+                                DetailTopBarAction(
+                                    onClick = {
+                                        onIntent(SongCollectionIntent.EnterSelectionMode)
+                                    },
+                                    icon = SymbolIconName.Checklist,
+                                    contentDescription = stringResource(R.string.songs_select_desc),
+                                    contentColor = actionIconColor,
+                                    containerColor = iconContainerColor
+                                )
+                                if (canReorder) {
                                     DetailTopBarAction(
-                                        onClick = {
-                                            onIntent(SongCollectionIntent.EnterSelectionMode)
-                                        },
-                                        icon = SymbolIconName.Checklist,
-                                        contentDescription = stringResource(R.string.songs_select_desc),
+                                        onClick = { reorderMode = true },
+                                        icon = SymbolIconName.SwapVert,
+                                        contentDescription = stringResource(
+                                            R.string.collection_detail_reorder_desc
+                                        ),
                                         contentColor = actionIconColor,
                                         containerColor = iconContainerColor
                                     )
-                                    if (canReorder) {
-                                        DetailTopBarAction(
-                                            onClick = { reorderMode = true },
-                                            icon = SymbolIconName.SwapVert,
-                                            contentDescription = stringResource(
-                                                R.string.collection_detail_reorder_desc
-                                            ),
-                                            contentColor = actionIconColor,
-                                            containerColor = iconContainerColor
-                                        )
-                                    }
                                 }
                             }
-                        },
-                        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                            containerColor = Color.Transparent,
-                            scrolledContainerColor = Color.Transparent,
-                            navigationIconContentColor = navigationIconColor,
-                            titleContentColor = navigationIconColor,
-                            actionIconContentColor = actionIconColor
-                        )
+                        }
+                    },
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                        containerColor = Color.Transparent,
+                        scrolledContainerColor = Color.Transparent,
+                        navigationIconContentColor = navigationIconColor,
+                        titleContentColor = navigationIconColor,
+                        actionIconContentColor = actionIconColor
                     )
-                }
-            ) { _ ->
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        // 安静面：旧的四段色面已删除，正文从 surface 开始。
-                        .background(MaterialTheme.colorScheme.surface)
+                )
+            }
+        ) { _ ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    // 安静面：旧的四段色面已删除，正文从 surface 开始。
+                    .background(MaterialTheme.colorScheme.surface)
+            ) {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        bottom = SonLayout.bottomBarClearance + bottomPadding +
+                            if (uiState.selectionMode) SelectionBarHeight else 0.dp
+                    )
                 ) {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(
-                            bottom = SonLayout.bottomBarClearance + bottomPadding +
-                                if (uiState.selectionMode) SelectionBarHeight else 0.dp
-                        )
-                    ) {
-                        if (uiState.isLoading) {
-                            item {
+                    if (uiState.isLoading) {
+                        item {
+                            // 歌单 / 专辑的曲目是本地数据，几乎瞬间就到：只有真等久了才画转圈，
+                            // 否则进页面会闪一帧（见 rememberLoadingIndicatorVisible）。
+                            if (rememberLoadingIndicatorVisible()) {
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -415,193 +418,199 @@ fun CollectionDetailScreen(
                                     LoadingIndicator()
                                 }
                             }
-                        } else {
-                            // hero 自己就是 list item：色面、cover、scrim、标题都在 item 内，
-                            // 随滚动离开；fold 只改变 cover 的尺寸/圆角/位置。
+                        }
+                    } else {
+                        // hero 自己就是 list item：色面、cover、scrim、标题都在 item 内，
+                        // 随滚动离开；fold 只改变 cover 的尺寸/圆角/位置。
+                        item {
+                            CollectionHeroFold(
+                                name = title,
+                                subtitle = subtitle,
+                                artwork = artwork,
+                                placeholderIcon = placeholderIcon,
+                                side = heroSide,
+                                collapse = collapse
+                            )
+                        }
+
+                        if (firstSong != null) {
                             item {
-                                CollectionHeroFold(
-                                    name = title,
-                                    subtitle = subtitle,
-                                    artwork = artwork,
-                                    placeholderIcon = placeholderIcon,
-                                    side = heroSide,
-                                    collapse = collapse
-                                )
-                            }
-
-                            if (firstSong != null) {
-                                item {
-                                    // 12dp 下沿 fade 只属于 CollectionDetail；共享的
-                                    // CollectionActions 保持中性，不把色面带到 MyMusic。
-                                    Box(modifier = Modifier.sonColorFieldDetailFade()) {
-                                        CollectionActions(
-                                            onPlayAll = {
-                                                onIntent(
-                                                    SongCollectionIntent.SongClick(firstSong)
-                                                )
-                                            },
-                                            onShuffle = {
-                                                onIntent(SongCollectionIntent.ShufflePlay)
-                                            },
-                                            onAddToPlaylist = {
-                                                onIntent(SongCollectionIntent.AddSongsToPlaylist)
-                                            },
-                                            containerColor = MaterialTheme.colorScheme
-                                                .secondaryContainer,
-                                            contentColor = MaterialTheme.colorScheme
-                                                .onSecondaryContainer
-                                        )
-                                    }
-                                }
-                            }
-
-                            headerExtra?.let { extra ->
-                                item {
-                                    Column(modifier = Modifier.fillMaxWidth()) {
-                                        extra()
-                                    }
-                                }
-                            }
-
-                            if (songs.isEmpty()) {
-                                if (emptyText != null) {
-                                    item {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(SonSpacing.extraLarge),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text(
-                                                text = emptyText,
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                // 12dp 下沿 fade 只属于 CollectionDetail；共享的
+                                // CollectionActions 保持中性，不把色面带到 MyMusic。
+                                Box(modifier = Modifier.sonColorFieldDetailFade()) {
+                                    CollectionActions(
+                                        onPlayAll = {
+                                            onIntent(
+                                                SongCollectionIntent.SongClick(firstSong)
                                             )
-                                        }
-                                    }
-                                }
-                            } else {
-                                itemsIndexed(
-                                    items = songs,
-                                    key = { _, song -> song.id }
-                                ) { index, song ->
-                                    val isDragging = index == draggingIndex
-                                    val dragShape = MaterialTheme.shapes.large
-                                    val draggedContainer by animateColorAsState(
-                                        targetValue = if (isDragging) {
-                                            MaterialTheme.colorScheme.surfaceContainerHigh
-                                        } else {
-                                            Color.Transparent
                                         },
-                                        animationSpec = MaterialTheme.motionScheme.fastEffectsSpec(),
-                                        label = "draggedContainer"
+                                        onShuffle = {
+                                            onIntent(SongCollectionIntent.ShufflePlay)
+                                        },
+                                        onAddToPlaylist = {
+                                            onIntent(SongCollectionIntent.AddSongsToPlaylist)
+                                        },
+                                        containerColor = MaterialTheme.colorScheme
+                                            .secondaryContainer,
+                                        contentColor = MaterialTheme.colorScheme
+                                            .onSecondaryContainer
                                     )
+                                }
+                            }
+                        }
+
+                        headerExtra?.let { extra ->
+                            item {
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    extra()
+                                }
+                            }
+                        }
+
+                        if (songs.isEmpty()) {
+                            if (emptyText != null) {
+                                item {
                                     Box(
                                         modifier = Modifier
-                                            .zIndex(if (isDragging) 1f else 0f)
-                                            .graphicsLayer {
-                                                translationY = if (isDragging) dragOffset else 0f
-                                                val dragScale = if (isDragging) 1.02f else 1f
-                                                scaleX = dragScale
-                                                scaleY = dragScale
-                                                shadowElevation =
-                                                    if (isDragging) 12.dp.toPx() else 0f
-                                                shape = dragShape
-                                            }
-                                            .background(draggedContainer, dragShape)
+                                            .fillMaxWidth()
+                                            .padding(SonSpacing.extraLarge),
+                                        contentAlignment = Alignment.Center
                                     ) {
-                                        CollectionSongRow(
-                                            song = song,
-                                            isCurrentSong = song.id == uiState.currentSongId,
-                                            selectionMode = uiState.selectionMode,
-                                            selected = song.id in uiState.selectedSongIds,
-                                            subtitle = songSubtitle(song),
-                                            onClick = {
-                                                onIntent(SongCollectionIntent.SongClick(song))
-                                            },
-                                            onToggleSelection = {
-                                                onIntent(
-                                                    SongCollectionIntent.ToggleSelection(song.id)
-                                                )
-                                            },
-                                            trailingContent = { songTrailing(song) },
-                                            moreMenuItems = songMoreMenu(song),
-                                            reorderMode = reorderMode,
-                                            dragHandle = if (canReorder && reorderMode) {
-                                                {
-                                                    ReorderHandle(
-                                                        onDragStart = {
-                                                            draggingIndex = index
-                                                            dragOffset = 0f
-                                                        },
-                                                        onDragEnd = {
-                                                            val steps = (dragOffset /
-                                                                reorderRowHeightPx).roundToInt()
-                                                            val target = (index + steps)
-                                                                .coerceIn(0, songs.lastIndex)
-                                                            if (target != index) {
-                                                                onMoveSong?.invoke(index, target)
-                                                            }
-                                                            draggingIndex = -1
-                                                            dragOffset = 0f
-                                                        },
-                                                        onDrag = { delta -> dragOffset += delta }
-                                                    )
-                                                }
-                                            } else {
-                                                null
-                                            }
+                                        Text(
+                                            text = emptyText,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
+                                }
+                            }
+                        } else {
+                            itemsIndexed(
+                                items = songs,
+                                key = { _, song -> song.id }
+                            ) { index, song ->
+                                val isDragging = index == draggingIndex
+                                val dragShape = MaterialTheme.shapes.large
+                                val draggedContainer by animateColorAsState(
+                                    targetValue = if (isDragging) {
+                                        MaterialTheme.colorScheme.surfaceContainerHigh
+                                    } else {
+                                        Color.Transparent
+                                    },
+                                    animationSpec = MaterialTheme.motionScheme.fastEffectsSpec(),
+                                    label = "draggedContainer"
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .zIndex(if (isDragging) 1f else 0f)
+                                        .graphicsLayer {
+                                            translationY = if (isDragging) dragOffset else 0f
+                                            val dragScale = if (isDragging) 1.02f else 1f
+                                            scaleX = dragScale
+                                            scaleY = dragScale
+                                            shadowElevation =
+                                                if (isDragging) 12.dp.toPx() else 0f
+                                            shape = dragShape
+                                        }
+                                        .background(draggedContainer, dragShape)
+                                ) {
+                                    CollectionSongRow(
+                                        song = song,
+                                        isCurrentSong = song.id == uiState.currentSongId,
+                                        selectionMode = uiState.selectionMode,
+                                        selected = song.id in uiState.selectedSongIds,
+                                        subtitle = songSubtitle(song),
+                                        onClick = {
+                                            onIntent(SongCollectionIntent.SongClick(song))
+                                        },
+                                        onToggleSelection = {
+                                            onIntent(
+                                                SongCollectionIntent.ToggleSelection(song.id)
+                                            )
+                                        },
+                                        trailingContent = { songTrailing(song) },
+                                        moreMenuItems = songMenuItems(
+                                            song = song,
+                                            queueActions = queueActions,
+                                            onToggleFavorite = onToggleFavorite,
+                                            // 页面特有的动作（歌单的「移出」）接在通用动作之后。
+                                            extra = songMoreMenu(song)
+                                        ),
+                                        reorderMode = reorderMode,
+                                        dragHandle = if (canReorder && reorderMode) {
+                                            {
+                                                ReorderHandle(
+                                                    onDragStart = {
+                                                        draggingIndex = index
+                                                        dragOffset = 0f
+                                                    },
+                                                    onDragEnd = {
+                                                        val steps = (dragOffset /
+                                                            reorderRowHeightPx).roundToInt()
+                                                        val target = (index + steps)
+                                                            .coerceIn(0, songs.lastIndex)
+                                                        if (target != index) {
+                                                            onMoveSong?.invoke(index, target)
+                                                        }
+                                                        draggingIndex = -1
+                                                        dragOffset = 0f
+                                                    },
+                                                    onDrag = { delta -> dragOffset += delta }
+                                                )
+                                            }
+                                        } else {
+                                            null
+                                        }
+                                    )
                                 }
                             }
                         }
                     }
+                }
 
-                    // 顶栏底色：在列表之上；cover 从列表滚过时由这层 surface 实底接管。
-                    // 旧的四段页面渐变已删除，这里只负责滚动态的顶栏底色。
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            // M3 TopAppBar 与 ShortNavigationBar 同为 64dp；沿用现有
-                            // layout token，不新增尺寸 token。
-                            .height(statusBarInset + SonSizes.shortNavigationBarHeight)
-                            // 在 layer 内读 collapse：滚动时只更新这一层的 alpha，
-                            // 不让整段 content（含 LazyColumn）重组。
-                            .graphicsLayer { alpha = collapse.containerAlpha() }
-                            .background(MaterialTheme.colorScheme.surface)
-                    ) { }
+                // 顶栏底色：在列表之上；cover 从列表滚过时由这层 surface 实底接管。
+                // 旧的四段页面渐变已删除，这里只负责滚动态的顶栏底色。
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        // M3 TopAppBar 与 ShortNavigationBar 同为 64dp；沿用现有
+                        // layout token，不新增尺寸 token。
+                        .height(statusBarInset + SonSizes.shortNavigationBarHeight)
+                        // 在 layer 内读 collapse：滚动时只更新这一层的 alpha，
+                        // 不让整段 content（含 LazyColumn）重组。
+                        .graphicsLayer { alpha = collapse.containerAlpha() }
+                        .background(MaterialTheme.colorScheme.surface)
+                ) { }
 
-                    if (uiState.selectionMode) {
-                        CollectionSelectionBar(
-                            selectedCount = uiState.selectedSongIds.size,
-                            onRemove = onRemoveSelected,
-                            removeLabel = removeLabel,
-                            onFavorite = {
-                                onIntent(SongCollectionIntent.BatchSetFavorite(true))
-                            },
-                            onUnfavorite = {
-                                onIntent(SongCollectionIntent.BatchSetFavorite(false))
-                            },
-                            modifier = Modifier.align(Alignment.BottomCenter)
-                        )
-                    }
+                if (uiState.selectionMode) {
+                    CollectionSelectionBar(
+                        selectedCount = uiState.selectedSongIds.size,
+                        onRemove = onRemoveSelected,
+                        removeLabel = removeLabel,
+                        onFavorite = {
+                            onIntent(SongCollectionIntent.BatchSetFavorite(true))
+                        },
+                        onUnfavorite = {
+                            onIntent(SongCollectionIntent.BatchSetFavorite(false))
+                        },
+                        modifier = Modifier.align(Alignment.BottomCenter)
+                    )
                 }
             }
-
-            // 「添加到歌单」弹窗盖在整页之上，外壳统一挂载，三个页面行为一致。
-            PlaylistPickerDialog(
-                visible = uiState.showAddToPlaylistDialog,
-                playlists = uiState.playlists,
-                onDismiss = { onIntent(SongCollectionIntent.DismissAddToPlaylistDialog) },
-                onPlaylistSelected = { playlistId ->
-                    onIntent(SongCollectionIntent.AddSongsToPlaylistTo(playlistId))
-                },
-                onCreateNewPlaylist = { name ->
-                    onIntent(SongCollectionIntent.CreatePlaylistAndAddSongs(name))
-                }
-            )
         }
+
+        // 「添加到歌单」弹窗盖在整页之上，外壳统一挂载，三个页面行为一致。
+        PlaylistPickerDialog(
+            visible = uiState.showAddToPlaylistDialog,
+            playlists = uiState.playlists,
+            onDismiss = { onIntent(SongCollectionIntent.DismissAddToPlaylistDialog) },
+            onPlaylistSelected = { playlistId ->
+                onIntent(SongCollectionIntent.AddSongsToPlaylistTo(playlistId))
+            },
+            onCreateNewPlaylist = { name ->
+                onIntent(SongCollectionIntent.CreatePlaylistAndAddSongs(name))
+            }
+        )
     }
 }
 

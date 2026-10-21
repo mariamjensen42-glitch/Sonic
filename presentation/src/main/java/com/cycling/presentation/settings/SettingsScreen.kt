@@ -2,7 +2,9 @@
 
 package com.cycling.presentation.settings
 
+import android.content.Context
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
@@ -36,11 +38,12 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.ListItem
-import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
@@ -48,12 +51,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -71,11 +76,14 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cycling.core.ui.components.M3SymbolIcon
 import com.cycling.core.ui.components.SymbolIconName
+import com.cycling.core.ui.components.HiResBadgeOverlay
 import com.cycling.core.ui.theme.SonLayout
 import com.cycling.core.ui.theme.SonSizes
 import com.cycling.core.ui.theme.SonSpacing
 import com.cycling.domain.model.AudioQuality
+import com.cycling.domain.model.CacheUsage
 import com.cycling.domain.model.ExcludedFolder
+import com.cycling.domain.model.HiResBadge
 import com.cycling.domain.model.LibraryStats
 import com.cycling.domain.model.LyricsProvider
 import com.cycling.domain.model.ScanResult
@@ -84,9 +92,16 @@ import com.cycling.domain.repository.SettingsRepository.Companion.MAX_PLAYBACK_S
 import com.cycling.domain.repository.SettingsRepository.Companion.MIN_PLAYBACK_SPEED
 import com.cycling.presentation.components.PieChart
 import com.cycling.presentation.components.PieChartData
+import com.cycling.presentation.components.SonLoadingState
+import com.cycling.presentation.onlinesources.OnlineSourcesContent
 import com.cycling.presentation.permissions.MediaLibraryPermission
 import com.cycling.presentation.R
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 import java.util.Locale
+import com.cycling.presentation.equalizer.EqualizerContent
 
 private data class QualityStatItemUi(
     val quality: AudioQuality,
@@ -150,6 +165,25 @@ fun SettingsScreen(
         uri?.let { viewModel.handleIntent(SettingsIntent.ImportM3u(it.toString())) }
     }
 
+    // 选中后先落盘再存路径：SAF 只给一次临时授权，直接存 URI 的话重启就只剩一串打不开的地址。
+    val badgeScope = rememberCoroutineScope()
+    val badgeImageLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            badgeScope.launch {
+                val path = withContext(Dispatchers.IO) { importHiResBadgeImage(context, uri) }
+                if (path != null) {
+                    viewModel.handleIntent(SettingsIntent.SetHiResBadgeCustomUri(path))
+                    // 选图之后立刻切到自定义档：只存图不切换的话，用户会觉得"点了没反应"。
+                    viewModel.handleIntent(SettingsIntent.SetHiResBadge(HiResBadge.CUSTOM))
+                } else {
+                    onShowToast(context.getString(R.string.settings_hi_res_badge_pick_failed))
+                }
+            }
+        }
+    }
+
     LaunchedEffect(Unit) {
         viewModel.checkAndRequestPermission(MediaLibraryPermission.isGranted(context))
     }
@@ -173,6 +207,13 @@ fun SettingsScreen(
         }
     }
 
+    // 二级设置页（扫描 / 排除目录 / API Key / 统计）是这条路由内部的目的地，不是导航路由：
+    // 系统返回不拦的话会穿透到 NavDisplay，把整条设置路由弹掉，直接落回首页。
+    // 只在二级页接管；主设置页的返回仍交给导航（退出到首页）。
+    BackHandler(enabled = uiState.currentDestination != SettingsDestination.MAIN) {
+        viewModel.handleIntent(SettingsIntent.NavigateBack)
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -184,6 +225,8 @@ fun SettingsScreen(
                             SettingsDestination.EXCLUDE_FOLDERS -> stringResource(R.string.settings_exclude_menu)
                             SettingsDestination.API_KEY_CONFIG -> stringResource(R.string.settings_api_config_menu)
                             SettingsDestination.LIBRARY_STATS -> stringResource(R.string.settings_library_stats_menu)
+                            SettingsDestination.EQUALIZER -> stringResource(R.string.settings_equalizer_menu)
+                            SettingsDestination.ONLINE_SOURCES -> stringResource(R.string.settings_online_sources_menu)
                         },
                         style = MaterialTheme.typography.titleLarge
                     )
@@ -229,6 +272,8 @@ fun SettingsScreen(
                 rememberPlaybackPosition = uiState.rememberPlaybackPosition,
                 openPlayerOnPlay = uiState.openPlayerOnPlay,
                 autoContinueEnabled = uiState.autoContinueEnabled,
+                hiResBadge = uiState.hiResBadge,
+                hiResBadgeCustomUri = uiState.hiResBadgeCustomUri,
                 onToggleOnlineLyrics = { viewModel.handleIntent(SettingsIntent.SetOnlineLyricsEnabled(it)) },
                 onMoveLyricsProvider = { provider, offset ->
                     viewModel.handleIntent(SettingsIntent.MoveLyricsProvider(provider, offset))
@@ -246,6 +291,16 @@ fun SettingsScreen(
                 onSetAutoContinue = {
                     viewModel.handleIntent(SettingsIntent.SetAutoContinueEnabled(it))
                 },
+                onSetHiResBadge = { viewModel.handleIntent(SettingsIntent.SetHiResBadge(it)) },
+                onClearHiResBadgeCustomUri = {
+                    viewModel.handleIntent(SettingsIntent.SetHiResBadgeCustomUri(null))
+                    deleteHiResBadgeImage(context, uiState.hiResBadgeCustomUri)
+                    // 清掉图片后还停在自定义档就只剩一块空白，退回不显示。
+                    if (uiState.hiResBadge == HiResBadge.CUSTOM) {
+                        viewModel.handleIntent(SettingsIntent.SetHiResBadge(HiResBadge.OFF))
+                    }
+                },
+                onPickHiResBadgeImage = { badgeImageLauncher.launch(arrayOf("image/*")) },
                 sleepTimerRemainingMs = uiState.sleepTimerRemainingMs,
                 onSetSleepTimer = { viewModel.handleIntent(SettingsIntent.SetSleepTimer(it)) },
                 onCancelSleepTimer = { viewModel.handleIntent(SettingsIntent.CancelSleepTimer) },
@@ -253,6 +308,8 @@ fun SettingsScreen(
                 onNavigateToExcludeFolders = { viewModel.handleIntent(SettingsIntent.NavigateTo(SettingsDestination.EXCLUDE_FOLDERS)) },
                 onNavigateToApiKeyConfig = { viewModel.handleIntent(SettingsIntent.NavigateTo(SettingsDestination.API_KEY_CONFIG)) },
                 onNavigateToLibraryStats = { viewModel.handleIntent(SettingsIntent.NavigateTo(SettingsDestination.LIBRARY_STATS)) },
+                onNavigateToEqualizer = { viewModel.handleIntent(SettingsIntent.NavigateTo(SettingsDestination.EQUALIZER)) },
+                onNavigateToOnlineSources = { viewModel.handleIntent(SettingsIntent.NavigateTo(SettingsDestination.ONLINE_SOURCES)) },
                 onExportBackup = {
                     backupExportLauncher.launch("sonic-backup-${System.currentTimeMillis()}.json")
                 },
@@ -267,6 +324,19 @@ fun SettingsScreen(
                     )
                 },
                 isTransferring = uiState.isTransferring,
+                cacheState = CachePanelState(
+                    usage = uiState.cacheUsage,
+                    limitBytes = uiState.cacheLimitBytes,
+                    autoCleanEnabled = uiState.autoCleanCacheEnabled
+                ),
+                cacheActions = CachePanelActions(
+                    onSetLimit = { viewModel.handleIntent(SettingsIntent.SetCacheLimit(it)) },
+                    onSetAutoClean = { viewModel.handleIntent(SettingsIntent.SetAutoCleanCache(it)) },
+                    onClearDisk = { viewModel.handleIntent(SettingsIntent.ClearDiskCache(it)) },
+                    onClearLyrics = { viewModel.handleIntent(SettingsIntent.ClearLyricsCache) },
+                    onClearAiInfo = { viewModel.handleIntent(SettingsIntent.ClearAiInfoCache) },
+                    onClearAll = { viewModel.handleIntent(SettingsIntent.ClearAllCaches) }
+                ),
                 bottomPadding = bottomPadding,
                 modifier = Modifier.padding(paddingValues)
             )
@@ -294,6 +364,14 @@ fun SettingsScreen(
             SettingsDestination.LIBRARY_STATS -> LibraryStatsContent(
                 stats = uiState.libraryStats,
                 isLoading = uiState.isLoadingStats,
+                modifier = Modifier.padding(paddingValues)
+            )
+            SettingsDestination.EQUALIZER -> EqualizerContent(
+                modifier = Modifier.padding(paddingValues)
+            )
+            SettingsDestination.ONLINE_SOURCES -> OnlineSourcesContent(
+                onShowToast = onShowToast,
+                bottomPadding = bottomPadding,
                 modifier = Modifier.padding(paddingValues)
             )
         }
@@ -375,22 +453,31 @@ private fun SettingsNavigationRow(
     }
 }
 
-/** 开关型设置项：点击整行或开关本身都能切换。 */
+/** 开关型设置项：点击整行或开关本身都能切换；[enabled] 为 false 时整行只读。 */
 @Composable
 private fun SettingsSwitchRow(
     icon: SymbolIconName,
     title: String,
     supporting: String? = null,
     checked: Boolean,
+    enabled: Boolean = true,
     onCheckedChange: (Boolean) -> Unit
 ) {
     SettingsRow(
         icon = icon,
         title = title,
         supporting = supporting,
-        onClick = { onCheckedChange(!checked) }
+        onClick = if (enabled) {
+            { onCheckedChange(!checked) }
+        } else {
+            null
+        }
     ) {
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Switch(
+            checked = checked && enabled,
+            onCheckedChange = if (enabled) onCheckedChange else null,
+            enabled = enabled
+        )
     }
 }
 
@@ -461,6 +548,8 @@ private fun MainSettingsContent(
     rememberPlaybackPosition: Boolean,
     openPlayerOnPlay: Boolean,
     autoContinueEnabled: Boolean,
+    hiResBadge: HiResBadge,
+    hiResBadgeCustomUri: String?,
     sleepTimerRemainingMs: Long?,
     onToggleOnlineLyrics: (Boolean) -> Unit,
     onMoveLyricsProvider: (LyricsProvider, Int) -> Unit,
@@ -471,22 +560,31 @@ private fun MainSettingsContent(
     onSetRememberPlaybackPosition: (Boolean) -> Unit,
     onSetOpenPlayerOnPlay: (Boolean) -> Unit,
     onSetAutoContinue: (Boolean) -> Unit,
+    onSetHiResBadge: (HiResBadge) -> Unit,
+    onClearHiResBadgeCustomUri: () -> Unit,
+    onPickHiResBadgeImage: () -> Unit,
     onSetSleepTimer: (Int) -> Unit,
     onCancelSleepTimer: () -> Unit,
     onNavigateToScan: () -> Unit,
     onNavigateToExcludeFolders: () -> Unit,
     onNavigateToApiKeyConfig: () -> Unit,
     onNavigateToLibraryStats: () -> Unit,
+    onNavigateToEqualizer: () -> Unit,
+    onNavigateToOnlineSources: () -> Unit,
     onExportBackup: () -> Unit,
     onImportBackup: () -> Unit,
     onImportM3u: () -> Unit,
     isTransferring: Boolean,
+    cacheState: CachePanelState,
+    cacheActions: CachePanelActions,
     bottomPadding: Dp = 0.dp,
     modifier: Modifier = Modifier
 ) {
     var showSpeedDialog by remember { mutableStateOf(false) }
     var showSleepTimerDialog by remember { mutableStateOf(false) }
     var showFadeDialog by remember { mutableStateOf(false) }
+    var showCacheSheet by remember { mutableStateOf(false) }
+    var showBadgeDialog by remember { mutableStateOf(false) }
     Column(modifier = modifier.verticalScroll(rememberScrollState())) {
         SettingsHeader(
             title = stringResource(R.string.settings_app_name),
@@ -544,6 +642,13 @@ private fun MainSettingsContent(
                 .fillMaxWidth()
                 .padding(horizontal = SonLayout.screenMargin)
         ) {
+            SettingsNavigationRow(
+                icon = SymbolIconName.GraphicEq,
+                title = stringResource(R.string.settings_equalizer_menu),
+                supporting = stringResource(R.string.settings_equalizer_menu_subtitle),
+                onClick = onNavigateToEqualizer
+            )
+            HorizontalDivider(modifier = Modifier.padding(start = listDividerIndent))
             SettingsNavigationRow(
                 icon = SymbolIconName.Speed,
                 title = stringResource(R.string.settings_playback_speed),
@@ -605,6 +710,37 @@ private fun MainSettingsContent(
                 supporting = stringResource(R.string.settings_auto_continue_subtitle),
                 checked = autoContinueEnabled,
                 onCheckedChange = onSetAutoContinue
+            )
+            HorizontalDivider(modifier = Modifier.padding(start = listDividerIndent))
+            SettingsNavigationRow(
+                icon = SymbolIconName.HighQuality,
+                title = stringResource(R.string.settings_hi_res_badge),
+                supporting = hiResBadgeLabel(hiResBadge),
+                onClick = { showBadgeDialog = true }
+            )
+        }
+
+        // ── 在线音乐 ──
+        Text(
+            text = stringResource(R.string.settings_section_online),
+            modifier = Modifier.padding(
+                start = SonSizes.listItemHorizontalPadding,
+                top = SonSpacing.large,
+                bottom = SonSpacing.small
+            ),
+            style = MaterialTheme.typography.titleSmallEmphasized,
+            color = MaterialTheme.colorScheme.primary
+        )
+        OutlinedCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = SonLayout.screenMargin)
+        ) {
+            SettingsNavigationRow(
+                icon = SymbolIconName.GraphicEq,
+                title = stringResource(R.string.settings_online_sources_menu),
+                supporting = stringResource(R.string.settings_online_sources_menu_subtitle),
+                onClick = onNavigateToOnlineSources
             )
         }
 
@@ -710,6 +846,32 @@ private fun MainSettingsContent(
             )
         }
 
+        // ── 存储 ──
+        Text(
+            text = stringResource(R.string.settings_section_storage),
+            modifier = Modifier.padding(
+                start = SonSizes.listItemHorizontalPadding,
+                top = SonSpacing.large,
+                bottom = SonSpacing.small
+            ),
+            style = MaterialTheme.typography.titleSmallEmphasized,
+            color = MaterialTheme.colorScheme.primary
+        )
+        OutlinedCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = SonLayout.screenMargin)
+        ) {
+            SettingsNavigationRow(
+                icon = SymbolIconName.Delete,
+                title = stringResource(R.string.settings_cache_menu),
+                supporting = cacheState.usage?.let {
+                    stringResource(R.string.settings_cache_usage, formatCacheSize(it.diskBytes))
+                } ?: stringResource(R.string.settings_cache_calculating),
+                onClick = { showCacheSheet = true }
+            )
+        }
+
         // ── 关于 ──
         Text(
             text = stringResource(R.string.settings_section_about),
@@ -762,6 +924,488 @@ private fun MainSettingsContent(
             onDismiss = { showFadeDialog = false }
         )
     }
+
+    if (showCacheSheet) {
+        CacheManagerSheet(
+            state = cacheState,
+            actions = cacheActions,
+            onDismiss = { showCacheSheet = false }
+        )
+    }
+
+    if (showBadgeDialog) {
+        HiResBadgeDialog(
+            current = hiResBadge,
+            customUri = hiResBadgeCustomUri,
+            onSelect = onSetHiResBadge,
+            onPickImage = onPickHiResBadgeImage,
+            onClearImage = onClearHiResBadgeCustomUri,
+            onDismiss = { showBadgeDialog = false }
+        )
+    }
+}
+
+// ════════════════════════════════════════════════════════════════
+// 外观：封面小金标 / 歌词界面
+// ════════════════════════════════════════════════════════════════
+
+/** 预览列的固定宽度（两张缩略图）：让每一种标的左边缘对齐，标签文字不跟着标牌长短跳动。 */
+private val BadgePreviewWidth = SonSizes.thumbnail * 2
+
+@Composable
+private fun hiResBadgeLabel(badge: HiResBadge): String = stringResource(
+    when (badge) {
+        HiResBadge.OFF -> R.string.settings_hi_res_badge_off
+        HiResBadge.HI_RES -> R.string.settings_hi_res_badge_hi_res
+        HiResBadge.HI_RES_WIRELESS -> R.string.settings_hi_res_badge_wireless
+        HiResBadge.GOLD_SEAL -> R.string.settings_hi_res_badge_gold
+        HiResBadge.CUSTOM -> R.string.settings_hi_res_badge_custom
+    }
+)
+
+/**
+ * 小金标选择器。
+ *
+ * 每一项左边就是它贴在封面上的真实样子 —— 这类纯装饰选项靠文字描述挑不出来。
+ */
+@Composable
+private fun HiResBadgeDialog(
+    current: HiResBadge,
+    customUri: String?,
+    onSelect: (HiResBadge) -> Unit,
+    onPickImage: () -> Unit,
+    onClearImage: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.settings_hi_res_badge_dialog_title)) },
+        text = {
+            Column {
+                HiResBadgeOption(
+                    badge = HiResBadge.OFF,
+                    labelRes = R.string.settings_hi_res_badge_off,
+                    selected = current == HiResBadge.OFF,
+                    customUri = customUri,
+                    onClick = { onSelect(HiResBadge.OFF) }
+                )
+                HiResBadgeOption(
+                    badge = HiResBadge.HI_RES,
+                    labelRes = R.string.settings_hi_res_badge_hi_res,
+                    selected = current == HiResBadge.HI_RES,
+                    customUri = customUri,
+                    onClick = { onSelect(HiResBadge.HI_RES) }
+                )
+                HiResBadgeOption(
+                    badge = HiResBadge.HI_RES_WIRELESS,
+                    labelRes = R.string.settings_hi_res_badge_wireless,
+                    selected = current == HiResBadge.HI_RES_WIRELESS,
+                    customUri = customUri,
+                    onClick = { onSelect(HiResBadge.HI_RES_WIRELESS) }
+                )
+                HiResBadgeOption(
+                    badge = HiResBadge.GOLD_SEAL,
+                    labelRes = R.string.settings_hi_res_badge_gold,
+                    selected = current == HiResBadge.GOLD_SEAL,
+                    customUri = customUri,
+                    onClick = { onSelect(HiResBadge.GOLD_SEAL) }
+                )
+                HiResBadgeOption(
+                    badge = HiResBadge.CUSTOM,
+                    labelRes = R.string.settings_hi_res_badge_custom,
+                    selected = current == HiResBadge.CUSTOM,
+                    customUri = customUri,
+                    onClick = { onSelect(HiResBadge.CUSTOM) }
+                )
+
+                Row(horizontalArrangement = Arrangement.spacedBy(SonSpacing.small)) {
+                    TextButton(onClick = onPickImage) {
+                        Text(stringResource(R.string.settings_hi_res_badge_pick))
+                    }
+                    if (customUri != null) {
+                        TextButton(onClick = onClearImage) {
+                            Text(stringResource(R.string.settings_hi_res_badge_clear))
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.settings_dialog_done))
+            }
+        }
+    )
+}
+
+@Composable
+private fun HiResBadgeOption(
+    badge: HiResBadge,
+    @StringRes labelRes: Int,
+    selected: Boolean,
+    customUri: String?,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = SonSpacing.mediumSmall),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier.width(BadgePreviewWidth),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            if (badge == HiResBadge.OFF) {
+                M3SymbolIcon(
+                    name = SymbolIconName.Close,
+                    filled = false,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                HiResBadgeOverlay(badge = badge, customUri = customUri)
+            }
+        }
+        Spacer(modifier = Modifier.width(SonSpacing.medium))
+        Text(
+            text = stringResource(labelRes),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+        RadioButton(selected = selected, onClick = onClick)
+    }
+}
+
+
+/** 缓存面板要看的值。 */
+private data class CachePanelState(
+    val usage: CacheUsage?,
+    val limitBytes: Long,
+    val autoCleanEnabled: Boolean
+)
+
+/** 缓存面板能触发的动作。 */
+private data class CachePanelActions(
+    val onSetLimit: (Long) -> Unit,
+    val onSetAutoClean: (Boolean) -> Unit,
+    val onClearDisk: (String) -> Unit,
+    val onClearLyrics: () -> Unit,
+    val onClearAiInfo: () -> Unit,
+    val onClearAll: () -> Unit
+)
+
+/** 待确认的清理目标。清理是破坏性的，先问一句。 */
+private sealed interface CacheClearTarget {
+    data class Disk(val id: String, val label: String) : CacheClearTarget
+    data object Lyrics : CacheClearTarget
+    data object AiInfo : CacheClearTarget
+    data object All : CacheClearTarget
+}
+
+/**
+ * 缓存管理面板。上半是可调的上限与自动清理，下半是各类缓存的实际占用。
+ *
+ * 只列会重新长出来的东西。自定义封面、音源脚本属于用户数据，这里连用量都不显示 ——
+ * 显示了就等于暗示"可以清"。
+ */
+@Composable
+private fun CacheManagerSheet(
+    state: CachePanelState,
+    actions: CachePanelActions,
+    onDismiss: () -> Unit
+) {
+    var pendingClear by remember { mutableStateOf<CacheClearTarget?>(null) }
+    var showLimitDialog by remember { mutableStateOf(false) }
+    val usage = state.usage
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = MaterialTheme.colorScheme.surfaceContainer
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = SonSpacing.medium)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = stringResource(R.string.settings_cache_title),
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                    Text(
+                        text = usage?.let {
+                            stringResource(R.string.settings_cache_usage, formatCacheSize(it.diskBytes))
+                        } ?: stringResource(R.string.settings_cache_calculating),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                TextButton(
+                    onClick = { pendingClear = CacheClearTarget.All },
+                    enabled = usage != null
+                ) {
+                    Text(stringResource(R.string.settings_cache_clear_all))
+                }
+            }
+
+            Spacer(modifier = Modifier.height(SonSpacing.small))
+
+            CacheRow(
+                label = stringResource(R.string.settings_cache_limit),
+                supporting = if (state.autoCleanEnabled) {
+                    formatCacheSize(state.limitBytes)
+                } else {
+                    stringResource(R.string.settings_cache_limit_off)
+                },
+                onClick = { showLimitDialog = true },
+                trailing = {
+                    M3SymbolIcon(
+                        name = SymbolIconName.KeyboardArrowRight,
+                        filled = true,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            )
+            HorizontalDivider(modifier = Modifier.padding(start = listDividerIndent))
+            CacheRow(
+                label = stringResource(R.string.settings_cache_auto_clean),
+                supporting = stringResource(R.string.settings_cache_auto_clean_desc),
+                onClick = { actions.onSetAutoClean(!state.autoCleanEnabled) },
+                trailing = {
+                    Switch(
+                        checked = state.autoCleanEnabled,
+                        onCheckedChange = actions.onSetAutoClean
+                    )
+                }
+            )
+
+            if (usage != null && (usage.diskCaches.isNotEmpty() || usage.lyricsEntries > 0 ||
+                    usage.aiInfoEntries > 0)
+            ) {
+                HorizontalDivider(modifier = Modifier.padding(start = listDividerIndent))
+                usage.diskCaches.forEach { cache ->
+                    val label = diskCacheLabel(cache.id)
+                    CacheRow(
+                        label = label,
+                        supporting = formatCacheSize(cache.bytes),
+                        onClick = null,
+                        trailing = {
+                            IconButton(onClick = {
+                                pendingClear = CacheClearTarget.Disk(cache.id, label)
+                            }) {
+                                M3SymbolIcon(
+                                    name = SymbolIconName.Delete,
+                                    filled = true,
+                                    contentDescription = stringResource(R.string.settings_cache_clear_desc)
+                                )
+                            }
+                        }
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(start = listDividerIndent))
+                }
+                CacheRow(
+                    label = stringResource(R.string.settings_cache_lyrics),
+                    supporting = stringResource(R.string.settings_cache_entries, usage.lyricsEntries),
+                    onClick = null,
+                    trailing = {
+                        IconButton(onClick = { pendingClear = CacheClearTarget.Lyrics }) {
+                            M3SymbolIcon(
+                                name = SymbolIconName.Delete,
+                                filled = true,
+                                contentDescription = stringResource(R.string.settings_cache_clear_desc)
+                            )
+                        }
+                    }
+                )
+                HorizontalDivider(modifier = Modifier.padding(start = listDividerIndent))
+                CacheRow(
+                    label = stringResource(R.string.settings_cache_ai),
+                    supporting = stringResource(R.string.settings_cache_entries, usage.aiInfoEntries),
+                    onClick = null,
+                    trailing = {
+                        IconButton(onClick = { pendingClear = CacheClearTarget.AiInfo }) {
+                            M3SymbolIcon(
+                                name = SymbolIconName.Delete,
+                                filled = true,
+                                contentDescription = stringResource(R.string.settings_cache_clear_desc)
+                            )
+                        }
+                    }
+                )
+            }
+
+            Text(
+                text = stringResource(R.string.settings_cache_hint),
+                modifier = Modifier.padding(top = SonSpacing.medium),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(SonSpacing.medium))
+        }
+    }
+
+    if (showLimitDialog) {
+        CacheLimitDialog(
+            currentBytes = state.limitBytes,
+            onSelect = actions.onSetLimit,
+            onDismiss = { showLimitDialog = false }
+        )
+    }
+
+    pendingClear?.let { target ->
+        CacheConfirmDialog(
+            target = target,
+            onConfirm = {
+                when (target) {
+                    is CacheClearTarget.Disk -> actions.onClearDisk(target.id)
+                    CacheClearTarget.Lyrics -> actions.onClearLyrics()
+                    CacheClearTarget.AiInfo -> actions.onClearAiInfo()
+                    CacheClearTarget.All -> actions.onClearAll()
+                }
+            },
+            onDismiss = { pendingClear = null }
+        )
+    }
+}
+
+/** 上限档位，MB。 */
+private val CacheLimitPresetsMb = listOf(128, 256, 512, 1024, 2048)
+
+@Composable
+private fun CacheLimitDialog(currentBytes: Long, onSelect: (Long) -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.settings_cache_limit)) },
+        text = {
+            Column {
+                Text(
+                    text = stringResource(R.string.settings_cache_limit_desc),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(SonSpacing.small))
+                CacheLimitPresetsMb.forEach { mb ->
+                    val bytes = mb.toLong() * 1024 * 1024
+                    val selected = bytes == currentBytes
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(MaterialTheme.shapes.small)
+                            .clickable {
+                                onSelect(bytes)
+                                onDismiss()
+                            }
+                            .padding(vertical = SonSpacing.mediumSmall),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = stringResource(R.string.settings_cache_limit_mb, mb),
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        if (selected) {
+                            M3SymbolIcon(
+                                name = SymbolIconName.Check,
+                                filled = true,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.settings_cache_cancel))
+            }
+        }
+    )
+}
+
+@Composable
+private fun CacheConfirmDialog(
+    target: CacheClearTarget,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val description = when (target) {
+        is CacheClearTarget.Disk ->
+            stringResource(R.string.settings_cache_confirm_disk, target.label)
+        CacheClearTarget.Lyrics -> stringResource(R.string.settings_cache_confirm_lyrics)
+        CacheClearTarget.AiInfo -> stringResource(R.string.settings_cache_confirm_ai)
+        CacheClearTarget.All -> stringResource(R.string.settings_cache_confirm_all)
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.settings_cache_confirm_title)) },
+        text = { Text(description) },
+        confirmButton = {
+            TextButton(onClick = {
+                onConfirm()
+                onDismiss()
+            }) {
+                Text(stringResource(R.string.settings_cache_confirm_action))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.settings_cache_cancel))
+            }
+        }
+    )
+}
+
+@Composable
+private fun CacheRow(
+    label: String,
+    supporting: String,
+    onClick: (() -> Unit)?,
+    trailing: @Composable () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(vertical = SonSpacing.small),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = label, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                text = supporting,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        trailing()
+    }
+}
+
+/** 目录名由各自的库决定（Coil / OkHttp），认识的给中文名，其余原样显示。 */
+@Composable
+private fun diskCacheLabel(id: String): String = when (id) {
+    "image_cache" -> stringResource(R.string.settings_cache_images)
+    "http_cache" -> stringResource(R.string.settings_cache_http)
+    else -> id
+}
+
+private fun formatCacheSize(size: Long): String = when {
+    size >= 1024 * 1024 * 1024 ->
+        String.format(Locale.getDefault(), "%.2f GB", size.toDouble() / (1024 * 1024 * 1024))
+    size >= 1024 * 1024 ->
+        String.format(Locale.getDefault(), "%.2f MB", size.toDouble() / (1024 * 1024))
+    size >= 1024 -> String.format(Locale.getDefault(), "%.2f KB", size.toDouble() / 1024)
+    else -> "$size B"
 }
 
 /** 睡眠定时器提供的时长，分钟。 */
@@ -1003,7 +1647,10 @@ private fun LyricsProviderRow(
 
 @StringRes
 private fun LyricsProvider.labelRes(): Int = when (this) {
+    LyricsProvider.AMLL -> R.string.settings_lyrics_provider_amll
     LyricsProvider.NETEASE -> R.string.settings_lyrics_provider_netease
+    LyricsProvider.QQ_MUSIC -> R.string.settings_lyrics_provider_qq_music
+    LyricsProvider.KUGOU -> R.string.settings_lyrics_provider_kugou
     LyricsProvider.LRCLIB -> R.string.settings_lyrics_provider_lrclib
 }
 
@@ -1217,12 +1864,8 @@ private fun ExcludeFoldersContent(
     modifier: Modifier = Modifier
 ) {
     when {
-        isLoading -> Box(
-            modifier = modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            LoadingIndicator()
-        }
+        // 排除列表存在 DataStore 里，读一次是毫秒级：延迟现身，别闪一帧转圈。
+        isLoading -> SonLoadingState(modifier = modifier)
         folders.isEmpty() -> EmptyStateContent(
             icon = SymbolIconName.Folder,
             title = stringResource(R.string.settings_empty_exclude_title),
@@ -1424,12 +2067,8 @@ private fun LibraryStatsContent(
     modifier: Modifier = Modifier
 ) {
     when {
-        isLoading -> Box(
-            modifier = modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            LoadingIndicator()
-        }
+        // 统计是本地 Room 聚合（毫秒级）：延迟现身，避免一闪而过。
+        isLoading -> SonLoadingState(modifier = modifier)
         stats != null && stats.totalSongs > 0 -> Column(
             modifier = modifier
                 .fillMaxSize()
@@ -1618,6 +2257,31 @@ private fun StatItemRow(item: QualityStatItemUi) {
 // ════════════════════════════════════════════════════════════════
 // 工具函数
 // ════════════════════════════════════════════════════════════════
+
+/** 小金标图片的私有目录名。放在 files/ 下，随应用卸载一起清掉。 */
+private const val HiResBadgeDir = "hi_res_badge"
+
+/**
+ * 把用户选的图片拷进应用私有目录，返回 `file://` URI（存的就是它）。
+ *
+ * 不存 SAF 的 content:// ：那是临时授权，系统随时可以收回，用户重启后只会看到一块空白。
+ * 旧图一并删掉，否则换几次就在私有目录里堆几张几 MB 的图。
+ */
+private fun importHiResBadgeImage(context: Context, uri: Uri): String? = runCatching {
+    val dir = File(context.filesDir, HiResBadgeDir).apply { mkdirs() }
+    val target = File(dir, "badge_${System.currentTimeMillis()}")
+    val input = context.contentResolver.openInputStream(uri) ?: return@runCatching null
+    input.use { source -> target.outputStream().use { sink -> source.copyTo(sink) } }
+    dir.listFiles()?.forEach { if (it != target) it.delete() }
+    Uri.fromFile(target).toString()
+}.getOrNull()
+
+/** 删除小金标图片；只认自己目录下的路径，避免一条脏数据把别处的文件删掉。 */
+private fun deleteHiResBadgeImage(context: Context, uriString: String?) {
+    val path = uriString?.let { Uri.parse(it).path } ?: return
+    if (!path.startsWith(File(context.filesDir, HiResBadgeDir).path)) return
+    runCatching { File(path).delete() }
+}
 
 private fun getFolderPathFromUri(uri: Uri): String? {
     val path = uri.path ?: return null

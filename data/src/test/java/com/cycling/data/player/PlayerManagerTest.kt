@@ -73,6 +73,9 @@ class PlayerManagerTest {
             settingsRepository = settingsRepository,
             getContinuationSongs = mockk(relaxed = true),
             playbackServiceController = serviceController,
+            // 听歌统计的写入不在队列语义的测试范围内；记录器本身有自己的单元测试。
+            playEventRecorder = mockk(relaxed = true),
+            resolveOnlinePlaySource = mockk(relaxed = true),
             dispatcher = dispatcherRule.testDispatcher
         )
     }
