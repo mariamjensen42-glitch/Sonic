@@ -1,13 +1,23 @@
-name: Build and Release APK
+name: Release APK
+
+# 唯一的发布通道：打 v* 标签即构建 release APK 并建 Release。
+# 原 android.yml 与本文件都在 tag 上触发，各构建一遍 APK、各建一次 Release，已合并到这里。
 
 on:
   push:
-    tags:
-      - 'v*'
+    tags: ["v*"]
   workflow_dispatch:
 
+# softprops/action-gh-release 需要写权限；缺这一行会 403 Resource not accessible by integration
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  build:
+  release:
     runs-on: ubuntu-latest
 
     steps:
@@ -22,19 +32,9 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Generate CI keystore
-        run: |
-          keytool -genkey -v -keystore app/ci-release.keystore \
-            -alias ci -keyalg RSA -keysize 2048 -validity 10000 \
-            -storepass ci123456 -keypass ci123456 \
-            -dname "CN=Sonic CI, OU=CI, O=Sonic, L=Unknown, ST=Unknown, C=CN"
-
+      # 签名直接用仓库根的 key.properties + sonic-release.keystore（路径相对 :app 解析）。
+      # 不再现生成临时 keystore：签名一换，装了旧版的用户就无法覆盖安装。
       - name: Build release APK
-        env:
-          SONIC_STORE_FILE: ci-release.keystore
-          SONIC_STORE_PASSWORD: ci123456
-          SONIC_KEY_ALIAS: ci
-          SONIC_KEY_PASSWORD: ci123456
         run: ./gradlew :app:assembleRelease
 
       - name: Upload APK
@@ -43,9 +43,20 @@ jobs:
           name: sonic-release-apk
           path: app/build/outputs/apk/release/app-release.apk
 
+      - name: Extract changelog
+        if: startsWith(github.ref, 'refs/tags/')
+        id: changelog
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          CONTENT=$(sed -n "/^## \[$VERSION\]/,/^## \[/p" CHANGELOG.md | sed '$d')
+          echo "content<<EOF" >> $GITHUB_OUTPUT
+          echo "$CONTENT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
+          name: Sonic-${{ github.ref_name }}
+          body: ${{ steps.changelog.outputs.content }}
           files: app/build/outputs/apk/release/app-release.apk
-          generate_release_notes: true
