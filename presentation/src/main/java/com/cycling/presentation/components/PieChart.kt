@@ -12,6 +12,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.cycling.core.ui.apple.AppleTheme
+import com.cycling.core.ui.apple.AppleType
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -27,18 +29,24 @@ data class PieChartData(
 )
 
 /**
- * 默认饼图调色板。全部取自主题色彩角色，随明暗主题自适应；
- * 调用方按需取色，不再硬编码一组十六进制色。
+ * 默认饼图调色板。
+ *
+ * 用品牌红与强调蓝两个 Apple 色相，配合三档浓度凑出六个可区分的扇形 ——
+ * Apple 的图表不用 Material 的 primary/secondary/tertiary 三角色体系。
  */
 @Composable
-fun defaultPieChartColors(): List<Color> = listOf(
-    MaterialTheme.colorScheme.primary,
-    MaterialTheme.colorScheme.secondary,
-    MaterialTheme.colorScheme.tertiary,
-    MaterialTheme.colorScheme.primaryContainer,
-    MaterialTheme.colorScheme.secondaryContainer,
-    MaterialTheme.colorScheme.tertiaryContainer
-)
+fun defaultPieChartColors(): List<Color> {
+    val red = AppleTheme.colors.systemRed
+    val blue = AppleTheme.colors.key
+    return listOf(
+        red,
+        blue,
+        red.copy(alpha = 0.55f),
+        blue.copy(alpha = 0.55f),
+        red.copy(alpha = 0.3f),
+        blue.copy(alpha = 0.3f)
+    )
+}
 
 @Composable
 fun PieChart(

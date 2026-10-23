@@ -113,17 +113,28 @@ benchmark ⇢ app（com.android.test，targetProjectPath，不在产品依赖链
 全应用只使用 Material 3 Expressive，**不存在任何旧风格残留**。设计系统的唯一入口是
 `core/ui/theme/`，页面不得自带样式常量：
 
+> **唯一例外：`core/ui/apple/`**。首页、资料库、迷你播放器与底部 Tab 条按 Apple Music 7.0.0-beta
+> 的像素级复刻实现，使用 iOS 语义色板、SF Pro 变体字体与独立几何（见
+> `docs/design/apple-music-port.md`）。例外被收束在这一个包内：它不修改 `core/ui/theme/`
+> 的语义，只有 `HomeScreen`、`MyMusicScreen`、`MiniPlayer`、`AppleBottomNavigationBar`
+> 引用它；其它页面仍须遵守下面的全部条款。要回滚，把这几处的 `Apple*` 组件引用换回
+> Material 组件即可。
+
+
 - **主题**：只能通过 `SonicTheme` 装配。配色来源优先级：系统壁纸动态取色（默认）→ 品牌种子色
   `SonicSeed`；显式 `colorScheme` 只作为特例覆盖，正常页面不要传。三条路径都收敛到
   `SonTonalScheme` 的 HCT 色调映射，不要绕开它直接拼颜色。
-  **封面不参与配色**：封面只经 `rememberArtworkBackdrop` 产出 `backdropColors`，供播放页 /
-  歌词页的 `SonDynamicBackdrop` 使用；其余页面一律跟随壁纸。
+  **封面不参与配色**：封面只经 `rememberArtworkBackdrop` 产出两样东西 —— `colors`（封面上真实
+  存在的 1~3 个色相）与 `cells`（封面 4×4 平均色，行优先），都只供播放页 / 歌词页的
+  `SonDynamicBackdrop` 使用（前者定色相、后者带上封面的明暗与构图）；其余页面一律跟随壁纸。
+  这条边界的意思是**不按封面重建整套配色方案**，不是「封面上不能有图像」。
 - **颜色**：只能取自 `MaterialTheme.colorScheme.*`；M3 角色无法表达时才用
   `LocalSonExtendedColors.current`（封面占位、封面之上内容、歌词高亮、波形）。
   **禁止**在页面里写 `Color(0x...)`/`Color.White`/`Color.Gray`（`Color.Transparent` 仅用于表达真透明）。
 - **排版**：只能用 `MaterialTheme.typography.*`（含 `*Emphasized` 强调变体）。
-  **禁止**在 `Text` 上写 `fontSize`/`fontWeight`。字体族见 `SonFontFamily`（Roboto Flex 静态子集
-  regular/medium/bold，中文由系统 CJK 回退），**禁止**再出现 `FontFamily.Default`。
+  **禁止**在 `Text` 上写 `fontSize`/`fontWeight`。字体族见 `SonFontFamily`（**MiSans** 的
+  regular / medium / bold 静态子集，GB2312 全量 + Latin-1，生僻字由系统 CJK 回退），
+  **禁止**再出现 `FontFamily.Default`。
 - **形状**：只能用 `MaterialTheme.shapes.*` 或 `CircleShape`。**禁止**裸写 `RoundedCornerShape(n.dp)`，
   也**禁止**给 Material 组件传 `shape` 去复刻它本就有的默认形状（卡片、列表项、文本框、芯片、
   对话框、抽屉都不需要传）。
@@ -141,10 +152,17 @@ benchmark ⇢ app（com.android.test，targetProjectPath，不在产品依赖链
 - **交互反馈**：**禁止** `indication = null`；直接 `Modifier.clickable(onClick = ...)` 即由 Material
   提供 ripple 与 state layer。Expressive 的按压反馈是**形状变形**，Material 组件（`Button`、
   `IconButton`、`ListItem`、`SegmentedButton`）内部已经实现，页面不要再手写形变或缩放。
-- **图标**：统一用 Material Symbols Rounded + `M3SymbolIcon`（`filled = true` 强调/选中，
-  `filled = false` 弱化/未选中；码位集中在 `SymbolIconName`，字体见 `SonSymbolFontFamily`）。
+- **图标**：分两套，按页面语义选。
+  - 播放页 / 歌词页 / 队列页用 **`SonGlyph` + `SonGlyphIcon`**（`core/ui/components/SonGlyphs.kt`，
+    二十个 Apple Music 造型的 `ImageVector` 手绘图标：运输键、心形、三点、歌词气泡、队列、随机 /
+    循环 / 单曲循环、拖拽把手、垃圾桶、实心双音符、AirPlay、音量、下载、分享；描边统一 2.0，
+    几何参考 Lucide ISC 与 Material Symbols Apache-2.0）。
+  - 其余页面用 Material Symbols Rounded + `M3SymbolIcon`（`filled = true` 强调/选中，
+    `filled = false` 弱化/未选中；码位集中在 `SymbolIconName`，字体见 `SonSymbolFontFamily`）。
   **禁止**再用 `material-icons-extended` 的 `Icons.*`，也不要新增自绘 vector drawable 当图标；
-  唯一保留的 drawable 是启动图标。新增图标时同步 `scripts/subset-fonts.py` 的码位清单并重跑脚本。
+  唯一保留的 drawable 是启动图标。**禁止**把 SF Pro / SF Symbols 字体打进包 —— 那是 Apple 授权，
+  只允许 Apple 平台使用（参考项目的 `SF-Pro-NOTICE.md` 也写明了这一点）。新增 Material 码位时
+  需要重新生成 `material_symbols_rounded*.ttf` 子集（`scripts/` 已从仓库移除，脚本需重建）。
 - **组件**：**直接使用 `androidx.compose.material3` 的原生组件**（`Button` / `Card` / `ListItem` /
   `TopAppBar` / `LoadingIndicator` / `OutlinedTextField` / `Chip` 等），让它们的官方默认值决定
   尺寸、形状、内容边距与排版。

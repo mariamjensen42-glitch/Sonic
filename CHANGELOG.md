@@ -4,6 +4,46 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-10-23
+
+### Added
+- 🍎 **Apple Music 设计层（`core/ui/apple`）**：色板、字阶、尺寸全部取自
+  `com.apple.android.music` 7.0.0-beta（build 1611）的资源表，不是目测值。
+  `AppleColors`（iOS 语义色）、`AppleType`（34sp largeTitle → 11sp caption2）、
+  `AppleDims`（corner_radius 3/5/7/10/14/24/80dp、48dp 行高、88dp 大列表封面）、
+  以及 SF Pro 可变字体（按 `wght` 轴切字重的四个 XML）。
+- 🧩 **Apple 组件集**：`AppleTopBar` / `AppleCompactBar` / `AppleLargeTitle` /
+  `AppleSectionHeader` / `AppleMenuRow` / `AppleLargeListRow` / `AppleSongRow` /
+  `AppleCard` / `AppleCarousel` / `AppleArtworkMosaic` / `AppleSeparator` /
+  `AppleChip` / `AppleActionButton` / `AppleTextAction` / `AppleSheet` / `AppleSheetRow` /
+  `AppleTextField` / `AppleAlert` / `AppleGroupedSection` / `AppleSettingsRow` /
+  `AppleSearchField` / `AppleMiniPlayer` / `ApplePlayingBars`。
+- 🎬 **播放页三页结构**：封面 / 歌词 / 队列横向三页，封面作共享元素在满宽大图与 64dp 顶栏小图
+  之间连续变形；底部控制区在歌词页 3s 无操作自动收起。
+- 🔤 **字体替换**：MiSans（GB2312 全量 + Latin-1 子集）替代 Roboto Flex，补齐生僻字回退；
+  播放页/歌词页的 Hi-Res 徽标走独立字形。
+
+### Changed
+- 📱 **全站页面换成 Apple 版式**：首页（Listen Now 结构）、资料库、我的音乐、专辑 / 歌手 / 歌单详情、
+  搜索、全部歌曲、文件夹、排行榜、听歌统计、设置、歌曲详情、AI 解读、均衡器、在线音源。
+- 🧹 **Material 组件清零**：`ListItem` → Apple 行、`AlertDialog` → `AppleAlert`（270dp、
+  发丝线按钮、破坏性红字）、`ModalBottomSheet` → `AppleSheet`（14dp 上圆角）、
+  `OutlinedTextField` → `AppleTextField`（填充底、无浮动标签）、
+  `FilterChip` / `SegmentedButton` → `AppleChip`、`OutlinedCard` → `AppleGroupedSection`。
+  设计令牌统一走一张映射表（`bodyLarge→body`、`onSurfaceVariant→secondaryLabel`、
+  `primary→key`、`error→systemRed`…），`MaterialTheme.shapes` 与 `motionScheme` 保留。
+- 🎨 **封面不参与配色**：封面只经 `rememberArtworkBackdrop` 产出动态色面（色相 + 4×4 均色），
+  其余页面统一跟随壁纸动态取色。
+- 📄 **仓库整理**：移除 `.planning/` 与 `scripts/`，设计文档收敛到 `docs/design/`
+  （`apple-music-port.md`、`apple-player-spec.md`）。
+
+### Fixed
+- 📝 **歌词与歌名叠字**：歌词页顶部渐隐原来按视口高度 16% 从屏幕顶端算，顶栏（64dp）之内的歌词
+  仍以半透明状态压在歌曲名 / 歌手名上。改为以 `headerInset` 为界：栏内全透明，栏下沿用 48dp
+  渐亮回来，既有收口也不留硬边。
+- 🎚 **播放页队列行当前曲目不可见**：深色底上用的是 Material 容器色，换成 `fill` 叠加层后
+  在当前主题下可见。
+
 ## [1.0.1] - 2026-10-21
 
 ### Fixed

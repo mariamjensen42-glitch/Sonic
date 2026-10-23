@@ -1,34 +1,39 @@
 package com.cycling.presentation.songdetail
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
+import com.cycling.core.ui.apple.AppleActionButton
+import com.cycling.core.ui.apple.AppleSeparator
+import com.cycling.core.ui.apple.AppleSheet
+import com.cycling.core.ui.apple.AppleSheetTitle
+import com.cycling.core.ui.apple.AppleTextAction
+import com.cycling.core.ui.apple.AppleTextField
+import com.cycling.core.ui.apple.AppleTheme
+import com.cycling.core.ui.apple.AppleType
 import com.cycling.core.ui.components.M3SymbolIcon
 import com.cycling.core.ui.components.SymbolIconName
-import com.cycling.core.ui.theme.SonSizes
-import com.cycling.core.ui.theme.SonSpacing
 import com.cycling.domain.lyrics.model.Attributes
 import com.cycling.domain.model.LyricsProvider
 import com.cycling.domain.model.LyricsSource
@@ -77,140 +82,137 @@ internal fun LyricsInfoDialog(
         duration = info.metadata.duration
     )
 
-    val dismissAction: (@Composable () -> Unit)? = if (canEditMetadata) {
-        {
-            TextButton(onClick = onDismiss) {
-                Text(text = stringResource(R.string.song_detail_cancel))
-            }
-        }
-    } else {
-        null
-    }
+    AppleSheet(onDismiss = onDismiss) {
+        AppleSheetTitle(title = stringResource(R.string.song_detail_lyrics_info_title))
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(text = stringResource(R.string.song_detail_lyrics_info_title)) },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(SonSpacing.extraSmall)
-            ) {
-                LyricsInfoRow(
-                    label = stringResource(R.string.song_detail_lyrics_info_source),
-                    value = sourceLabel(info.source, info.provider)
-                )
-                LyricsInfoRow(
-                    label = stringResource(R.string.song_detail_lyrics_info_timing),
-                    value = when {
-                        info.isWordByWord -> qualityLabel(true)
-                        info.hasTimings -> qualityLabel(false)
-                        else -> stringResource(R.string.song_detail_lyrics_info_untimed)
-                    }
-                )
-                LyricsInfoRow(
-                    label = stringResource(R.string.song_detail_lyrics_info_lines),
-                    value = info.lineCount.toString()
-                )
-                LyricsInfoRow(
-                    label = stringResource(R.string.song_detail_lyrics_info_format),
-                    value = when {
-                        info.format != null -> formatLabel(info.format)
-                        info.lineCount > 0 -> stringResource(R.string.song_detail_lyrics_format_plain)
-                        else -> stringResource(R.string.song_detail_unknown)
-                    }
-                )
-                LyricsInfoRow(
-                    label = stringResource(R.string.song_detail_lyrics_info_translation),
-                    value = stringResource(
-                        if (info.hasTranslation) R.string.song_detail_lyrics_info_yes
-                        else R.string.song_detail_lyrics_info_no
-                    )
-                )
-
-                if (!canEditMetadata) {
-                    if (editable) {
-                        Spacer(Modifier.height(SonSpacing.small))
-                        Text(
-                            text = stringResource(R.string.song_detail_lyrics_metadata_unsupported),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    } else {
-                        ReadOnlyMetadata(info.metadata)
-                    }
-                } else {
-                    Spacer(Modifier.height(SonSpacing.mediumSmall))
-                    HorizontalDivider()
-                    Spacer(Modifier.height(SonSpacing.small))
-                    Text(
-                        text = stringResource(R.string.song_detail_lyrics_metadata_section),
-                        style = MaterialTheme.typography.titleSmallEmphasized,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(Modifier.height(SonSpacing.extraSmall))
-
-                    Column(verticalArrangement = Arrangement.spacedBy(SonSpacing.medium)) {
-                        MetadataField(
-                            label = stringResource(R.string.song_detail_lyrics_meta_title),
-                            value = title,
-                            onValueChange = { title = it }
-                        )
-                        MetadataField(
-                            label = stringResource(R.string.song_detail_lyrics_meta_artist),
-                            value = artist,
-                            onValueChange = { artist = it }
-                        )
-                        MetadataField(
-                            label = stringResource(R.string.song_detail_lyrics_meta_album),
-                            value = album,
-                            onValueChange = { album = it }
-                        )
-                        MetadataField(
-                            label = stringResource(R.string.song_detail_lyrics_meta_offset),
-                            value = offset,
-                            keyboardType = KeyboardType.Number,
-                            supportingText = stringResource(R.string.song_detail_lyrics_meta_offset_hint),
-                            onValueChange = { value ->
-                                offset = value.filter { it.isDigit() || it == '-' }.take(7)
-                            }
-                        )
-                        MetadataField(
-                            label = stringResource(R.string.song_detail_lyrics_meta_by),
-                            value = byText,
-                            onValueChange = { byText = it }
-                        )
-                    }
-
-                    Spacer(Modifier.height(SonSpacing.extraSmall))
-                    TextButton(
-                        onClick = { onFillSongInfo(currentMetadata()) },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        M3SymbolIcon(
-                            name = SymbolIconName.MusicNote,
-                            filled = true,
-                            contentDescription = null,
-                            modifier = Modifier.size(SonSizes.buttonIcon)
-                        )
-                        Spacer(Modifier.width(SonSpacing.small))
-                        Text(text = stringResource(R.string.song_detail_lyrics_metadata_fill_song))
-                    }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 520.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            LyricsInfoRow(
+                label = stringResource(R.string.song_detail_lyrics_info_source),
+                value = sourceLabel(info.source, info.provider)
+            )
+            LyricsInfoRow(
+                label = stringResource(R.string.song_detail_lyrics_info_timing),
+                value = when {
+                    info.isWordByWord -> qualityLabel(true)
+                    info.hasTimings -> qualityLabel(false)
+                    else -> stringResource(R.string.song_detail_lyrics_info_untimed)
                 }
-            }
-        },
-        confirmButton = {
-            if (canEditMetadata) {
-                TextButton(onClick = { onApplyMetadata(currentMetadata()) }) {
-                    Text(text = stringResource(R.string.song_detail_lyrics_metadata_apply))
+            )
+            LyricsInfoRow(
+                label = stringResource(R.string.song_detail_lyrics_info_lines),
+                value = info.lineCount.toString()
+            )
+            LyricsInfoRow(
+                label = stringResource(R.string.song_detail_lyrics_info_format),
+                value = when {
+                    info.format != null -> formatLabel(info.format)
+                    info.lineCount > 0 -> stringResource(R.string.song_detail_lyrics_format_plain)
+                    else -> stringResource(R.string.song_detail_unknown)
+                }
+            )
+            LyricsInfoRow(
+                label = stringResource(R.string.song_detail_lyrics_info_translation),
+                value = stringResource(
+                    if (info.hasTranslation) R.string.song_detail_lyrics_info_yes
+                    else R.string.song_detail_lyrics_info_no
+                )
+            )
+
+            if (!canEditMetadata) {
+                if (editable) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.song_detail_lyrics_metadata_unsupported),
+                        style = AppleType.footnote,
+                        color = AppleTheme.colors.secondaryLabel
+                    )
+                } else {
+                    ReadOnlyMetadata(info.metadata)
                 }
             } else {
-                TextButton(onClick = onDismiss) {
-                    Text(text = stringResource(R.string.song_detail_lyrics_metadata_close))
+                Spacer(modifier = Modifier.height(12.dp))
+                AppleSeparator(leadingInset = 0.dp)
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = stringResource(R.string.song_detail_lyrics_metadata_section),
+                    style = AppleType.sectionTitle,
+                    color = AppleTheme.colors.label
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    MetadataField(
+                        label = stringResource(R.string.song_detail_lyrics_meta_title),
+                        value = title,
+                        onValueChange = { title = it }
+                    )
+                    MetadataField(
+                        label = stringResource(R.string.song_detail_lyrics_meta_artist),
+                        value = artist,
+                        onValueChange = { artist = it }
+                    )
+                    MetadataField(
+                        label = stringResource(R.string.song_detail_lyrics_meta_album),
+                        value = album,
+                        onValueChange = { album = it }
+                    )
+                    MetadataField(
+                        label = stringResource(R.string.song_detail_lyrics_meta_offset),
+                        value = offset,
+                        keyboardType = KeyboardType.Number,
+                        supportingText = stringResource(R.string.song_detail_lyrics_meta_offset_hint),
+                        onValueChange = { value ->
+                            offset = value.filter { it.isDigit() || it == '-' }.take(7)
+                        }
+                    )
+                    MetadataField(
+                        label = stringResource(R.string.song_detail_lyrics_meta_by),
+                        value = byText,
+                        onValueChange = { byText = it }
+                    )
                 }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                AppleTextAction(
+                    label = stringResource(R.string.song_detail_lyrics_metadata_fill_song),
+                    icon = SymbolIconName.MusicNote,
+                    onClick = { onFillSongInfo(currentMetadata()) }
+                )
             }
-        },
-        dismissButton = dismissAction
-    )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+            if (canEditMetadata) {
+                AppleActionButton(
+                    label = stringResource(R.string.song_detail_lyrics_metadata_apply),
+                    onClick = { onApplyMetadata(currentMetadata()) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                AppleActionButton(
+                    label = stringResource(R.string.song_detail_cancel),
+                    onClick = onDismiss,
+                    filled = false,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            } else {
+                AppleActionButton(
+                    label = stringResource(R.string.song_detail_lyrics_metadata_close),
+                    onClick = onDismiss,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
 }
 
 @Composable
@@ -221,21 +223,27 @@ private fun MetadataField(
     keyboardType: KeyboardType = KeyboardType.Text,
     supportingText: String? = null
 ) {
-    val hint = supportingText
-    val supportingContent: (@Composable () -> Unit)? = if (hint != null) {
-        { Text(text = hint) }
-    } else {
-        null
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = label,
+            style = AppleType.footnote,
+            color = AppleTheme.colors.secondaryLabel
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        AppleTextField(
+            value = value,
+            onValueChange = onValueChange,
+            keyboardType = keyboardType
+        )
+        if (supportingText != null) {
+            Text(
+                text = supportingText,
+                style = AppleType.caption1,
+                color = AppleTheme.colors.secondaryLabel,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
     }
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = { Text(text = label) },
-        supportingText = supportingContent,
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-        modifier = Modifier.fillMaxWidth()
-    )
 }
 
 /** 只读模式下的头部标签：只列文档里真有的，不拿一串「无」凑数。 */
@@ -256,29 +264,23 @@ private fun ReadOnlyMetadata(metadata: Attributes) {
     )
     if (rows.isEmpty()) return
 
-    Spacer(Modifier.height(SonSpacing.mediumSmall))
-    HorizontalDivider()
-    Spacer(Modifier.height(SonSpacing.small))
+    Spacer(modifier = Modifier.height(12.dp))
+    AppleSeparator(leadingInset = 0.dp)
+    Spacer(modifier = Modifier.height(12.dp))
     Text(
         text = stringResource(R.string.song_detail_lyrics_metadata_section),
-        style = MaterialTheme.typography.titleSmallEmphasized,
-        color = MaterialTheme.colorScheme.onSurface
+        style = AppleType.sectionTitle,
+        color = AppleTheme.colors.label
     )
     rows.forEach { (label, value) ->
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 2.dp),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = value,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            Text(text = label, style = AppleType.body, color = AppleTheme.colors.secondaryLabel)
+            Text(text = value, style = AppleType.body, color = AppleTheme.colors.label)
         }
     }
 }
@@ -286,19 +288,13 @@ private fun ReadOnlyMetadata(metadata: Attributes) {
 @Composable
 private fun LyricsInfoRow(label: String, value: String) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface
-        )
+        Text(text = label, style = AppleType.body, color = AppleTheme.colors.secondaryLabel)
+        Text(text = value, style = AppleType.body, color = AppleTheme.colors.label)
     }
 }
 
@@ -326,4 +322,3 @@ private fun formatLabel(format: String): String = when (format) {
     "LYRICIFY_SYLLABLE" -> stringResource(R.string.song_detail_lyrics_format_lyricify)
     else -> format
 }
-

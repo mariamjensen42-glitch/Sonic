@@ -12,9 +12,11 @@ import com.cycling.domain.repository.SettingsRepository.Companion.DEFAULT_LYRICS
 import com.cycling.domain.repository.SettingsRepository.Companion.DEFAULT_PLAYBACK_SPEED
 import com.cycling.domain.repository.SettingsRepository.Companion.DEFAULT_SLEEP_TIMER_PRESET_MINUTES
 
+/** 播放页的三页：封面 / 歌词 / 队列。三者在同一屏内滑动交叉淡入（Apple Music 版式）。 */
 enum class PlayerViewMode {
     COVER,
-    LYRICS
+    LYRICS,
+    QUEUE
 }
 
 data class PlayerUiState(
@@ -85,6 +87,9 @@ sealed interface PlayerIntent {
     data object UpdateProgress : PlayerIntent
     data object ToggleFavorite : PlayerIntent
     data object ToggleViewMode : PlayerIntent
+
+    /** 直接切到某一页（封面 / 歌词 / 队列）。 */
+    data class SetViewMode(val mode: PlayerViewMode) : PlayerIntent
 
     /** Asks for the current song's lyrics again, ignoring whatever was downloaded for it before. */
     data object RefreshLyrics : PlayerIntent

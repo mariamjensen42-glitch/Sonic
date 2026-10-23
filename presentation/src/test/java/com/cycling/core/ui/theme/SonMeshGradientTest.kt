@@ -5,6 +5,7 @@ import androidx.compose.ui.graphics.Color
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -27,6 +28,13 @@ class SonMeshGradientTest {
         Color(0xFF2E7D32),
         Color(0xFF1565C0)
     )
+
+    /** 封面 4×4 采样：行列各带一点渐变，模拟真实封面的明暗分布。 */
+    private val artworkCells = List(SonMeshGradient.GRID * SonMeshGradient.GRID) { index ->
+        val row = index / SonMeshGradient.GRID
+        val col = index % SonMeshGradient.GRID
+        Color(red = 40 + col * 60, green = 40 + row * 60, blue = 120)
+    }
 
     private fun render(
         scheme: ColorScheme,
@@ -84,6 +92,39 @@ class SonMeshGradientTest {
 
         assertEquals(SonMeshGradient.GRID * SonMeshGradient.GRID, palette.size)
         assertTrue(palette.all { (it ushr 24) and 0xFF == 0xFF })
+    }
+
+    @Test
+    fun `artwork palette gives sixteen opaque points`() {
+        val palette = SonMeshGradient.paletteFromArtwork(
+            cells = artworkCells,
+            surface = darkScheme.surface,
+            dark = true
+        )
+
+        assertEquals(SonMeshGradient.GRID * SonMeshGradient.GRID, palette?.size)
+        assertTrue(palette!!.all { (it ushr 24) and 0xFF == 0xFF })
+    }
+
+    @Test
+    fun `artwork palette keeps the cover light and dark layout`() {
+        // 上半暗、下半亮：糊开之后必须还看得出这个分布，否则就退化成一块平色
+        val cells = List(16) { index ->
+            if (index < 8) Color(0xFF141414) else Color(0xFFE8E8E8)
+        }
+        val palette = SonMeshGradient.paletteFromArtwork(cells, darkScheme.surface, dark = true)!!
+        val darkRow = Hct.fromColor(Color(palette[0])).tone
+        val brightRow = Hct.fromColor(Color(palette[15])).tone
+
+        assertTrue(
+            "bright row $brightRow should stay brighter than dark row $darkRow",
+            brightRow > darkRow + 5.0
+        )
+    }
+
+    @Test
+    fun `artwork palette rejects grids that are not the control grid`() {
+        assertNull(SonMeshGradient.paletteFromArtwork(coverColors, darkScheme.surface, dark = true))
     }
 
     @Test

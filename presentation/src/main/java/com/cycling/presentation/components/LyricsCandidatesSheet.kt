@@ -1,31 +1,28 @@
-@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@file:OptIn(ExperimentalMaterial3ExpressiveApi::class)
 
 package com.cycling.presentation.components
 
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.LoadingIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
-import com.cycling.core.ui.theme.SonSpacing
+import androidx.compose.ui.unit.dp
+import com.cycling.core.ui.apple.AppleSheet
+import com.cycling.core.ui.apple.AppleSheetRow
+import com.cycling.core.ui.apple.AppleSheetTitle
+import com.cycling.core.ui.apple.AppleTheme
+import com.cycling.core.ui.apple.AppleType
 import com.cycling.domain.model.LyricsCandidate
 import com.cycling.domain.model.LyricsProvider
 import com.cycling.presentation.R
@@ -48,92 +45,58 @@ fun LyricsCandidatesSheet(
     onDismiss: () -> Unit,
     @StringRes hintRes: Int = R.string.lyrics_candidates_hint
 ) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = SonSpacing.large)
-        ) {
-            Text(
-                text = stringResource(R.string.lyrics_candidates_title),
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(horizontal = SonSpacing.large, vertical = SonSpacing.small)
+    AppleSheet(onDismiss = onDismiss) {
+        AppleSheetTitle(
+            title = stringResource(R.string.lyrics_candidates_title),
+            subtitle = stringResource(hintRes)
+        )
+
+        when {
+            isLoading -> Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 32.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                LoadingIndicator()
+            }
+
+            candidates.isEmpty() -> Text(
+                text = stringResource(R.string.lyrics_candidates_empty),
+                style = AppleType.body,
+                color = AppleTheme.colors.secondaryLabel,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp)
             )
-            Text(
-                text = stringResource(hintRes),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = SonSpacing.large)
-            )
-            Spacer(Modifier.height(SonSpacing.small))
 
-            when {
-                isLoading -> Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = SonSpacing.extraLarge),
-                    contentAlignment = Alignment.Center
-                ) {
-                    LoadingIndicator()
-                }
-
-                candidates.isEmpty() -> Text(
-                    text = stringResource(R.string.lyrics_candidates_empty),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(SonSpacing.large)
-                )
-
-                else -> LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                    items(candidates, key = { it.id }) { candidate ->
-                        LyricsCandidateItem(
-                            candidate = candidate,
-                            onClick = { onSelect(candidate.id) }
-                        )
-                    }
+            else -> LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 480.dp)
+            ) {
+                items(candidates, key = { it.id }) { candidate ->
+                    AppleSheetRow(
+                        title = "${providerLabel(candidate.provider)} · " +
+                            qualityLabel(candidate.wordByWord),
+                        // 版本之间真正的区别在专辑名（同一首歌的不同上架），拿不到才退回歌词首句。
+                        subtitle = candidate.label ?: candidate.preview,
+                        onClick = { onSelect(candidate.id) },
+                        trailing = {
+                            if (candidate.isCurrent) {
+                                Text(
+                                    text = stringResource(R.string.lyrics_candidate_current),
+                                    style = AppleType.caption1Emphasized,
+                                    color = AppleTheme.colors.key
+                                )
+                            }
+                        }
+                    )
                 }
             }
         }
     }
-}
-
-@Composable
-private fun LyricsCandidateItem(
-    candidate: LyricsCandidate,
-    onClick: () -> Unit
-) {
-    ListItem(
-        // 可点击的 ListItem 里，主标题这一格叫 content 而不是 headlineContent。
-        content = {
-            Text(
-                text = "${providerLabel(candidate.provider)} · ${qualityLabel(candidate.wordByWord)}"
-            )
-        },
-        // 版本之间真正的区别在专辑名（同一首歌的不同上架），拿不到才退回歌词首句。
-        supportingContent = {
-            val detail = candidate.label ?: candidate.preview
-            if (detail != null) {
-                Text(text = detail, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-        },
-        trailingContent = {
-            if (candidate.isCurrent) {
-                Text(
-                    text = stringResource(R.string.lyrics_candidate_current),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-        },
-        onClick = onClick
-    )
 }
 
 /** 在线歌词来源的名字，选择器与歌词信息面板共用。 */

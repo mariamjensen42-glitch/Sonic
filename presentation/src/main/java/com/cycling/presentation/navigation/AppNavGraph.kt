@@ -186,7 +186,6 @@ fun AppNavGraph(
                 uiState = uiState.value,
                 onIntent = playerViewModel::handleIntent,
                 onNavigateBack = { navigator.goBack() },
-                onNavigateToLyrics = { navigator.navigate(Screen.Lyrics) },
                 beatFlow = playerViewModel.beat
             )
         }
@@ -429,7 +428,10 @@ private fun EntryProviderScope<NavKey>.libraryEntries(
                 )
                 navigateToPlayer()
             },
-            queueActions = queueActions
+            queueActions = queueActions,
+            onNavigateToAlbumDetail = { albumId ->
+                navigator.navigate(LibraryDestination.AlbumDetail(albumId))
+            }
         )
     }
 

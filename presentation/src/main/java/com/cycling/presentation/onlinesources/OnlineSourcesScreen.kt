@@ -4,6 +4,8 @@ package com.cycling.presentation.onlinesources
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -12,29 +14,16 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearWavyProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedCard
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -50,11 +39,16 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.cycling.core.ui.components.M3SymbolIcon
+import com.cycling.core.ui.apple.AppleActionButton
+import com.cycling.core.ui.apple.AppleAlert
+import com.cycling.core.ui.apple.AppleChip
+import com.cycling.core.ui.apple.AppleSectionHeader
+import com.cycling.core.ui.apple.AppleSeparator
+import com.cycling.core.ui.apple.AppleTextField
+import com.cycling.core.ui.apple.AppleTheme
+import com.cycling.core.ui.apple.AppleType
+import com.cycling.core.ui.apple.appleBottomBarClearance
 import com.cycling.core.ui.components.SymbolIconName
-import com.cycling.core.ui.theme.SonLayout
-import com.cycling.core.ui.theme.SonSizes
-import com.cycling.core.ui.theme.SonSpacing
 import com.cycling.domain.online.model.OnlinePlugin
 import com.cycling.domain.online.model.PluginPriority
 import com.cycling.domain.online.model.PluginSortMode
@@ -99,10 +93,18 @@ fun OnlineSourcesContent(
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = SonLayout.bottomBarClearance + bottomPadding)
+        contentPadding = PaddingValues(bottom = appleBottomBarClearance() + bottomPadding)
     ) {
-        item { PrioritySection(uiState.priority) { viewModel.handleIntent(OnlineSourcesIntent.SetPriority(it)) } }
-        item { SortSection(uiState.sortMode) { viewModel.handleIntent(OnlineSourcesIntent.SetSortMode(it)) } }
+        item {
+            PrioritySection(uiState.priority) {
+                viewModel.handleIntent(OnlineSourcesIntent.SetPriority(it))
+            }
+        }
+        item {
+            SortSection(uiState.sortMode) {
+                viewModel.handleIntent(OnlineSourcesIntent.SetSortMode(it))
+            }
+        }
         item {
             ImportSection(
                 importing = uiState.importing,
@@ -121,45 +123,48 @@ fun OnlineSourcesContent(
             )
         }
         item {
-            SectionTitle(
-                stringResource(R.string.online_sources_installed, uiState.plugins.size)
+            AppleSectionHeader(
+                title = stringResource(R.string.online_sources_installed, uiState.plugins.size)
             )
         }
         if (!uiState.hasPlugins) {
             item { EmptyState() }
         } else {
             items(uiState.plugins, key = { it.id }) { plugin ->
-                PluginCard(
-                    plugin = plugin,
-                    sortMode = uiState.sortMode,
-                    testing = uiState.testingPluginId == plugin.id,
-                    onToggle = { enabled ->
-                        viewModel.handleIntent(OnlineSourcesIntent.ToggleEnabled(plugin.id, enabled))
-                    },
-                    onTest = { viewModel.handleIntent(OnlineSourcesIntent.TestPlugin(plugin.id)) },
-                    onMoveUp = { viewModel.handleIntent(OnlineSourcesIntent.MovePlugin(plugin.id, -1)) },
-                    onMoveDown = { viewModel.handleIntent(OnlineSourcesIntent.MovePlugin(plugin.id, 1)) },
-                    onDelete = { viewModel.handleIntent(OnlineSourcesIntent.DeletePlugin(plugin.id)) },
-                    onAutoBlock = { enabled ->
-                        viewModel.handleIntent(OnlineSourcesIntent.SetAutoBlock(plugin.id, enabled))
-                    },
-                    onClearBlocked = {
-                        viewModel.handleIntent(OnlineSourcesIntent.ClearBlockedPlatforms(plugin.id))
-                    }
-                )
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    PluginRow(
+                        plugin = plugin,
+                        sortMode = uiState.sortMode,
+                        testing = uiState.testingPluginId == plugin.id,
+                        onToggle = { enabled ->
+                            viewModel.handleIntent(OnlineSourcesIntent.ToggleEnabled(plugin.id, enabled))
+                        },
+                        onTest = { viewModel.handleIntent(OnlineSourcesIntent.TestPlugin(plugin.id)) },
+                        onMoveUp = { viewModel.handleIntent(OnlineSourcesIntent.MovePlugin(plugin.id, -1)) },
+                        onMoveDown = { viewModel.handleIntent(OnlineSourcesIntent.MovePlugin(plugin.id, 1)) },
+                        onDelete = { viewModel.handleIntent(OnlineSourcesIntent.DeletePlugin(plugin.id)) },
+                        onAutoBlock = { enabled ->
+                            viewModel.handleIntent(OnlineSourcesIntent.SetAutoBlock(plugin.id, enabled))
+                        },
+                        onClearBlocked = {
+                            viewModel.handleIntent(OnlineSourcesIntent.ClearBlockedPlatforms(plugin.id))
+                        }
+                    )
+                    AppleSeparator()
+                }
             }
         }
         item {
             Text(
                 text = stringResource(R.string.online_sources_key_hint),
                 modifier = Modifier.padding(
-                    start = SonLayout.screenMargin,
-                    end = SonLayout.screenMargin,
-                    top = SonSpacing.medium,
-                    bottom = SonSpacing.large
+                    start = 16.dp,
+                    end = 16.dp,
+                    top = 12.dp,
+                    bottom = 24.dp
                 ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = AppleType.footnote,
+                color = AppleTheme.colors.secondaryLabel
             )
         }
     }
@@ -185,56 +190,38 @@ fun OnlineSourcesContent(
 }
 
 @Composable
-private fun SectionTitle(text: String) {
-    Text(
-        text = text,
-        modifier = Modifier.padding(
-            start = SonLayout.screenMargin,
-            end = SonLayout.screenMargin,
-            top = SonSpacing.large,
-            bottom = SonSpacing.small
-        ),
-        style = MaterialTheme.typography.titleSmallEmphasized,
-        color = MaterialTheme.colorScheme.primary
-    )
-}
-
-@Composable
 private fun PrioritySection(
     priority: PluginPriority,
     onSelect: (PluginPriority) -> Unit
 ) {
-    SectionTitle(stringResource(R.string.online_sources_priority))
-    Column(
+    AppleSectionHeader(title = stringResource(R.string.online_sources_priority))
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = SonLayout.screenMargin)
+            .padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-            SegmentedButton(
-                selected = priority == PluginPriority.FALLBACK,
-                onClick = { onSelect(PluginPriority.FALLBACK) },
-                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                label = { Text(stringResource(R.string.online_sources_priority_fallback)) }
-            )
-            SegmentedButton(
-                selected = priority == PluginPriority.PLUGIN_ONLY,
-                onClick = { onSelect(PluginPriority.PLUGIN_ONLY) },
-                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                label = { Text(stringResource(R.string.online_sources_priority_plugin_only)) }
-            )
-        }
-        Text(
-            text = if (priority == PluginPriority.FALLBACK) {
-                stringResource(R.string.online_sources_priority_fallback_desc)
-            } else {
-                stringResource(R.string.online_sources_priority_plugin_only_desc)
-            },
-            modifier = Modifier.padding(top = SonSpacing.small),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+        AppleChip(
+            label = stringResource(R.string.online_sources_priority_fallback),
+            selected = priority == PluginPriority.FALLBACK,
+            onClick = { onSelect(PluginPriority.FALLBACK) }
+        )
+        AppleChip(
+            label = stringResource(R.string.online_sources_priority_plugin_only),
+            selected = priority == PluginPriority.PLUGIN_ONLY,
+            onClick = { onSelect(PluginPriority.PLUGIN_ONLY) }
         )
     }
+    Text(
+        text = if (priority == PluginPriority.FALLBACK) {
+            stringResource(R.string.online_sources_priority_fallback_desc)
+        } else {
+            stringResource(R.string.online_sources_priority_plugin_only_desc)
+        },
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
+        style = AppleType.footnote,
+        color = AppleTheme.colors.secondaryLabel
+    )
 }
 
 @Composable
@@ -242,7 +229,7 @@ private fun SortSection(
     sortMode: PluginSortMode,
     onSelect: (PluginSortMode) -> Unit
 ) {
-    SectionTitle(stringResource(R.string.online_sources_sort))
+    AppleSectionHeader(title = stringResource(R.string.online_sources_sort))
     val labels = mapOf(
         PluginSortMode.MANUAL to R.string.online_sources_sort_manual,
         PluginSortMode.PLATFORM_COUNT to R.string.online_sources_sort_platform_count,
@@ -250,14 +237,14 @@ private fun SortSection(
         PluginSortMode.AVAILABLE to R.string.online_sources_sort_available
     )
     LazyRow(
-        contentPadding = PaddingValues(horizontal = SonLayout.screenMargin),
-        horizontalArrangement = Arrangement.spacedBy(SonSpacing.small)
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         items(PluginSortMode.entries.toList()) { mode ->
-            FilterChip(
+            AppleChip(
+                label = stringResource(labels.getValue(mode)),
                 selected = mode == sortMode,
-                onClick = { onSelect(mode) },
-                label = { Text(stringResource(labels.getValue(mode))) }
+                onClick = { onSelect(mode) }
             )
         }
     }
@@ -270,39 +257,41 @@ private fun ImportSection(
     onPasteScript: () -> Unit,
     onImportUrl: () -> Unit
 ) {
-    SectionTitle(stringResource(R.string.settings_online_sources_menu))
+    AppleSectionHeader(title = stringResource(R.string.settings_online_sources_menu))
     LazyRow(
-        contentPadding = PaddingValues(horizontal = SonLayout.screenMargin),
-        horizontalArrangement = Arrangement.spacedBy(SonSpacing.small)
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         item {
-            FilledTonalButton(onClick = onPickFile, enabled = !importing) {
-                M3SymbolIcon(
-                    name = SymbolIconName.UploadFile,
-                    filled = true,
-                    contentDescription = null,
-                    modifier = Modifier.size(SonSizes.buttonIcon)
-                )
-                Spacer(modifier = Modifier.width(SonSpacing.small))
-                Text(stringResource(R.string.online_sources_import_file))
-            }
+            AppleActionButton(
+                label = stringResource(R.string.online_sources_import_file),
+                onClick = onPickFile,
+                enabled = !importing,
+                icon = SymbolIconName.UploadFile
+            )
         }
         item {
-            OutlinedButton(onClick = onPasteScript, enabled = !importing) {
-                Text(stringResource(R.string.online_sources_import_text))
-            }
+            AppleActionButton(
+                label = stringResource(R.string.online_sources_import_text),
+                onClick = onPasteScript,
+                filled = false,
+                enabled = !importing
+            )
         }
         item {
-            OutlinedButton(onClick = onImportUrl, enabled = !importing) {
-                Text(stringResource(R.string.online_sources_import_url))
-            }
+            AppleActionButton(
+                label = stringResource(R.string.online_sources_import_url),
+                onClick = onImportUrl,
+                filled = false,
+                enabled = !importing
+            )
         }
     }
     if (importing) {
         LinearWavyProgressIndicator(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = SonLayout.screenMargin, vertical = SonSpacing.small)
+                .padding(horizontal = 16.dp, vertical = 8.dp)
         )
     }
 }
@@ -311,19 +300,19 @@ private fun ImportSection(
 private fun EmptyState() {
     Text(
         text = stringResource(R.string.online_sources_empty),
-        modifier = Modifier.padding(
-            start = SonLayout.screenMargin,
-            end = SonLayout.screenMargin,
-            top = SonSpacing.medium,
-            bottom = SonSpacing.large
-        ),
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp),
+        style = AppleType.footnote,
+        color = AppleTheme.colors.secondaryLabel
     )
 }
 
+/**
+ * 插件行。
+ *
+ * 不再用卡片：iOS 的列表是"分组 + 发丝线"，卡片会给每一行套一层边框，视觉噪音太大。
+ */
 @Composable
-private fun PluginCard(
+private fun PluginRow(
     plugin: OnlinePlugin,
     sortMode: PluginSortMode,
     testing: Boolean,
@@ -335,147 +324,176 @@ private fun PluginCard(
     onAutoBlock: (Boolean) -> Unit,
     onClearBlocked: () -> Unit
 ) {
-    OutlinedCard(
+    val colors = AppleTheme.colors
+
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = SonLayout.screenMargin, vertical = SonSpacing.small)
+            .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
-        Column(modifier = Modifier.padding(SonSpacing.medium)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = plugin.name,
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    val platformText = if (plugin.musicPlatformCount > 0) {
-                        stringResource(
-                            R.string.online_sources_platform_count,
-                            plugin.musicPlatformCount
-                        )
-                    } else {
-                        ""
-                    }
-                    Text(
-                        text = buildString {
-                            if (plugin.version.isNotBlank()) append("v").append(plugin.version)
-                            if (platformText.isNotBlank()) {
-                                if (isNotEmpty()) append(" · ")
-                                append(platformText)
-                            }
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Switch(checked = plugin.enabled, onCheckedChange = onToggle)
-            }
-
-            if (plugin.description.isNotBlank()) {
-                Spacer(modifier = Modifier.height(SonSpacing.small))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = plugin.description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
+                    text = plugin.name,
+                    style = AppleType.headline,
+                    color = colors.label,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                val platformText = if (plugin.musicPlatformCount > 0) {
+                    stringResource(
+                        R.string.online_sources_platform_count,
+                        plugin.musicPlatformCount
+                    )
+                } else {
+                    ""
+                }
+                Text(
+                    text = buildString {
+                        if (plugin.version.isNotBlank()) append("v").append(plugin.version)
+                        if (platformText.isNotBlank()) {
+                            if (isNotEmpty()) append(" · ")
+                            append(platformText)
+                        }
+                    },
+                    style = AppleType.footnote,
+                    color = colors.secondaryLabel
+                )
             }
+            Switch(checked = plugin.enabled, onCheckedChange = onToggle)
+        }
 
-            if (plugin.sources.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(SonSpacing.small))
-                Text(
-                    text = stringResource(
-                        R.string.online_sources_sources,
-                        plugin.sources.joinToString(" / ") { it.key.displayName }
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            if (plugin.autoBlockedPlatforms.isNotEmpty()) {
-                Text(
-                    text = stringResource(
-                        R.string.online_sources_blocked,
-                        plugin.autoBlockedPlatforms.joinToString(" / ") { it.displayName }
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error
-                )
+        if (plugin.description.isNotBlank()) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = plugin.description,
+                style = AppleType.footnote,
+                color = colors.secondaryLabel,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        if (plugin.sources.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = stringResource(
+                    R.string.online_sources_sources,
+                    plugin.sources.joinToString(" / ") { it.key.displayName }
+                ),
+                style = AppleType.footnote,
+                color = colors.secondaryLabel
+            )
+        }
+        if (plugin.autoBlockedPlatforms.isNotEmpty()) {
+            Text(
+                text = stringResource(
+                    R.string.online_sources_blocked,
+                    plugin.autoBlockedPlatforms.joinToString(" / ") { it.displayName }
+                ),
+                style = AppleType.footnote,
+                color = colors.systemRed
+            )
+        }
+        if (plugin.blockedPlatforms.isNotEmpty()) {
+            Text(
+                text = stringResource(
+                    R.string.online_sources_manual_blocked,
+                    plugin.blockedPlatforms.joinToString(" / ") { it.displayName }
+                ),
+                style = AppleType.footnote,
+                color = colors.systemRed
+            )
+        }
+        val pluginError = plugin.error
+        if (!pluginError.isNullOrBlank()) {
+            Text(
+                text = stringResource(R.string.online_sources_error, pluginError),
+                style = AppleType.footnote,
+                color = colors.systemRed,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        if (plugin.opaque) {
+            Text(
+                text = stringResource(R.string.online_sources_opaque_hint),
+                style = AppleType.footnote,
+                color = colors.secondaryLabel
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = stringResource(R.string.online_sources_auto_block),
+                style = AppleType.footnote,
+                color = colors.secondaryLabel
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Switch(checked = plugin.autoBlockInvalid, onCheckedChange = onAutoBlock)
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (sortMode == PluginSortMode.MANUAL) {
+                PluginAction(stringResource(R.string.online_sources_move_up), onMoveUp)
+                PluginAction(stringResource(R.string.online_sources_move_down), onMoveDown)
             }
             if (plugin.blockedPlatforms.isNotEmpty()) {
-                Text(
-                    text = stringResource(
-                        R.string.online_sources_manual_blocked,
-                        plugin.blockedPlatforms.joinToString(" / ") { it.displayName }
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error
+                PluginAction(
+                    stringResource(R.string.online_sources_clear_blocked_short),
+                    onClearBlocked
                 )
             }
-            val pluginError = plugin.error
-            if (!pluginError.isNullOrBlank()) {
-                Text(
-                    text = stringResource(R.string.online_sources_error, pluginError),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            if (plugin.opaque) {
-                Text(
-                    text = stringResource(R.string.online_sources_opaque_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Spacer(modifier = Modifier.height(SonSpacing.small))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = stringResource(R.string.online_sources_auto_block),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.width(SonSpacing.small))
-                Switch(
-                    checked = plugin.autoBlockInvalid,
-                    onCheckedChange = onAutoBlock
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (sortMode == PluginSortMode.MANUAL) {
-                    TextButton(onClick = onMoveUp) { Text(stringResource(R.string.online_sources_move_up)) }
-                    TextButton(onClick = onMoveDown) { Text(stringResource(R.string.online_sources_move_down)) }
-                }
-                if (plugin.blockedPlatforms.isNotEmpty()) {
-                    TextButton(onClick = onClearBlocked) {
-                        Text(stringResource(R.string.online_sources_clear_blocked_short))
-                    }
-                }
-                TextButton(onClick = onTest, enabled = !testing) {
-                    Text(
-                        if (testing) {
-                            stringResource(R.string.online_sources_testing)
-                        } else {
-                            stringResource(R.string.online_sources_test)
-                        }
-                    )
-                }
-                TextButton(onClick = onDelete) {
-                    Text(stringResource(R.string.online_sources_delete))
-                }
-            }
+            PluginAction(
+                label = if (testing) {
+                    stringResource(R.string.online_sources_testing)
+                } else {
+                    stringResource(R.string.online_sources_test)
+                },
+                onClick = onTest,
+                enabled = !testing
+            )
+            PluginAction(
+                label = stringResource(R.string.online_sources_delete),
+                onClick = onDelete,
+                destructive = true
+            )
         }
     }
+}
+
+/** 行内文字动作，颜色取 key（删除类取品牌红）。 */
+@Composable
+private fun PluginAction(
+    label: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    destructive: Boolean = false
+) {
+    val colors = AppleTheme.colors
+    val interaction = remember { MutableInteractionSource() }
+    Text(
+        text = label,
+        style = AppleType.footnoteEmphasized,
+        color = when {
+            !enabled -> colors.tertiaryLabel
+            destructive -> colors.systemRed
+            else -> colors.key
+        },
+        modifier = Modifier
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                enabled = enabled,
+                onClick = onClick
+            )
+            .padding(vertical = 4.dp)
+    )
 }
 
 @Composable
@@ -484,29 +502,22 @@ private fun TextImportDialog(
     onConfirm: (String) -> Unit
 ) {
     var content by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.online_sources_import_text_title)) },
-        text = {
-            OutlinedTextField(
-                value = content,
-                onValueChange = { content = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 160.dp),
-                minLines = 6,
-                maxLines = 12
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(content) }, enabled = content.isNotBlank()) {
-                Text(stringResource(R.string.online_sources_import_confirm))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.online_sources_cancel)) }
-        }
-    )
+    AppleAlert(
+        title = stringResource(R.string.online_sources_import_text_title),
+        confirmLabel = stringResource(R.string.online_sources_import_confirm),
+        onConfirm = { onConfirm(content) },
+        onDismiss = onDismiss,
+        dismissLabel = stringResource(R.string.online_sources_cancel),
+        confirmEnabled = content.isNotBlank()
+    ) {
+        AppleTextField(
+            value = content,
+            onValueChange = { content = it },
+            singleLine = false,
+            minHeight = 140.dp,
+            placeholder = stringResource(R.string.online_sources_import_text_title)
+        )
+    }
 }
 
 @Composable
@@ -515,24 +526,18 @@ private fun UrlImportDialog(
     onConfirm: (String) -> Unit
 ) {
     var url by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.online_sources_import_url_title)) },
-        text = {
-            OutlinedTextField(
-                value = url,
-                onValueChange = { url = it },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(url) }, enabled = url.isNotBlank()) {
-                Text(stringResource(R.string.online_sources_import_confirm))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.online_sources_cancel)) }
-        }
-    )
+    AppleAlert(
+        title = stringResource(R.string.online_sources_import_url_title),
+        confirmLabel = stringResource(R.string.online_sources_import_confirm),
+        onConfirm = { onConfirm(url) },
+        onDismiss = onDismiss,
+        dismissLabel = stringResource(R.string.online_sources_cancel),
+        confirmEnabled = url.isNotBlank()
+    ) {
+        AppleTextField(
+            value = url,
+            onValueChange = { url = it },
+            placeholder = "https://"
+        )
+    }
 }

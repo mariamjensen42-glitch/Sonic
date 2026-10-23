@@ -21,6 +21,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.cycling.core.ui.apple.AppleTheme
+import com.cycling.core.ui.apple.AppleType
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -77,9 +79,9 @@ fun WeeklyRhythmChart(
             val isSelected = day.date == selectedDate
             val isToday = day.date == today
             val barColor = when {
-                isSelected -> MaterialTheme.colorScheme.primary
+                isSelected -> AppleTheme.colors.systemRed
                 isToday -> MaterialTheme.colorScheme.tertiary
-                day.playMs > 0L -> MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
+                day.playMs > 0L -> AppleTheme.colors.systemRed.copy(alpha = 0.45f)
                 else -> MaterialTheme.colorScheme.surfaceContainerHighest
             }
             Column(
@@ -108,7 +110,7 @@ fun WeeklyRhythmChart(
                 Spacer(modifier = Modifier.height(SonSpacing.extraSmall))
                 Text(
                     text = weekdayLabel(day.date),
-                    style = MaterialTheme.typography.labelSmall,
+                    style = AppleType.caption1,
                     color = if (isSelected || isToday) {
                         MaterialTheme.colorScheme.onSurface
                     } else {
@@ -143,10 +145,10 @@ fun YearHeatmap(
 
     val emptyColor = MaterialTheme.colorScheme.surfaceContainerHighest
     val levelColors = listOf(
-        MaterialTheme.colorScheme.primary.copy(alpha = 0.28f),
-        MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
-        MaterialTheme.colorScheme.primary.copy(alpha = 0.74f),
-        MaterialTheme.colorScheme.primary
+        AppleTheme.colors.systemRed.copy(alpha = 0.28f),
+        AppleTheme.colors.systemRed.copy(alpha = 0.5f),
+        AppleTheme.colors.systemRed.copy(alpha = 0.74f),
+        AppleTheme.colors.systemRed
     )
 
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
@@ -197,7 +199,7 @@ fun HourPulseChart(
     if (hours.isEmpty()) return
     val peak = hours.maxOf { it.playMs }.coerceAtLeast(1L)
     val idleColor = MaterialTheme.colorScheme.surfaceContainerHighest
-    val activeColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
+    val activeColor = AppleTheme.colors.systemRed.copy(alpha = 0.45f)
     val highlightColor = MaterialTheme.colorScheme.tertiary
 
     Column(modifier = modifier.fillMaxWidth()) {
@@ -237,7 +239,7 @@ fun HourPulseChart(
             listOf(0, 6, 12, 18).forEach { hour ->
                 Text(
                     text = "%02d:00".format(Locale.getDefault(), hour),
-                    style = MaterialTheme.typography.labelSmall,
+                    style = AppleType.caption1,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -250,7 +252,7 @@ fun HourPulseChart(
 fun ShareMeter(
     fraction: Float,
     modifier: Modifier = Modifier,
-    color: Color = MaterialTheme.colorScheme.primary
+    color: Color = AppleTheme.colors.systemRed
 ) {
     Box(
         modifier = modifier

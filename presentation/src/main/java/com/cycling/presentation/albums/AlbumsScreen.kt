@@ -37,6 +37,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.cycling.core.ui.apple.appleBottomBarClearance
+import com.cycling.core.ui.apple.AppleTheme
+import com.cycling.core.ui.apple.AppleTopBar
 import com.cycling.core.ui.components.M3SymbolIcon
 import com.cycling.core.ui.components.SymbolIconName
 import com.cycling.core.ui.components.M3MediaCard
@@ -59,7 +62,6 @@ fun AlbumsScreen(
     val gridState = rememberLazyGridState()
     var showSortMenu by remember { mutableStateOf(false) }
     var sortOrder by remember { mutableStateOf(SortOrder.TITLE) }
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
     LaunchedEffect(Unit) {
         viewModel.uiEffect.collect { effect ->
@@ -74,31 +76,14 @@ fun AlbumsScreen(
     }
 
     Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        containerColor = MaterialTheme.colorScheme.surface,
+        modifier = Modifier.fillMaxSize(),
+        containerColor = AppleTheme.colors.background,
         topBar = {
-            MediumFlexibleTopAppBar(
-                title = {
-                    Text(
-                        text = stringResource(R.string.albums_title),
-                        maxLines = 1
-                    )
-                },
-                subtitle = {
-                    Text(
-                        text = stringResource(R.string.albums_count, sortedAlbums.size),
-                        maxLines = 1
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        M3SymbolIcon(
-                            name = SymbolIconName.ArrowBack,
-                            filled = true,
-                            contentDescription = stringResource(R.string.albums_back_desc)
-                        )
-                    }
-                },
+            AppleTopBar(
+                title = stringResource(R.string.albums_title),
+                subtitle = stringResource(R.string.albums_count, sortedAlbums.size),
+                onNavigateBack = onNavigateBack,
+                backContentDescription = stringResource(R.string.albums_back_desc),
                 actions = {
                     Box {
                         IconButton(onClick = { showSortMenu = true }) {
@@ -107,49 +92,42 @@ fun AlbumsScreen(
                                 filled = true,
                                 contentDescription = stringResource(R.string.albums_sort_desc)
                             )
-                        }
-                        DropdownMenuPopup(
-                            expanded = showSortMenu,
-                            onDismissRequest = { showSortMenu = false }
-                        ) {
-                            // 与歌曲页的排序菜单同一套 Expressive 形态：选中项实底 + 勾。
-                            DropdownMenuGroup(shapes = MenuDefaults.groupShape(0, 1)) {
-                                val orders = listOf(SortOrder.TITLE, SortOrder.ARTIST)
-                                orders.forEachIndexed { index, order ->
-                                    val selected = sortOrder == order
-                                    SelectableDropdownMenuItem(
-                                        selected = selected,
-                                        onClick = {
-                                            sortOrder = order
-                                            showSortMenu = false
-                                        },
-                                        text = { Text(text = getSortOrderName(order)) },
-                                        shapes = MenuDefaults.itemShape(index, orders.size),
-                                        trailingContent = if (selected) {
-                                            {
-                                                M3SymbolIcon(
-                                                    name = SymbolIconName.Check,
-                                                    contentDescription = null,
-                                                    filled = true,
-                                                    size = MenuDefaults.TrailingIconSize
-                                                )
-                                            }
-                                        } else {
-                                            null
-                                        }
-                                    )
-                                }
-                            }
-                        }
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    scrolledContainerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface,
-                    subtitleContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                ),
-                scrollBehavior = scrollBehavior
+                    DropdownMenuPopup(
+                        expanded = showSortMenu,
+                        onDismissRequest = { showSortMenu = false }
+                    ) {
+                    // 与歌曲页的排序菜单同一套 Expressive 形态：选中项实底 + 勾。
+                    DropdownMenuGroup(shapes = MenuDefaults.groupShape(0, 1)) {
+                        val orders = listOf(SortOrder.TITLE, SortOrder.ARTIST)
+                        orders.forEachIndexed { index, order ->
+                            val selected = sortOrder == order
+                            SelectableDropdownMenuItem(
+                                selected = selected,
+                                onClick = {
+                                    sortOrder = order
+                                    showSortMenu = false
+                                },
+                            text = { Text(text = getSortOrderName(order)) },
+                            shapes = MenuDefaults.itemShape(index, orders.size),
+                            trailingContent = if (selected) {
+                                {
+                                    M3SymbolIcon(
+                                        name = SymbolIconName.Check,
+                                        contentDescription = null,
+                                        filled = true,
+                                        size = MenuDefaults.TrailingIconSize
+                                    )
+                            }
+                    } else {
+                    null
+                    }
+                    )
+                    }
+                    }
+                    }
+                    }
+                }
             )
         }
     ) { paddingValues ->
@@ -171,7 +149,7 @@ fun AlbumsScreen(
                     start = SonLayout.screenMargin,
                     end = SonLayout.screenMargin,
                     top = SonLayout.contentTopPadding,
-                    bottom = SonLayout.bottomBarClearance + bottomPadding
+                    bottom = appleBottomBarClearance() + bottomPadding
                 ),
                 verticalArrangement = Arrangement.spacedBy(SonLayout.gridGap),
                 horizontalArrangement = Arrangement.spacedBy(SonLayout.gridGap)

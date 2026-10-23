@@ -2,6 +2,8 @@ package com.cycling.presentation.equalizer
 
 import androidx.annotation.StringRes
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -15,14 +17,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,11 +33,18 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.cycling.core.ui.theme.LocalSonExtendedColors
-import com.cycling.core.ui.theme.SonLayout
-import com.cycling.core.ui.theme.SonSizes
+import com.cycling.core.ui.apple.AppleActionButton
+import com.cycling.core.ui.apple.AppleChip
+import com.cycling.core.ui.apple.AppleSectionHeader
+import com.cycling.core.ui.apple.AppleSeparator
+import com.cycling.core.ui.apple.AppleSettingsSwitchRow
+import com.cycling.core.ui.apple.AppleTheme
+import com.cycling.core.ui.apple.AppleType
+import com.cycling.core.ui.apple.appleBottomBarClearance
+import com.cycling.core.ui.components.SymbolIconName
 import com.cycling.core.ui.theme.SonSpacing
 import com.cycling.domain.audio.BiquadCoefficients
 import com.cycling.domain.model.EqFilterSpec
@@ -79,29 +82,30 @@ fun EqualizerContent(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(bottom = SonLayout.bottomBarClearance)
+            .padding(bottom = appleBottomBarClearance())
     ) {
-        SwitchRow(
+        AppleSettingsSwitchRow(
+            icon = SymbolIconName.GraphicEq,
             title = stringResource(R.string.equalizer_enable),
-            subtitle = stringResource(R.string.equalizer_enable_subtitle),
+            supporting = stringResource(R.string.equalizer_enable_subtitle),
             checked = state.enabled,
             onCheckedChange = { viewModel.handleIntent(EqualizerIntent.SetEnabled(it)) }
         )
 
-        HorizontalDivider(modifier = Modifier.padding(horizontal = SonLayout.screenMargin))
+        AppleSeparator()
 
-        SectionTitle(stringResource(R.string.equalizer_response))
+        AppleSectionHeader(title = stringResource(R.string.equalizer_response))
         EqualizerCurve(
             filters = filters,
             preampDb = effectivePreampDb,
             enabled = state.enabled,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = SonLayout.screenMargin)
+                .padding(horizontal = AppleDimsPadding)
                 .height(CURVE_HEIGHT)
         )
 
-        SectionTitle(stringResource(R.string.autoeq_section))
+        AppleSectionHeader(title = stringResource(R.string.autoeq_section))
         AutoEqRow(
             appliedName = state.autoEq?.name,
             detail = state.autoEq?.let {
@@ -110,15 +114,15 @@ fun EqualizerContent(
             onPick = { viewModel.handleIntent(EqualizerIntent.OpenAutoEqPicker) }
         )
 
-        SectionTitle(stringResource(R.string.equalizer_presets))
+        AppleSectionHeader(title = stringResource(R.string.equalizer_presets))
         PresetChips(
             selected = state.preset,
             chipEnabled = state.enabled,
             onSelect = { viewModel.handleIntent(EqualizerIntent.SetPreset(it)) }
         )
 
-        SectionTitle(stringResource(R.string.equalizer_bands))
-        Column(modifier = Modifier.padding(horizontal = SonLayout.screenMargin)) {
+        AppleSectionHeader(title = stringResource(R.string.equalizer_bands))
+        Column(modifier = Modifier.padding(horizontal = AppleDimsPadding)) {
             EqualizerBands.frequenciesHz.forEachIndexed { index, frequencyHz ->
                 BandSliderRow(
                     frequencyHz = frequencyHz,
@@ -131,27 +135,28 @@ fun EqualizerContent(
             }
         }
 
-        SectionTitle(stringResource(R.string.equalizer_preamp))
+        AppleSectionHeader(title = stringResource(R.string.equalizer_preamp))
         PreampSliderRow(
             preampDb = state.preampDb,
             sliderEnabled = state.enabled,
             onPreampChange = { viewModel.handleIntent(EqualizerIntent.SetPreamp(it)) }
         )
 
-        Button(
+        AppleActionButton(
+            label = stringResource(R.string.equalizer_reset),
             onClick = { viewModel.handleIntent(EqualizerIntent.Reset) },
+            filled = false,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = SonLayout.screenMargin, vertical = SonSpacing.large)
-        ) {
-            Text(text = stringResource(R.string.equalizer_reset))
-        }
+                .padding(horizontal = AppleDimsPadding, vertical = SonSpacing.large)
+        )
 
-        HorizontalDivider(modifier = Modifier.padding(horizontal = SonLayout.screenMargin))
+        AppleSeparator()
 
-        SwitchRow(
+        AppleSettingsSwitchRow(
+            icon = SymbolIconName.BarChart,
             title = stringResource(R.string.equalizer_visualization),
-            subtitle = stringResource(R.string.equalizer_visualization_subtitle),
+            supporting = stringResource(R.string.equalizer_visualization_subtitle),
             checked = state.visualizationEnabled,
             onCheckedChange = {
                 viewModel.handleIntent(EqualizerIntent.SetVisualizationEnabled(it))
@@ -178,90 +183,52 @@ fun EqualizerContent(
     }
 }
 
-/**
- * 耳机校正条目：左边是当前档案（或"未应用"），右边是入口。
- */
+/** 耳机校正条目：左边是当前档案（或"未应用"），右边是入口。整行可点。 */
 @Composable
 private fun AutoEqRow(
     appliedName: String?,
     detail: String,
     onPick: () -> Unit
 ) {
+    val colors = AppleTheme.colors
+    val interaction = remember { MutableInteractionSource() }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = SonLayout.screenMargin, vertical = SonSpacing.medium),
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                onClick = onPick
+            )
+            .padding(horizontal = AppleDimsPadding, vertical = SonSpacing.mediumSmall),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = appliedName ?: stringResource(R.string.autoeq_none),
-                style = MaterialTheme.typography.titleMediumEmphasized,
-                color = MaterialTheme.colorScheme.onSurface,
+                style = AppleType.body,
+                color = colors.label,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = detail,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = AppleType.footnote,
+                color = colors.secondaryLabel,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
         }
         Spacer(modifier = Modifier.width(SonSpacing.medium))
-        TextButton(onClick = onPick) {
-            Text(
-                text = stringResource(
-                    if (appliedName == null) R.string.autoeq_pick else R.string.autoeq_change
-                )
-            )
-        }
+        Text(
+            text = stringResource(
+                if (appliedName == null) R.string.autoeq_pick else R.string.autoeq_change
+            ),
+            style = AppleType.body,
+            color = colors.key,
+            maxLines = 1
+        )
     }
-}
-
-@Composable
-private fun SwitchRow(
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = SonLayout.screenMargin, vertical = SonSpacing.medium),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMediumEmphasized,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        Spacer(modifier = Modifier.width(SonSpacing.medium))
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
-    }
-}
-
-@Composable
-private fun SectionTitle(text: String) {
-    Text(
-        text = text,
-        modifier = Modifier.padding(
-            start = SonSizes.listItemHorizontalPadding,
-            top = SonSpacing.large,
-            bottom = SonSpacing.small
-        ),
-        style = MaterialTheme.typography.titleSmallEmphasized,
-        color = MaterialTheme.colorScheme.primary
-    )
 }
 
 /**
@@ -276,8 +243,8 @@ private fun EqualizerCurve(
     enabled: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val curveColor = LocalSonExtendedColors.current.waveformActive
-    val baseColor = LocalSonExtendedColors.current.waveform
+    val curveColor = AppleTheme.colors.systemRed
+    val baseColor = AppleTheme.colors.separator
 
     Canvas(modifier = modifier) {
         val middleY = size.height / 2f
@@ -285,7 +252,7 @@ private fun EqualizerCurve(
 
         // 0dB 基线
         drawLine(
-            color = baseColor.copy(alpha = 0.45f),
+            color = baseColor,
             start = Offset(0f, middleY),
             end = Offset(size.width, middleY),
             strokeWidth = thinStroke
@@ -318,33 +285,28 @@ private fun PresetChips(
     chipEnabled: Boolean,
     onSelect: (EqualizerPreset) -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = AppleDimsPadding)) {
         FlowRow(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = SonLayout.screenMargin),
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(SonSpacing.small),
             verticalArrangement = Arrangement.spacedBy(SonSpacing.small)
         ) {
             // CUSTOM 只是"用户改过"的标记，不作为可点选的预设。
             EqualizerPreset.entries.filter { it != EqualizerPreset.CUSTOM }.forEach { preset ->
-                FilterChip(
+                AppleChip(
+                    label = stringResource(preset.labelRes()),
                     selected = preset == selected,
-                    onClick = { onSelect(preset) },
                     enabled = chipEnabled,
-                    label = { Text(text = stringResource(preset.labelRes())) }
+                    onClick = { onSelect(preset) }
                 )
             }
         }
         if (selected == EqualizerPreset.CUSTOM) {
             Text(
                 text = stringResource(R.string.equalizer_custom_active),
-                modifier = Modifier.padding(
-                    start = SonSizes.listItemHorizontalPadding,
-                    top = SonSpacing.small
-                ),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                modifier = Modifier.padding(top = SonSpacing.small),
+                style = AppleType.footnote,
+                color = AppleTheme.colors.secondaryLabel
             )
         }
     }
@@ -359,6 +321,7 @@ private fun BandSliderRow(
 ) {
     // 拖动过程只改本地值，松手才落盘 —— 否则一次拖动会触发几十次 DataStore 写入。
     var localGain by remember(gainDb) { mutableStateOf(gainDb) }
+    val colors = AppleTheme.colors
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -366,8 +329,8 @@ private fun BandSliderRow(
     ) {
         Text(
             text = frequencyLabel(frequencyHz),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = AppleType.caption1,
+            color = colors.secondaryLabel,
             modifier = Modifier.width(FREQUENCY_LABEL_WIDTH)
         )
         Slider(
@@ -383,8 +346,8 @@ private fun BandSliderRow(
         )
         Text(
             text = stringResource(R.string.equalizer_band_gain, localGain),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurface,
+            style = AppleType.caption1Emphasized,
+            color = colors.label,
             textAlign = TextAlign.End,
             modifier = Modifier.width(GAIN_LABEL_WIDTH)
         )
@@ -398,11 +361,12 @@ private fun PreampSliderRow(
     onPreampChange: (Float) -> Unit
 ) {
     var localPreamp by remember(preampDb) { mutableStateOf(preampDb) }
+    val colors = AppleTheme.colors
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = SonLayout.screenMargin),
+            .padding(horizontal = AppleDimsPadding),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Slider(
@@ -421,8 +385,8 @@ private fun PreampSliderRow(
         )
         Text(
             text = stringResource(R.string.equalizer_preamp_value, localPreamp),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurface,
+            style = AppleType.caption1Emphasized,
+            color = colors.label,
             textAlign = TextAlign.End,
             modifier = Modifier.width(GAIN_LABEL_WIDTH)
         )
@@ -447,6 +411,9 @@ private fun EqualizerPreset.labelRes(): Int = when (this) {
     EqualizerPreset.DANCE -> R.string.eq_preset_dance
     EqualizerPreset.CUSTOM -> R.string.equalizer_custom_active
 }
+
+/** 与设置页行一致的内边距：左右 16dp。 */
+private val AppleDimsPadding: Dp = 16.dp
 
 private val FREQUENCY_LABEL_WIDTH: Dp = SonSpacing.extraExtraLarge
 private val GAIN_LABEL_WIDTH: Dp = SonSpacing.huge

@@ -1,6 +1,7 @@
 package com.cycling.presentation.player
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -14,6 +15,19 @@ import com.cycling.core.ui.theme.CoverArtworkLoader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import timber.log.Timber
+
+/**
+ * 当前封面对动态色面的两种贡献。
+ *
+ * - [colors]：封面上真实存在的 1~3 个颜色（色相拉开），没有封面采样时的色相来源；
+ * - [cells]：封面 4×4 的平均色（行优先 16 个），让色面带封面的明暗与构图 —— 有它才像
+ *   「把这张封面糊开了」，只有色相的话是一团平滑渐变。
+ */
+@Immutable
+data class ArtworkBackdrop(
+    val colors: List<Color> = emptyList(),
+    val cells: List<Color> = emptyList()
+)
 
 /**
  * 从当前封面提取**动态色面**用的颜色。
@@ -36,13 +50,13 @@ import timber.log.Timber
 fun rememberArtworkBackdrop(
     imageUrl: String?,
     filePath: String? = null
-): List<Color> {
+): ArtworkBackdrop {
     val context = LocalContext.current
-    var backdrop by remember(imageUrl, filePath) { mutableStateOf(emptyList<Color>()) }
+    var backdrop by remember(imageUrl, filePath) { mutableStateOf(ArtworkBackdrop()) }
 
     LaunchedEffect(imageUrl, filePath) {
         if (imageUrl == null && filePath == null) {
-            backdrop = emptyList()
+            backdrop = ArtworkBackdrop()
             return@LaunchedEffect
         }
         backdrop = runCatching {
@@ -50,25 +64,27 @@ fun rememberArtworkBackdrop(
                 val bitmap = CoverArtworkLoader.load(context, imageUrl, filePath)
                 if (bitmap == null) {
                     Timber.w("rememberArtworkBackdrop: 封面读取失败 %s", filePath ?: imageUrl)
-                    return@withContext emptyList<Color>()
+                    return@withContext ArtworkBackdrop()
                 }
+                val cells = ArtColorExtractor.sampleGrid(bitmap)
                 val colors = ArtColorExtractor.colorsFromBitmap(bitmap)
                 if (colors == null) {
                     Timber.w("rememberArtworkBackdrop: Palette 没有取到颜色 %s", filePath ?: imageUrl)
-                    return@withContext emptyList<Color>()
+                    return@withContext ArtworkBackdrop(cells = cells)
                 }
                 // Palette 偶尔一个 swatch 都给不出来（纯色图），这时用种子色兜底 ——
                 // 它同样来自封面，比配色方案里被旋转过的 container 好。
                 val result = colors.backdrop.ifEmpty { listOf(colors.seed) }
                 Timber.i(
-                    "rememberArtworkBackdrop: backdrop=%s",
-                    result.joinToString { "#%06X".format(it.toArgb() and 0xFFFFFF) }
+                    "rememberArtworkBackdrop: backdrop=%s cells=%d",
+                    result.joinToString { "#%06X".format(it.toArgb() and 0xFFFFFF) },
+                    cells.size
                 )
-                result
+                ArtworkBackdrop(colors = result, cells = cells)
             }
         }.onFailure {
             Timber.w(it, "rememberArtworkBackdrop: 封面取色失败")
-        }.getOrDefault(emptyList<Color>())
+        }.getOrDefault(ArtworkBackdrop())
     }
 
     return backdrop

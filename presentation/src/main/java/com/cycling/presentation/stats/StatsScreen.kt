@@ -54,6 +54,11 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cycling.core.ui.components.M3MediaCard
+import com.cycling.core.ui.apple.AppleTheme
+import com.cycling.core.ui.apple.AppleType
+import com.cycling.core.ui.apple.AppleAlert
+import com.cycling.core.ui.apple.AppleSheet
+import com.cycling.core.ui.apple.AppleTopBar
 import com.cycling.core.ui.components.M3SymbolIcon
 import com.cycling.core.ui.components.SymbolIconName
 import com.cycling.core.ui.theme.SonLayout
@@ -103,7 +108,6 @@ fun StatsScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var showFullRanking by remember { mutableStateOf(false) }
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     LaunchedEffect(Unit) {
         viewModel.uiEffect.collect { effect ->
@@ -120,34 +124,22 @@ fun StatsScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(text = stringResource(R.string.stats_title)) },
-                navigationIcon = {
-                    IconButton(onClick = { viewModel.handleIntent(StatsIntent.NavigateBack) }) {
-                        M3SymbolIcon(
-                            name = SymbolIconName.ArrowBack,
-                            filled = true,
-                            contentDescription = stringResource(R.string.stats_back)
-                        )
-                    }
-                },
+            AppleTopBar(
+                title = stringResource(R.string.stats_title),
+                subtitle = null,
+                onNavigateBack = { viewModel.handleIntent(StatsIntent.NavigateBack) },
+                backContentDescription = stringResource(R.string.stats_back),
                 actions = {
                     IconButton(onClick = {
-                        viewModel.handleIntent(StatsIntent.NavigateToLeaderboard)
+                    viewModel.handleIntent(StatsIntent.NavigateToLeaderboard)
                     }) {
-                        M3SymbolIcon(
-                            name = SymbolIconName.GraphicEq,
-                            filled = false,
-                            contentDescription = stringResource(R.string.leaderboard_title)
-                        )
+                    M3SymbolIcon(
+                    name = SymbolIconName.GraphicEq,
+                    filled = false,
+                    contentDescription = stringResource(R.string.leaderboard_title)
+                    )
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                }
             )
         }
     ) { innerPadding ->
@@ -185,10 +177,7 @@ fun StatsScreen(
     // ── 当天详情 ──
     val selectedDay = uiState.selectedDay
     if (selectedDay != null) {
-        ModalBottomSheet(
-            onDismissRequest = { viewModel.handleIntent(StatsIntent.DismissDay) },
-            sheetState = sheetState
-        ) {
+        AppleSheet(onDismiss = { viewModel.handleIntent(StatsIntent.DismissDay) }) {
             DayDetailContent(
                 date = selectedDay,
                 songs = uiState.daySongs,
@@ -200,10 +189,7 @@ fun StatsScreen(
 
     // ── 完整榜单 ──
     if (showFullRanking) {
-        ModalBottomSheet(
-            onDismissRequest = { showFullRanking = false },
-            sheetState = sheetState
-        ) {
+        AppleSheet(onDismiss = { showFullRanking = false }) {
             FullRankingContent(
                 songs = uiState.stats.topSongs,
                 onPlay = { viewModel.handleIntent(StatsIntent.PlaySong(it)) }
@@ -213,20 +199,14 @@ fun StatsScreen(
 
     // ── 清空确认 ──
     if (uiState.showClearConfirm) {
-        AlertDialog(
-            onDismissRequest = { viewModel.handleIntent(StatsIntent.DismissClearStats) },
-            title = { Text(text = stringResource(R.string.stats_clear_confirm_title)) },
-            text = { Text(text = stringResource(R.string.stats_clear_confirm_text)) },
-            confirmButton = {
-                TextButton(onClick = { viewModel.handleIntent(StatsIntent.ConfirmClearStats) }) {
-                    Text(text = stringResource(R.string.stats_clear_confirm))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { viewModel.handleIntent(StatsIntent.DismissClearStats) }) {
-                    Text(text = stringResource(R.string.stats_cancel))
-                }
-            }
+        AppleAlert(
+            title = stringResource(R.string.stats_clear_confirm_title),
+            message = stringResource(R.string.stats_clear_confirm_text),
+            confirmLabel = stringResource(R.string.stats_clear_confirm),
+            onConfirm = { viewModel.handleIntent(StatsIntent.ConfirmClearStats) },
+            onDismiss = { viewModel.handleIntent(StatsIntent.DismissClearStats) },
+            dismissLabel = stringResource(R.string.stats_cancel),
+            destructive = true
         )
     }
 }
@@ -319,19 +299,19 @@ private fun HeroCard(stats: ListeningStats) {
             .fillMaxWidth()
             .padding(horizontal = SonLayout.screenMargin, vertical = SonSpacing.small),
         shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.primaryContainer
+        color = AppleTheme.colors.fill
     ) {
         Column(modifier = Modifier.padding(SonSpacing.large)) {
             Text(
                 text = stringResource(R.string.stats_hero_total),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
+                style = AppleType.caption1Emphasized,
+                color = AppleTheme.colors.label
             )
             Spacer(modifier = Modifier.height(SonSpacing.small))
             Text(
                 text = formatListenDuration(stats.totalPlayMs),
-                style = MaterialTheme.typography.displaySmallEmphasized,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                style = AppleType.largeTitle,
+                color = AppleTheme.colors.label,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -342,16 +322,16 @@ private fun HeroCard(stats: ListeningStats) {
                     formatListenCount(stats.totalPlayCount),
                     stats.totalDays
                 ),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
+                style = AppleType.footnote,
+                color = AppleTheme.colors.label
             )
             Text(
                 text = stringResource(
                     R.string.stats_average_per_song,
                     formatListenDuration(stats.averagePlayMs)
                 ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
+                style = AppleType.caption1,
+                color = AppleTheme.colors.label
             )
         }
     }
@@ -370,7 +350,7 @@ private fun PeriodOverview(periods: List<PeriodListening>) {
             Surface(
                 modifier = Modifier.weight(1f),
                 shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.surfaceContainerHigh
+                color = AppleTheme.colors.tertiaryBackground
             ) {
                 Column(
                     modifier = Modifier.padding(SonSpacing.mediumSmall),
@@ -378,14 +358,14 @@ private fun PeriodOverview(periods: List<PeriodListening>) {
                 ) {
                     Text(
                         text = periodLabel(period.period),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        style = AppleType.caption1Emphasized,
+                        color = AppleTheme.colors.secondaryLabel
                     )
                     Spacer(modifier = Modifier.height(SonSpacing.extraSmall))
                     Text(
                         text = formatListenDuration(period.playMs),
-                        style = MaterialTheme.typography.titleMediumEmphasized,
-                        color = MaterialTheme.colorScheme.onSurface,
+                        style = AppleType.headline,
+                        color = AppleTheme.colors.label,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         textAlign = TextAlign.Center
@@ -395,8 +375,8 @@ private fun PeriodOverview(periods: List<PeriodListening>) {
                             R.string.stats_period_plays,
                             formatListenCount(period.playCount)
                         ),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        style = AppleType.caption1,
+                        color = AppleTheme.colors.secondaryLabel
                     )
                 }
             }
@@ -421,7 +401,7 @@ private fun WeekRhythmCard(
             .fillMaxWidth()
             .padding(horizontal = SonLayout.screenMargin),
         shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh
+        color = AppleTheme.colors.tertiaryBackground
     ) {
         Column(modifier = Modifier.padding(SonSpacing.medium)) {
             Row(
@@ -430,8 +410,8 @@ private fun WeekRhythmCard(
             ) {
                 Text(
                     text = stringResource(R.string.stats_week_title),
-                    style = MaterialTheme.typography.titleMediumEmphasized,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    style = AppleType.headline,
+                    color = AppleTheme.colors.label,
                     modifier = Modifier.weight(1f)
                 )
                 Text(
@@ -439,8 +419,8 @@ private fun WeekRhythmCard(
                         R.string.stats_week_total,
                         formatListenDuration(weekTotal)
                     ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    style = AppleType.caption1,
+                    color = AppleTheme.colors.secondaryLabel
                 )
             }
             Spacer(modifier = Modifier.height(SonSpacing.medium))
@@ -461,19 +441,19 @@ private fun YearHeatmapCard(days: List<DailyListening>) {
             .fillMaxWidth()
             .padding(horizontal = SonLayout.screenMargin, vertical = SonSpacing.small),
         shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh
+        color = AppleTheme.colors.tertiaryBackground
     ) {
         Column(modifier = Modifier.padding(SonSpacing.medium)) {
             Text(
                 text = stringResource(R.string.stats_year_title),
-                style = MaterialTheme.typography.titleMediumEmphasized,
-                color = MaterialTheme.colorScheme.onSurface
+                style = AppleType.headline,
+                color = AppleTheme.colors.label
             )
             Spacer(modifier = Modifier.height(SonSpacing.small))
             Text(
                 text = stringResource(R.string.stats_year_caption),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = AppleType.caption1,
+                color = AppleTheme.colors.secondaryLabel
             )
             Spacer(modifier = Modifier.height(SonSpacing.medium))
             YearHeatmap(days = days)
@@ -489,7 +469,7 @@ private fun HourCard(hours: List<HourlyListening>, busiestHour: Int?) {
             .fillMaxWidth()
             .padding(horizontal = SonLayout.screenMargin),
         shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh
+        color = AppleTheme.colors.tertiaryBackground
     ) {
         Column(modifier = Modifier.padding(SonSpacing.medium)) {
             if (busiestHour != null) {
@@ -499,8 +479,8 @@ private fun HourCard(hours: List<HourlyListening>, busiestHour: Int?) {
                         formatListenHour(busiestHour),
                         formatListenHourEnd(busiestHour)
                     ),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    style = AppleType.footnote,
+                    color = AppleTheme.colors.secondaryLabel
                 )
                 Spacer(modifier = Modifier.height(SonSpacing.medium))
             }
@@ -543,20 +523,20 @@ private fun TopArtistsRail(artists: List<ArtistListeningStat>) {
         items(items = artists.take(TOP_ARTIST_PREVIEW), key = { it.artist }) { artist ->
             Surface(
                 shape = MaterialTheme.shapes.large,
-                color = MaterialTheme.colorScheme.secondaryContainer
+                color = AppleTheme.colors.fill
             ) {
                 Column(modifier = Modifier.padding(SonSpacing.mediumSmall)) {
                     Text(
                         text = artist.artist,
-                        style = MaterialTheme.typography.titleSmallEmphasized,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        style = AppleType.footnoteEmphasized,
+                        color = AppleTheme.colors.label,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         text = formatListenDuration(artist.playMs),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                        style = AppleType.caption1,
+                        color = AppleTheme.colors.label
                     )
                 }
             }
@@ -578,7 +558,7 @@ private fun ClearStatsRow(onClick: () -> Unit) {
             modifier = Modifier
                 .size(SonSizes.thumbnail)
                 .clip(MaterialTheme.shapes.small)
-                .background(MaterialTheme.colorScheme.errorContainer),
+                .background(AppleTheme.colors.fill),
             contentAlignment = Alignment.Center
         ) {
             M3SymbolIcon(
@@ -586,14 +566,14 @@ private fun ClearStatsRow(onClick: () -> Unit) {
                 filled = true,
                 contentDescription = null,
                 modifier = Modifier.size(SonSizes.iconMedium),
-                tint = MaterialTheme.colorScheme.onErrorContainer
+                tint = AppleTheme.colors.label
             )
         }
         Spacer(modifier = Modifier.width(SonSpacing.mediumSmall))
         Text(
             text = stringResource(R.string.stats_clear),
-            style = MaterialTheme.typography.titleMediumEmphasized,
-            color = MaterialTheme.colorScheme.onSurface,
+            style = AppleType.headline,
+            color = AppleTheme.colors.label,
             modifier = Modifier.weight(1f)
         )
     }
@@ -619,8 +599,8 @@ private fun DayDetailContent(
         item {
             Text(
                 text = stringResource(R.string.stats_day_detail_title, dayLabel(date)),
-                style = MaterialTheme.typography.titleLargeEmphasized,
-                color = MaterialTheme.colorScheme.onSurface,
+                style = AppleType.title2Emphasized,
+                color = AppleTheme.colors.label,
                 modifier = Modifier.padding(
                     horizontal = SonLayout.screenMargin,
                     vertical = SonSpacing.small
@@ -642,8 +622,8 @@ private fun DayDetailContent(
             songs.isEmpty() -> item {
                 Text(
                     text = stringResource(R.string.stats_day_detail_empty),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = AppleType.footnote,
+                    color = AppleTheme.colors.secondaryLabel,
                     modifier = Modifier.padding(
                         horizontal = SonLayout.screenMargin,
                         vertical = SonSpacing.large
@@ -676,8 +656,8 @@ private fun FullRankingContent(
         item {
             Text(
                 text = stringResource(R.string.stats_top_songs),
-                style = MaterialTheme.typography.titleLargeEmphasized,
-                color = MaterialTheme.colorScheme.onSurface,
+                style = AppleType.title2Emphasized,
+                color = AppleTheme.colors.label,
                 modifier = Modifier.padding(
                     horizontal = SonLayout.screenMargin,
                     vertical = SonSpacing.small

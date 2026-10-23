@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Apple Music 设计层预览 · Sonic</title>
+<style>
+  :root{
+    --sf: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Meta", system-ui, sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:#e9e9ee;font-family:var(--sf);padding:40px 24px 64px;
+    display:flex;flex-wrap:wrap;gap:32px;justify-content:center;align-items:flex-start;
+  }
+  .caption{width:100%;text-align:center;color:#3c3c43;font-size:13px;margin-bottom:4px}
+  .wrap{display:flex;flex-direction:column;gap:10px;align-items:center}
+  .tag{font-size:12px;color:#6b6b72;letter-spacing:.02em}
+  .phone{
+    width:375px;height:760px;border-radius:44px;overflow:hidden;position:relative;
+    box-shadow:0 18px 50px rgba(0,0,0,.18);display:flex;flex-direction:column;
+  }
+  .light{background:#fff;color:#000}
+  .dark{background:#000;color:#fff}
+  .status{height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;font-size:14px;font-weight:600}
+  .nav{display:flex;align-items:center;padding:2px 16px 6px}
+  .nav h1{font-size:34px;line-height:41px;font-weight:700;letter-spacing:-.4px;flex:1}
+  .nav .sub{font-size:13px;line-height:18px;opacity:.6;font-weight:400;letter-spacing:0}
+  .icons{display:flex;gap:4px;color:#0088FF}
+  .ic{width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-size:19px}
+  .scroll{flex:1;overflow:hidden}
+  .sec{display:flex;align-items:center;padding:13px 16px 10px}
+  .sec h2{font-size:20px;line-height:25px;font-weight:700;letter-spacing:-.2px;flex:1}
+  .chev{opacity:.3;font-size:17px;font-weight:600}
+  .row{display:flex;gap:10px;padding:0 0 0 16px;overflow:hidden}
+  .card{width:148px;flex:0 0 148px}
+  .art{width:148px;height:148px;border-radius:7px;background:#e3e3e8;position:relative;overflow:hidden}
+  .art::after{content:"";position:absolute;inset:0;background:radial-gradient(120% 90% at 20% 10%, rgba(255,255,255,.55), transparent 60%)}
+  .art.small{width:132px;height:132px;border-radius:50%}
+  .card .t{font-size:15px;line-height:20px;margin-top:6px;padding:0 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .card .s{font-size:13px;line-height:18px;padding:0 2px;opacity:.6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .song{display:flex;align-items:center;gap:12px;padding:8px 16px}
+  .song .art{width:48px;height:48px;border-radius:5px;flex:0 0 48px}
+  .song .txt{flex:1;min-width:0}
+  .song .txt .t{font-size:17px;line-height:22px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .song .txt .s{font-size:13px;line-height:18px;opacity:.6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .menu{display:flex;align-items:center;gap:16px;padding:13px 20px 13px 16px}
+  .menu .g{font-size:22px;color:#FF3B30;width:26px;text-align:center}
+  .menu .l{font-size:20px;line-height:25px;font-weight:700;letter-spacing:-.2px;flex:1}
+  .sep{height:.5px;background:#C6C6C8;margin-left:58px}
+  .dark .sep{background:#38383A}
+  .bigrow{display:flex;align-items:center;gap:12px;padding:8px 16px}
+  .bigrow .art{width:88px;height:88px;flex:0 0 88px}
+  .bigrow .t{font-size:17px;line-height:22px}
+  .bigrow .s{font-size:13px;line-height:18px;opacity:.6}
+  .bigrow .more{margin-left:auto;opacity:.45;font-size:18px}
+  .tabbar{
+    height:56px;display:flex;align-items:center;justify-content:space-around;
+    border-top:.5px solid rgba(198,198,200,.6);
+  }
+  .dark .tabbar{border-top-color:rgba(56,56,58,.9)}
+  .tab{font-size:11px;line-height:13px;text-align:center;color:#000;display:flex;flex-direction:column;gap:2px;align-items:center;width:50%}
+  .dark .tab{color:#fff}
+  .tab.on{color:#0088FF}
+  .dark .tab.on{color:#0091FF}
+  .tab .i{font-size:20px}
+  .mini{
+    margin:8px 16px;height:48px;border-radius:80px;background:#F5F5F7;
+    border:.5px solid rgba(0,0,0,.1);display:flex;align-items:center;
+    padding:0 8px 0 16px;gap:8px;
+  }
+  .dark .mini{background:#262628;border-color:rgba(255,255,255,.2)}
+  .mini .art{width:30px;height:30px;border-radius:5px;flex:0 0 30px}
+  .mini .txt{flex:1;min-width:0}
+  .mini .t{font-size:12px;line-height:16px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mini .s{font-size:12px;line-height:16px;opacity:.6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mini .btn{width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:17px}
+  .muted{opacity:.55}
+  .note{width:100%;max-width:820px;color:#4a4a52;font-size:13px;line-height:1.7;margin-top:8px}
+  .note code{background:rgba(0,0,0,.06);padding:1px 5px;border-radius:4px}
+</style>
+</head>
+<body>
+
+<div class="caption">Sonic · Apple Music 设计层静态预览（令牌取自 APK 资源表，非应用截图）</div>
+<div class="wrap">
+  <div class="tag">首页 · 浅色</div>
+  <div class="phone light">
+    <div class="status"><span>9:41</span><span>􀙇 􀙈 􀛨</span></div>
+    <div class="nav"><div style="flex:1"><h1>上午好</h1><div class="sub">今天听点什么好呢？</div></div>
+      <div class="icons"><div class="ic">􀊫</div><div class="ic">􀍟</div></div></div>
+    <div class="scroll">
+      <div class="sec"><h2>最近播放</h2><div class="chev">›</div></div>
+      <div class="row">
+        <div class="card"><div class="art"></div><div class="t">夜航</div><div class="s">林采欣</div></div>
+        <div class="card"><div class="art"></div><div class="t">Blue Hour</div><div class="s">Nova Lane</div></div>
+        <div class="card"><div class="art"></div><div class="t">潮汐</div><div class="s">海朋森</div></div>
+      </div>
+      <div class="sec"><h2>推荐专辑</h2><div class="chev">›</div></div>
+      <div class="row">
+        <div class="card"><div class="art"></div><div class="t">Solaris</div><div class="s">Aki Tanaka</div></div>
+        <div class="card"><div class="art"></div><div class="t">长夜漫游</div><div class="s">李知远</div></div>
+        <div class="card"><div class="art"></div><div class="t">Echoes</div><div class="s">Vela</div></div>
+      </div>
+      <div class="sec"><h2>推荐歌手</h2><div class="chev">›</div></div>
+      <div class="row">
+        <div class="card" style="width:132px;flex:0 0 132px"><div class="art small"></div><div class="t">陈婧霏</div><div class="s">歌手</div></div>
+        <div class="card" style="width:132px;flex:0 0 132px"><div class="art small"></div><div class="t">Motorama</div><div class="s">歌手</div></div>
+      </div>
+      <div class="sec"><h2>收藏歌曲</h2><div class="chev">›</div></div>
+      <div class="song"><div class="art"></div><div class="txt"><div class="t">午夜飞行</div><div class="s">陈婧霏</div></div><div class="chev">›</div></div>
+      <div class="song"><div class="art"></div><div class="txt"><div class="t">Ghost</div><div class="s">Motorama</div></div><div class="chev">›</div></div>
+    </div>
+    <div class="mini">
+      <div class="art"></div>
+      <div class="txt"><div class="t">午夜飞行</div><div class="s">陈婧霏</div></div>
+      <div class="btn">􀊘</div>
+      <div class="btn">􀊕</div>
+    </div>
+    <div class="tabbar">
+      <div class="tab on"><div class="i">􀎬</div><div>首页</div></div>
+      <div class="tab"><div class="i">􀫊</div><div>资料库</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="tag">资料库 · 浅色</div>
+  <div class="phone light">
+    <div class="status"><span>9:41</span><span>􀙇 􀙈 􀛨</span></div>
+    <div class="nav"><div style="flex:1"><h1>资料库</h1><div class="sub">12 个播放列表</div></div>
+      <div class="icons"><div class="ic">􀊫</div><div class="ic">􀐅</div></div></div>
+    <div class="scroll">
+      <div class="menu"><div class="g">􀑪</div><div class="l">全部歌曲</div><div class="chev">›</div></div>
+      <div class="sep"></div>
+      <div class="menu"><div class="g">􀋚</div><div class="l">我喜欢</div><div class="chev">›</div></div>
+      <div class="sep"></div>
+      <div class="menu"><div class="g">􀘽</div><div class="l">听歌统计</div><div class="chev">›</div></div>
+      <div class="sep"></div>
+      <div class="menu"><div class="g">􀟤</div><div class="l">排行榜</div><div class="chev">›</div></div>
+      <div class="sep"></div>
+      <div class="sec" style="padding-top:20px"><h2>播放列表</h2></div>
+      <div class="bigrow"><div class="art"></div><div class="txt"><div class="t">深夜驾驶</div><div class="s">28 首</div></div><div class="more">⋯</div></div>
+      <div class="bigrow"><div class="art"></div><div class="txt"><div class="t">雨天钢琴</div><div class="s">41 首</div></div><div class="more">⋯</div></div>
+      <div class="bigrow"><div class="art"></div><div class="txt"><div class="t">Post Rock 循环</div><div class="s">63 首</div></div><div class="more">⋯</div></div>
+    </div>
+    <div class="tabbar">
+      <div class="tab"><div class="i">􀎬</div><div>首页</div></div>
+      <div class="tab on"><div class="i">􀫊</div><div>资料库</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="tag">资料库 · 深色</div>
+  <div class="phone dark">
+    <div class="status"><span>9:41</span><span>􀙇 􀙈 􀛨</span></div>
+    <div class="nav"><div style="flex:1"><h1>资料库</h1><div class="sub">12 个播放列表</div></div>
+      <div class="icons"><div class="ic">􀊫</div><div class="ic">􀐅</div></div></div>
+    <div class="scroll">
+      <div class="menu"><div class="g">􀑪</div><div class="l">全部歌曲</div><div class="chev">›</div></div>
+      <div class="sep"></div>
+      <div class="menu"><div class="g">􀋚</div><div class="l">我喜欢</div><div class="chev">›</div></div>
+      <div class="sep"></div>
+      <div class="menu"><div class="g">􀘽</div><div class="l">听歌统计</div><div class="chev">›</div></div>
+      <div class="sep"></div>
+      <div class="menu"><div class="g">􀟤</div><div class="l">排行榜</div><div class="chev">›</div></div>
+      <div class="sep"></div>
+      <div class="sec" style="padding-top:20px"><h2>播放列表</h2></div>
+      <div class="bigrow"><div class="art" style="background:#1c1c1e"></div><div class="txt"><div class="t">深夜驾驶</div><div class="s">28 首</div></div><div class="more">⋯</div></div>
+      <div class="bigrow"><div class="art" style="background:#1c1c1e"></div><div class="txt"><div class="t">雨天钢琴</div><div class="s">41 首</div></div><div class="more">⋯</div></div>
+      <div class="bigrow"><div class="art" style="background:#1c1c1e"></div><div class="txt"><div class="t">Post Rock 循环</div><div class="s">63 首</div></div><div class="more">⋯</div></div>
+    </div>
+    <div class="tabbar">
+      <div class="tab"><div class="i">􀎬</div><div>首页</div></div>
+      <div class="tab on"><div class="i">􀫊</div><div>资料库</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  预览只用于确认观感，字号/间距/圆角均按 APK 实际资源值渲染：
+  大标题 34sp、分区标题 20sp Bold、卡片 148dp/圆角 7dp、栅格 10dp、行尾露出 36dp、
+  菜单行 13dp 上下留白 + 26dp 图标、封面行 88dp。<br>
+  外壳：迷你播放器 48dp 胶囊（圆角 pill、0.5dp 描边、材质底 #F5F5F7 / #262628、30dp 封面、12sp 标题、两个 32dp 控件、无进度条）；
+  Tab 条 56dp、11sp 标签、选中 #0088FF（夜间 #0091FF）、顶部 0.5dp 半透明分隔线；胶囊与栏之间 8dp 透明间隙。
+  首页帧展示了「有正在播放」的状态，资料库帧展示「无播放」的空档。
+</div>
+
+</body>
+</html>

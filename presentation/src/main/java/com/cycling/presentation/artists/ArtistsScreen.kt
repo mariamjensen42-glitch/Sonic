@@ -29,6 +29,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.cycling.core.ui.apple.appleBottomBarClearance
+import com.cycling.core.ui.apple.AppleTheme
+import com.cycling.core.ui.apple.AppleTopBar
 import com.cycling.core.ui.components.M3SymbolIcon
 import com.cycling.core.ui.components.SymbolIconName
 import com.cycling.core.ui.components.M3ArtistCard
@@ -48,7 +51,6 @@ fun ArtistsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val gridState = rememberLazyGridState()
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
     LaunchedEffect(Unit) {
         viewModel.uiEffect.collect { effect ->
@@ -59,38 +61,17 @@ fun ArtistsScreen(
     }
 
     Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        containerColor = MaterialTheme.colorScheme.surface,
+        modifier = Modifier.fillMaxSize(),
+        containerColor = AppleTheme.colors.background,
         topBar = {
-            MediumFlexibleTopAppBar(
-                title = {
-                    Text(
-                        text = stringResource(R.string.artists_title),
-                        maxLines = 1
-                    )
-                },
-                subtitle = {
-                    Text(
-                        text = stringResource(R.string.artists_count, uiState.artists.size),
-                        maxLines = 1
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        M3SymbolIcon(
-                            name = SymbolIconName.ArrowBack,
-                            filled = true,
-                            contentDescription = stringResource(R.string.artists_back_desc)
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    scrolledContainerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface,
-                    subtitleContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                ),
-                scrollBehavior = scrollBehavior
+            AppleTopBar(
+                title = stringResource(R.string.artists_title),
+                subtitle = stringResource(R.string.artists_count, uiState.artists.size),
+                onNavigateBack = onNavigateBack,
+                backContentDescription = stringResource(R.string.artists_back_desc),
+                actions = {
+
+                }
             )
         }
     ) { paddingValues ->
@@ -112,7 +93,7 @@ fun ArtistsScreen(
                     start = SonLayout.screenMargin,
                     end = SonLayout.screenMargin,
                     top = SonLayout.contentTopPadding,
-                    bottom = SonLayout.bottomBarClearance + bottomPadding
+                    bottom = appleBottomBarClearance() + bottomPadding
                 ),
                 verticalArrangement = Arrangement.spacedBy(SonLayout.gridGap),
                 horizontalArrangement = Arrangement.spacedBy(SonLayout.gridGap)

@@ -90,6 +90,24 @@ internal object SonMeshGradient {
     private val LIGHT_MIX = floatArrayOf(0.78f, 0.58f, 0.70f)
 
     /**
+     * 封面采样路线的明度带与混合比例。
+     *
+     * 与 swatch 路线的差别：那边的控制点按「角色」取固定明度（30/38/44），这边每个格子保留
+     * 自己相对的明暗，只把整体压进这一带 —— 压得够窄才保证白字对比度，又不至于变成一块死色。
+     */
+    private const val DARK_ART_TONE_MIN = 24.0
+    private const val DARK_ART_TONE_MAX = 50.0
+    private const val LIGHT_ART_TONE_MIN = 76.0
+    private const val LIGHT_ART_TONE_MAX = 92.0
+
+    /** 封面采样路线的彩度区间：下限比 swatch 路线低，淡封面才不会糊成灰。 */
+    private const val ART_MIN_CHROMA = 14.0
+    private const val ART_MAX_CHROMA = 52.0
+
+    private const val DARK_ART_MIX = 0.66f
+    private const val LIGHT_ART_MIX = 0.72f
+
+    /**
      * 域扭曲的主振幅（参数空间，1 等于整个画面宽度）。
      *
      * 这个值直接决定「动不动得起来」：0.05 时一秒内采样点只移动不到半个纹素，色面看起来是
@@ -139,6 +157,34 @@ internal object SonMeshGradient {
                 tone = tones[role]
             ).toColor()
             tint.blendedOver(surface, mix[role]).toArgb()
+        }
+    }
+
+    /**
+     * 用封面的 4×4 采样直接当控制点。
+     *
+     * 与 [palette] 的区别只在控制点的来源：那边是 Palette 挑出的 2~3 个 swatch 按角色重复，
+     * 得到的是「封面颜色的色相」；这里是封面每个格子的平均色，**保留了封面的明暗与构图**，
+     * 所以糊开之后还能认出是那张图 —— 也就是 Apple Music / MeloX 那种背景的观感。
+     *
+     * 明度仍然是夹到可读区间（暗色 24~50 / 亮色 76~92）而不是照搬：封面上纯白或纯黑的区域
+     * 直接铺开会让白字读不出来。彩度也留了下限，淡封面才不至于糊成灰。
+     *
+     * @return 控制点颜色；[cells] 不是 [GRID]×[GRID] 时返回 null，调用方退回 [palette]。
+     */
+    fun paletteFromArtwork(cells: List<Color>, surface: Color, dark: Boolean): IntArray? {
+        if (cells.size != GRID * GRID) return null
+        val toneMin = if (dark) DARK_ART_TONE_MIN else LIGHT_ART_TONE_MIN
+        val toneMax = if (dark) DARK_ART_TONE_MAX else LIGHT_ART_TONE_MAX
+        val mix = if (dark) DARK_ART_MIX else LIGHT_ART_MIX
+        return IntArray(GRID * GRID) { index ->
+            val hct = Hct.fromColor(cells[index])
+            val tint = Hct.from(
+                hue = hct.hue,
+                chroma = hct.chroma.coerceIn(ART_MIN_CHROMA, ART_MAX_CHROMA),
+                tone = toneMin + (hct.tone / 100.0).coerceIn(0.0, 1.0) * (toneMax - toneMin)
+            ).toColor()
+            tint.blendedOver(surface, mix).toArgb()
         }
     }
 
@@ -379,21 +425,24 @@ private fun rememberBackdropState(): BackdropState = remember {
 @Composable
 private fun rememberBackdropPalette(colorScheme: ColorScheme, backdrop: List<Color>): IntArray {
     val dark = colorScheme.surface.luminance() < SonMeshGradient.DARK_SURFACE_LUMINANCE
-    return remember(colorScheme, backdrop) {
-        SonMeshGradient.palette(
-            colors = if (backdrop.isNotEmpty()) {
-                backdrop
-            } else {
-                // 没有封面（或封面接近灰阶）：退回配色方案里的三个 container 角色。
-                listOf(
-                    colorScheme.primaryContainer,
-                    colorScheme.secondaryContainer,
-                    colorScheme.tertiaryContainer
-                )
-            },
-            surface = colorScheme.surface,
-            dark = dark
-        )
+    val artwork = LocalSonBackdropArtwork.current
+    return remember(colorScheme, backdrop, artwork, dark) {
+        // 有封面采样就先用它：控制点是封面每一格的颜色，色面因此留着封面的明暗与构图。
+        SonMeshGradient.paletteFromArtwork(artwork, colorScheme.surface, dark)
+            ?: SonMeshGradient.palette(
+                colors = if (backdrop.isNotEmpty()) {
+                    backdrop
+                } else {
+                    // 没有封面（或封面接近灰阶）：退回配色方案里的三个 container 角色。
+                    listOf(
+                        colorScheme.primaryContainer,
+                        colorScheme.secondaryContainer,
+                        colorScheme.tertiaryContainer
+                    )
+                },
+                surface = colorScheme.surface,
+                dark = dark
+            )
     }
 }
 

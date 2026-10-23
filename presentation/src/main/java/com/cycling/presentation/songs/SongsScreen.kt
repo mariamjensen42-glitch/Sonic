@@ -50,6 +50,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.cycling.core.ui.apple.appleBottomBarClearance
+import com.cycling.core.ui.apple.AppleTheme
+import com.cycling.core.ui.apple.AppleTopBar
 import com.cycling.core.ui.components.M3SymbolIcon
 import com.cycling.core.ui.components.SymbolIconName
 import com.cycling.core.ui.theme.SonLayout
@@ -86,7 +89,6 @@ fun SongsScreen(
     var showSortMenu by remember { mutableStateOf(false) }
     var expandedSongId by remember { mutableStateOf<Long?>(null) }
     val scrollState = rememberLazyListState()
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
     // 空列表上的按钮要区分"没权限"和"没歌"：没权限时先去要权限，要到手就直接扫，
     // 否则用户按下去只会得到一个依然空着的列表。
@@ -132,139 +134,104 @@ fun SongsScreen(
     )
 
     Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        containerColor = MaterialTheme.colorScheme.surface,
+        modifier = Modifier.fillMaxSize(),
+        containerColor = AppleTheme.colors.background,
         topBar = {
-            MediumFlexibleTopAppBar(
-                title = {
-                    Text(
-                        text = if (uiState.selectionMode) {
-                            stringResource(R.string.songs_selected_count, uiState.selectedSongIds.size)
-                        } else {
-                            stringResource(R.string.songs_title)
-                        },
-                        maxLines = 1
-                    )
+            AppleTopBar(
+                title = if (uiState.selectionMode) {
+                    stringResource(R.string.songs_selected_count, uiState.selectedSongIds.size)
+                } else {
+                    stringResource(R.string.songs_title)
                 },
-                subtitle = {
-                    Text(
-                        text = stringResource(R.string.songs_count, sortedSongs.size),
-                        maxLines = 1
-                    )
+                subtitle = stringResource(R.string.songs_count, sortedSongs.size),
+                onNavigateBack = {
+                    if (uiState.selectionMode) viewModel.handleIntent(SongsIntent.ExitSelectionMode)
+                    else onNavigateBack()
                 },
-                navigationIcon = {
-                    IconButton(
-                        onClick = {
-                            if (uiState.selectionMode) {
-                                viewModel.handleIntent(SongsIntent.ExitSelectionMode)
-                            } else {
-                                onNavigateBack()
-                            }
-                        }
-                    ) {
-                        M3SymbolIcon(
-                            name = if (uiState.selectionMode) {
-                                SymbolIconName.Close
-                            } else {
-                                SymbolIconName.ArrowBack
-                            },
-                            filled = true,
-                            contentDescription = if (uiState.selectionMode) {
-                                stringResource(R.string.songs_exit_selection_desc)
-                            } else {
-                                stringResource(R.string.songs_back_desc)
-                            }
-                        )
-                    }
-                },
+                backContentDescription = if (uiState.selectionMode) stringResource(R.string.songs_exit_selection_desc)
+                    else stringResource(R.string.songs_back_desc),
+                backIcon = if (uiState.selectionMode) SymbolIconName.Close else SymbolIconName.ArrowBack,
                 actions = {
                     if (uiState.selectionMode) {
                         val allSelected = sortedSongs.isNotEmpty() &&
-                            uiState.selectedSongIds.size == sortedSongs.size
+                        uiState.selectedSongIds.size == sortedSongs.size
                         IconButton(
                             onClick = {
                                 viewModel.handleIntent(
                                     if (allSelected) SongsIntent.ClearSelection else SongsIntent.SelectAll
                                 )
-                            }
-                        ) {
+                        }
+                    ) {
+                    M3SymbolIcon(
+                        name = SymbolIconName.SelectAll,
+                        filled = true,
+                        contentDescription = if (allSelected) {
+                            stringResource(R.string.songs_clear_selection_desc)
+                        } else {
+                        stringResource(R.string.songs_select_all_desc)
+                    }
+                    )
+                    }
+                    } else {
+                    IconButton(
+                        onClick = { viewModel.handleIntent(SongsIntent.EnterSelectionMode) }
+                    ) {
+                    M3SymbolIcon(
+                        name = SymbolIconName.Checklist,
+                        filled = true,
+                        contentDescription = stringResource(R.string.songs_select_desc)
+                    )
+                    }
+                    Box {
+                        IconButton(onClick = { showSortMenu = true }) {
                             M3SymbolIcon(
-                                name = SymbolIconName.SelectAll,
+                                name = SymbolIconName.Sort,
                                 filled = true,
-                                contentDescription = if (allSelected) {
-                                    stringResource(R.string.songs_clear_selection_desc)
-                                } else {
-                                    stringResource(R.string.songs_select_all_desc)
-                                }
+                                contentDescription = stringResource(R.string.songs_sort_desc)
                             )
+                    }
+                    DropdownMenuPopup(
+                        expanded = showSortMenu,
+                        onDismissRequest = { showSortMenu = false }
+                    ) {
+                    // Expressive 分组菜单：选中项自带实底与形变，末尾补一个勾。
+                    DropdownMenuGroup(shapes = MenuDefaults.groupShape(0, 1)) {
+                        val orders = SortOrder.entries
+                        orders.forEachIndexed { index, sortOrder ->
+                            val selected = uiState.sortOrder == sortOrder
+                            SelectableDropdownMenuItem(
+                                selected = selected,
+                                onClick = {
+                                    viewModel.handleIntent(
+                                        SongsIntent.ChangeSortOrder(sortOrder)
+                                    )
+                                showSortMenu = false
+                            },
+                        text = { Text(text = getSortOrderName(sortOrder)) },
+                        shapes = MenuDefaults.itemShape(index, orders.size),
+                        trailingContent = if (selected) {
+                            {
+                                M3SymbolIcon(
+                                    name = SymbolIconName.Check,
+                                    contentDescription = null,
+                                    filled = true,
+                                    size = MenuDefaults.TrailingIconSize
+                                )
                         }
                     } else {
-                        IconButton(
-                            onClick = { viewModel.handleIntent(SongsIntent.EnterSelectionMode) }
-                        ) {
-                            M3SymbolIcon(
-                                name = SymbolIconName.Checklist,
-                                filled = true,
-                                contentDescription = stringResource(R.string.songs_select_desc)
-                            )
-                        }
-                        Box {
-                            IconButton(onClick = { showSortMenu = true }) {
-                                M3SymbolIcon(
-                                    name = SymbolIconName.Sort,
-                                    filled = true,
-                                    contentDescription = stringResource(R.string.songs_sort_desc)
-                                )
-                            }
-                            DropdownMenuPopup(
-                                expanded = showSortMenu,
-                                onDismissRequest = { showSortMenu = false }
-                            ) {
-                                // Expressive 分组菜单：选中项自带实底与形变，末尾补一个勾。
-                                DropdownMenuGroup(shapes = MenuDefaults.groupShape(0, 1)) {
-                                    val orders = SortOrder.entries
-                                    orders.forEachIndexed { index, sortOrder ->
-                                        val selected = uiState.sortOrder == sortOrder
-                                        SelectableDropdownMenuItem(
-                                            selected = selected,
-                                            onClick = {
-                                                viewModel.handleIntent(
-                                                    SongsIntent.ChangeSortOrder(sortOrder)
-                                                )
-                                                showSortMenu = false
-                                            },
-                                            text = { Text(text = getSortOrderName(sortOrder)) },
-                                            shapes = MenuDefaults.itemShape(index, orders.size),
-                                            trailingContent = if (selected) {
-                                                {
-                                                    M3SymbolIcon(
-                                                        name = SymbolIconName.Check,
-                                                        contentDescription = null,
-                                                        filled = true,
-                                                        size = MenuDefaults.TrailingIconSize
-                                                    )
-                                                }
-                                            } else {
-                                                null
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-                        }
+                    null
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    scrolledContainerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface,
-                    subtitleContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                ),
-                scrollBehavior = scrollBehavior
+                    )
+                    }
+                    }
+                    }
+                    }
+                    }
+                }
             )
         }
     ) { paddingValues ->
-        Box(modifier = Modifier.padding(paddingValues)) {
+        Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
             if (uiState.isLoading) {
                 SonLoadingState()
             } else if (sortedSongs.isEmpty()) {
@@ -280,7 +247,7 @@ fun SongsScreen(
                         modifier = Modifier.fillMaxSize(),
                         state = scrollState,
                         contentPadding = PaddingValues(
-                            bottom = SonLayout.bottomBarClearance +
+                            bottom = appleBottomBarClearance() +
                                 if (uiState.selectionMode) SelectionBarHeight else 0.dp
                         )
                     ) {

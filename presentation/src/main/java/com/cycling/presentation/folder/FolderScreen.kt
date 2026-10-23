@@ -7,9 +7,11 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -40,6 +42,12 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.cycling.core.ui.apple.appleBottomBarClearance
+import com.cycling.core.ui.apple.AppleTheme
+import com.cycling.core.ui.apple.AppleChip
+import com.cycling.core.ui.apple.AppleSheetRow
+import com.cycling.core.ui.apple.AppleType
+import com.cycling.core.ui.apple.AppleTopBar
 import com.cycling.core.ui.components.M3SymbolIcon
 import com.cycling.core.ui.components.SymbolIconName
 import com.cycling.core.ui.theme.SonLayout
@@ -62,7 +70,6 @@ fun FolderScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
     // SAF 选目录：权限由用户逐棵授予并持久化，浏览全程不需要任何存储权限
     val folderPickerLauncher = rememberLauncherForActivityResult(
@@ -90,40 +97,17 @@ fun FolderScreen(
     }
 
     Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        containerColor = MaterialTheme.colorScheme.surface,
+        modifier = Modifier.fillMaxSize(),
+        containerColor = AppleTheme.colors.background,
         topBar = {
-            MediumFlexibleTopAppBar(
-                title = {
-                    Text(
-                        text = uiState.title,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+            AppleTopBar(
+                title = uiState.title,
+                subtitle = stringResource(R.string.folder_song_count, uiState.songs.size),
+                onNavigateBack = {
+                    if (uiState.atListRoot) onNavigateBack()
+                    else viewModel.handleIntent(FolderIntent.NavigateBack)
                 },
-                subtitle = {
-                    Text(
-                        text = stringResource(R.string.folder_song_count, uiState.songs.size),
-                        maxLines = 1
-                    )
-                },
-                navigationIcon = {
-                    IconButton(
-                        onClick = {
-                            if (uiState.atListRoot) {
-                                onNavigateBack()
-                            } else {
-                                viewModel.handleIntent(FolderIntent.NavigateBack)
-                            }
-                        }
-                    ) {
-                        M3SymbolIcon(
-                            name = SymbolIconName.ArrowBack,
-                            filled = true,
-                            contentDescription = stringResource(R.string.folder_back_desc)
-                        )
-                    }
-                },
+                backContentDescription = stringResource(R.string.folder_back_desc),
                 actions = {
                     // 「+ 选目录」只属于本机文件夹（SAF）来源
                     if (uiState.source == FolderSource.DEVICE_FILES) {
@@ -133,16 +117,9 @@ fun FolderScreen(
                                 filled = true,
                                 contentDescription = stringResource(R.string.settings_add_folder_desc)
                             )
-                        }
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    scrolledContainerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface,
-                    subtitleContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                ),
-                scrollBehavior = scrollBehavior
+                    }
+                }
             )
         }
     ) { paddingValues ->
@@ -199,22 +176,21 @@ private fun SourceSwitcher(
     source: FolderSource,
     onSelect: (FolderSource) -> Unit
 ) {
-    SingleChoiceSegmentedButtonRow(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = SonSpacing.medium, vertical = SonSpacing.small)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        SegmentedButton(
+        AppleChip(
+            label = stringResource(R.string.folder_source_library),
             selected = source == FolderSource.LIBRARY,
-            onClick = { onSelect(FolderSource.LIBRARY) },
-            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-            label = { Text(stringResource(R.string.folder_source_library)) }
+            onClick = { onSelect(FolderSource.LIBRARY) }
         )
-        SegmentedButton(
+        AppleChip(
+            label = stringResource(R.string.folder_source_device),
             selected = source == FolderSource.DEVICE_FILES,
-            onClick = { onSelect(FolderSource.DEVICE_FILES) },
-            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-            label = { Text(stringResource(R.string.folder_source_device)) }
+            onClick = { onSelect(FolderSource.DEVICE_FILES) }
         )
     }
 }
@@ -229,26 +205,20 @@ private fun RootList(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
             top = SonLayout.contentTopPadding,
-            bottom = SonLayout.bottomBarClearance + bottomPadding
+            bottom = appleBottomBarClearance() + bottomPadding
         )
     ) {
         items(roots, key = { it.uri }) { root ->
-            ListItem(
+            AppleSheetRow(
+                title = root.name,
                 onClick = { onRootClick(root) },
-                leadingContent = {
+                leading = {
                     M3SymbolIcon(
                         name = SymbolIconName.Folder,
                         filled = true,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                },
-                content = {
-                    Text(
-                        text = root.name,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        tint = AppleTheme.colors.systemRed,
+                        size = 20.dp
                     )
                 }
             )
@@ -266,7 +236,7 @@ private fun FolderContentList(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
             top = SonLayout.contentTopPadding,
-            bottom = SonLayout.bottomBarClearance + bottomPadding
+            bottom = appleBottomBarClearance() + bottomPadding
         )
     ) {
         items(uiState.folders, key = { it.path }) { folder ->
@@ -306,29 +276,23 @@ private fun FolderListItem(
     folder: FolderItem,
     onClick: () -> Unit
 ) {
-    ListItem(
+    AppleSheetRow(
+        title = folder.name,
         onClick = onClick,
-        leadingContent = {
+        leading = {
             M3SymbolIcon(
                 name = SymbolIconName.Folder,
                 filled = true,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                tint = AppleTheme.colors.systemRed,
+                size = 20.dp
             )
         },
-        content = {
-            Text(
-                text = folder.name,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        },
-        trailingContent = {
+        trailing = {
             Text(
                 text = stringResource(R.string.folder_song_count, folder.songCount),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = AppleType.caption1,
+                color = AppleTheme.colors.secondaryLabel
             )
         }
     )

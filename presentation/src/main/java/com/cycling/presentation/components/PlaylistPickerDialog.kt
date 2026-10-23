@@ -1,27 +1,16 @@
 package com.cycling.presentation.components
 
-import com.cycling.core.ui.components.M3SymbolIcon
-import com.cycling.core.ui.components.SymbolIconName
-import com.cycling.presentation.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -30,12 +19,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.KeyboardCapitalization
-import com.cycling.core.ui.theme.SonSizes
-import com.cycling.core.ui.theme.SonSpacing
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.cycling.core.ui.apple.AppleAlert
+import com.cycling.core.ui.apple.AppleSheet
+import com.cycling.core.ui.apple.AppleSheetRow
+import com.cycling.core.ui.apple.AppleSheetTitle
+import com.cycling.core.ui.apple.AppleTextField
+import com.cycling.core.ui.apple.AppleTheme
+import com.cycling.core.ui.apple.AppleType
+import com.cycling.core.ui.components.M3SymbolIcon
+import com.cycling.core.ui.components.SymbolIconName
 import com.cycling.domain.model.Playlist
+import com.cycling.presentation.R
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlaylistPickerDialog(
     visible: Boolean,
@@ -45,52 +42,43 @@ fun PlaylistPickerDialog(
     onCreateNewPlaylist: (name: String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showCreateDialog by remember { mutableStateOf(false) }
 
     if (visible) {
-        ModalBottomSheet(
-            onDismissRequest = onDismiss,
-            sheetState = sheetState
-        ) {
-            Column(
-                modifier = modifier
-                    .fillMaxWidth()
-                    .padding(bottom = SonSpacing.large)
-            ) {
-                Text(
-                    text = stringResource(R.string.playlist_picker_title),
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(horizontal = SonSpacing.large, vertical = SonSpacing.small)
-                )
+        AppleSheet(onDismiss = onDismiss, modifier = modifier) {
+            AppleSheetTitle(title = stringResource(R.string.playlist_picker_title))
 
-                ListItem(
-                    content = {
-                        Text(text = stringResource(R.string.playlist_picker_new))
-                    },
-                    leadingContent = {
-                        M3SymbolIcon(
-                            name = SymbolIconName.Add,
-                            filled = true,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(SonSizes.iconMedium)
+            AppleSheetRow(
+                title = stringResource(R.string.playlist_picker_new),
+                onClick = { showCreateDialog = true },
+                trailing = {
+                    M3SymbolIcon(
+                        name = SymbolIconName.Add,
+                        contentDescription = null,
+                        filled = true,
+                        tint = AppleTheme.colors.key,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            )
+
+            if (playlists.isEmpty()) {
+                EmptyPlaylistsContent()
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp)
+                ) {
+                    items(playlists, key = { it.id }) { playlist ->
+                        AppleSheetRow(
+                            title = playlist.name,
+                            subtitle = stringResource(
+                                R.string.playlist_picker_song_count,
+                                playlist.numberOfSongs
+                            ),
+                            onClick = { onPlaylistSelected(playlist.id) }
                         )
-                    },
-                    onClick = { showCreateDialog = true }
-                )
-
-                if (playlists.isEmpty()) {
-                    EmptyPlaylistsContent()
-                } else {
-                    LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                        items(playlists, key = { it.id }) { playlist ->
-                            PlaylistPickerItem(
-                                playlist = playlist,
-                                onClick = { onPlaylistSelected(playlist.id) }
-                            )
-                        }
                     }
                 }
             }
@@ -109,61 +97,35 @@ fun PlaylistPickerDialog(
 }
 
 @Composable
-private fun PlaylistPickerItem(
-    playlist: Playlist,
-    onClick: () -> Unit
-) {
-    ListItem(
-        content = {
-            Text(text = playlist.name)
-        },
-        leadingContent = {
-            M3SymbolIcon(
-                name = SymbolIconName.QueueMusic,
-                filled = true,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(SonSizes.iconMedium)
-            )
-        },
-        trailingContent = {
-            Text(
-                text = stringResource(R.string.playlist_picker_song_count, playlist.numberOfSongs),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        },
-        onClick = onClick
-    )
-}
-
-@Composable
 private fun EmptyPlaylistsContent() {
+    val colors = AppleTheme.colors
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = SonSpacing.extraLarge),
+            .padding(vertical = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         M3SymbolIcon(
             name = SymbolIconName.LibraryMusic,
-            filled = true,
             contentDescription = null,
-            modifier = Modifier.size(SonSizes.iconExtraLarge),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
+            filled = true,
+            tint = colors.tertiaryLabel,
+            modifier = Modifier.size(36.dp)
         )
-        Spacer(modifier = Modifier.height(SonSpacing.mediumSmall))
+        Spacer(modifier = Modifier.height(12.dp))
         Text(
             text = stringResource(R.string.playlist_picker_empty_title),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface
+            style = AppleType.headline,
+            color = colors.label
         )
-        Spacer(modifier = Modifier.height(SonSpacing.extraSmall))
+        Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = stringResource(R.string.playlist_picker_empty_subtitle),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            style = AppleType.footnote,
+            color = colors.secondaryLabel,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
@@ -175,36 +137,18 @@ private fun CreatePlaylistInputDialog(
 ) {
     var name by remember { mutableStateOf("") }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.playlist_picker_dialog_title)) },
-        text = {
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                placeholder = { Text(text = stringResource(R.string.playlist_picker_name_placeholder)) },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.Sentences
-                )
-            )
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    if (name.isNotBlank()) {
-                        onCreate(name.trim())
-                    }
-                },
-                enabled = name.isNotBlank()
-            ) {
-                Text(stringResource(R.string.playlist_picker_create))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.playlist_picker_cancel))
-            }
-        }
-    )
+    AppleAlert(
+        title = stringResource(R.string.playlist_picker_dialog_title),
+        confirmLabel = stringResource(R.string.playlist_picker_create),
+        onConfirm = { if (name.isNotBlank()) onCreate(name.trim()) },
+        onDismiss = onDismiss,
+        dismissLabel = stringResource(R.string.playlist_picker_cancel),
+        confirmEnabled = name.isNotBlank()
+    ) {
+        AppleTextField(
+            value = name,
+            onValueChange = { name = it },
+            placeholder = stringResource(R.string.playlist_picker_name_placeholder)
+        )
+    }
 }

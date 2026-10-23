@@ -35,6 +35,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.cycling.core.ui.apple.appleEdgeFade
 import com.cycling.core.ui.theme.LocalSonExtendedColors
 import com.cycling.core.ui.theme.SonSpacing
 import com.cycling.domain.lyrics.model.karaoke.KaraokeAlignment
@@ -326,7 +327,10 @@ fun KaraokeLineText(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = SonSpacing.small, horizontal = SonSpacing.medium),
+            .padding(vertical = SonSpacing.small, horizontal = SonSpacing.medium)
+            // Apple 的歌词行是 FullWidthAlphaGradientFlexboxLayout：两端做 alpha 渐隐，
+            // 长行贴到屏幕边缘时自然淡出，不缩字号也不截断。
+            .appleEdgeFade(),
         verticalArrangement = Arrangement.spacedBy(SonSpacing.extraSmall),
         horizontalAlignment = columnHorizontalAlignment
     ) {

@@ -43,10 +43,12 @@ import com.cycling.core.ui.theme.SonSpacing
 @Composable
 fun M3Artwork(
     artwork: String?,
-    placeholderIcon: SymbolIconName,
     shape: Shape,
     modifier: Modifier = Modifier,
-    contentDescription: String? = null
+    contentDescription: String? = null,
+    /** 有值时用 Apple 造型的矢量图标做占位（播放页 / 队列页），Material 那档只作兜底。 */
+    placeholderGlyph: SonGlyph? = null,
+    placeholderIcon: SymbolIconName = SymbolIconName.MusicNote
 ) {
     val extended = LocalSonExtendedColors.current
     Box(
@@ -61,6 +63,14 @@ fun M3Artwork(
                 contentDescription = contentDescription,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
+            )
+        } else if (placeholderGlyph != null) {
+            SonGlyphIcon(
+                glyph = placeholderGlyph,
+                contentDescription = null,
+                tint = extended.onArtworkPlaceholder,
+                size = SonSizes.iconLarge,
+                modifier = Modifier.size(SonSizes.iconLarge)
             )
         } else {
             M3SymbolIcon(

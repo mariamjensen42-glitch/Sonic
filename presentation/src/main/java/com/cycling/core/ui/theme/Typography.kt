@@ -9,29 +9,29 @@ import androidx.compose.ui.unit.sp
 import com.cycling.presentation.R
 
 /**
- * 字体族（ADR-0002，C 方案）。
+ * 字体族（ADR-0002，C 方案；2026-10-22 换字）。
  *
- * Latin 统一使用 Roboto Flex 的静态实例（`scripts/subset-fonts.py`）：regular /
- * medium / bold 三个字重各一份子集，FILL 之外的轴已在构建期钉死。中文/日文/韩文
- * 没有 Flex 字形，由 Android 的系统 fallback 接管 —— 这是决策里明确接受的 CJK 混排
- * 方案，不要为中文伪造粗体。
+ * 正文与标题统一使用 **MiSans**（小米，官方免费商用），三档静态实例 regular / medium / bold，
+ * 已按 GB2312 全量 + Latin-1 + 常用标点做过子集（每档约 1.8 MB）。选它的原因：参考项目
+ * （MeloX-Android）的观感来自 MiLanPro / MiSans 这一路的中性黑体，而 Roboto 的字面更窄、
+ * 中文全落回设备系统字体，跨设备观感不一致。
  *
- * 为什么不用运行时可变轴：Compose 1.13 的 `Font(variationSettings = ...)` 在 API 33
- * 上会静默回退到系统字体（实测图标码位变成缺字方块），静态实例既绕开这条路径，也
- * 把三份字体子集压到 ~120 KB。
+ * 子集之外的生僻字（歌名里偶尔会出现）由系统的 CJK fallback 接管，不会缺字。
+ *
+ * 历史：v1 用 Roboto Flex 静态子集（~120 KB）+ 系统 CJK 回退；换字后这两档不再打包。
  */
 object SonFontFamily {
 
     /** 展示位：display / headline。 */
-    val Brand: FontFamily = robotoFlex()
+    val Brand: FontFamily = miSans()
 
     /** 正文位：title / body / label。 */
-    val Plain: FontFamily = robotoFlex()
+    val Plain: FontFamily = miSans()
 
-    private fun robotoFlex(): FontFamily = FontFamily(
-        Font(R.font.roboto_flex_regular, FontWeight.Normal),
-        Font(R.font.roboto_flex_medium, FontWeight.Medium),
-        Font(R.font.roboto_flex_bold, FontWeight.Bold)
+    private fun miSans(): FontFamily = FontFamily(
+        Font(R.font.misans_regular, FontWeight.Normal),
+        Font(R.font.misans_medium, FontWeight.Medium),
+        Font(R.font.misans_bold, FontWeight.Bold)
     )
 }
 

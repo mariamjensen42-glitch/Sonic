@@ -1,6 +1,7 @@
 package com.cycling.presentation.collectiondetail
 
 import androidx.annotation.StringRes
+import com.cycling.domain.model.Album
 import com.cycling.domain.model.Playlist
 import com.cycling.domain.model.Song
 
@@ -31,7 +32,9 @@ data class CollectionDetailUiState(
     /** 介绍正在生成中。 */
     val isDescriptionGenerating: Boolean = false,
     /** 已收藏曲目 id（歌手页实时维护，供行尾心形使用）。 */
-    val likedSongIds: Set<Long> = emptySet()
+    val likedSongIds: Set<Long> = emptySet(),
+    /** 该歌手的专辑（只有歌手页会填，用于页尾的「专辑」横滑）。 */
+    val albums: List<Album> = emptyList()
 )
 
 /**

@@ -97,3 +97,12 @@ val LocalSonExtendedColors = staticCompositionLocalOf { SonDarkExtendedColors }
  * 颜色只能从这个 local 或 `MaterialTheme.colorScheme` 来 —— 页面不自己取封面、不自己拼色。
  */
 val LocalSonBackdropColors = compositionLocalOf { emptyList<Color>() }
+
+/**
+ * 封面的 4×4 采样（行优先，16 个颜色），给动态色面当控制点用。
+ *
+ * 与 [LocalSonBackdropColors] 的分工：那个给的是「封面上有哪几种颜色」，色面据此挑色相；
+ * 这个给的是「封面每一格长什么样」，色面因此能带上封面的明暗与构图 —— 也就是把封面糊开
+ * 的那种观感。空表示没有封面或采样失败，色面自动退回前者。
+ */
+val LocalSonBackdropArtwork = compositionLocalOf { emptyList<Color>() }

@@ -46,6 +46,8 @@ fun SonicTheme(
     dynamicColor: Boolean = true,
     colorScheme: ColorScheme? = null,
     backdropColors: List<Color> = emptyList(),
+    /** 封面的 4×4 采样，让动态色面带上封面的明暗与构图；空则只用 [backdropColors] 的色相。 */
+    backdropArtwork: List<Color> = emptyList(),
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
@@ -71,7 +73,8 @@ fun SonicTheme(
 
     CompositionLocalProvider(
         LocalSonExtendedColors provides if (darkTheme) SonDarkExtendedColors else SonLightExtendedColors,
-        LocalSonBackdropColors provides backdropColors
+        LocalSonBackdropColors provides backdropColors,
+        LocalSonBackdropArtwork provides backdropArtwork
     ) {
         MaterialExpressiveTheme(
             colorScheme = resolved,

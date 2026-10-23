@@ -17,6 +17,7 @@
     <string name="player_close">关闭</string>
     <string name="player_now_playing">正在播放</string>
     <string name="player_settings_desc">播放设置</string>
+    <string name="player_hires_label">HI-RES</string>
     <string name="player_playback_settings_title">播放设置</string>
     <string name="player_spectrum_title">频谱条</string>
     <string name="player_spectrum_subtitle">关闭后底部不再显示频谱</string>
@@ -246,6 +247,7 @@
     <!-- Artist Detail -->
     <string name="artist_detail_back_desc">返回</string>
     <string name="artist_detail_unknown">未知歌手</string>
+    <string name="artist_detail_top_songs">热门歌曲</string>
     <string name="artist_detail_info">歌手 · %d 首歌曲</string>
 
     <!-- Albums -->

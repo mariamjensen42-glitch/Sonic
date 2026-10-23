@@ -10,6 +10,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,30 +24,24 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.FilledTonalIconButton
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
@@ -53,6 +49,17 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.cycling.core.ui.apple.appleBottomBarClearance
+import com.cycling.core.ui.apple.AppleActionButton
+import com.cycling.core.ui.apple.AppleAlert
+import com.cycling.core.ui.apple.AppleCompactBar
+import com.cycling.core.ui.apple.AppleDims
+import com.cycling.core.ui.apple.AppleIconButton
+import com.cycling.core.ui.apple.AppleSeparator
+import com.cycling.core.ui.apple.AppleTextAction
+import com.cycling.core.ui.apple.AppleTextField
+import com.cycling.core.ui.apple.AppleTheme
+import com.cycling.core.ui.apple.AppleType
 import com.cycling.core.ui.components.M3SymbolIcon
 import com.cycling.core.ui.components.SymbolIconName
 import com.cycling.core.ui.components.M3Artwork
@@ -123,71 +130,42 @@ fun SongDetailScreen(
     }
 
     Scaffold(
+        containerColor = AppleTheme.colors.background,
         topBar = {
-            CenterAlignedTopAppBar(
-                title = {
-                    Text(
-                        text = if (uiState.isEditMode) {
-                            stringResource(R.string.song_detail_title_edit)
-                        } else {
-                            stringResource(R.string.song_detail_title_view)
-                        },
-                        style = MaterialTheme.typography.titleLarge,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+            AppleCompactBar(
+                title = if (uiState.isEditMode) {
+                    stringResource(R.string.song_detail_title_edit)
+                } else {
+                    stringResource(R.string.song_detail_title_view)
                 },
-                navigationIcon = {
-                    IconButton(
-                        onClick = {
-                            if (uiState.isEditMode) {
-                                viewModel.handleIntent(SongDetailIntent.ExitEditMode)
-                            } else {
-                                onNavigateBack()
-                            }
-                        }
-                    ) {
-                        M3SymbolIcon(
-                            name = SymbolIconName.ArrowBack,
-                            filled = true,
-                            contentDescription = stringResource(R.string.song_detail_back_desc)
-                        )
+                onNavigateBack = {
+                    if (uiState.isEditMode) {
+                        viewModel.handleIntent(SongDetailIntent.ExitEditMode)
+                    } else {
+                        onNavigateBack()
                     }
                 },
+                backContentDescription = stringResource(R.string.song_detail_back_desc),
                 actions = {
                     if (uiState.isEditMode) {
                         if (uiState.isSaving) {
                             LoadingIndicator(modifier = Modifier.size(SonSizes.iconMedium))
                         } else {
-                            IconButton(
+                            AppleIconButton(
+                                icon = SymbolIconName.Check,
+                                contentDescription = stringResource(R.string.song_detail_save_desc),
                                 onClick = { viewModel.handleIntent(SongDetailIntent.SaveChanges) },
                                 enabled = uiState.hasChanges
-                            ) {
-                                M3SymbolIcon(
-                                    name = SymbolIconName.Check,
-                                    filled = true,
-                                    contentDescription = stringResource(R.string.song_detail_save_desc)
-                                )
-                            }
+                            )
                         }
-                    } else {
-                        uiState.song?.let {
-                            IconButton(
-                                onClick = { viewModel.handleIntent(SongDetailIntent.EnterEditMode) }
-                            ) {
-                                M3SymbolIcon(
-                                    name = SymbolIconName.Edit,
-                                    filled = true,
-                                    contentDescription = stringResource(R.string.song_detail_edit_desc)
-                                )
-                            }
-                        }
+                    } else if (uiState.song != null) {
+                        AppleIconButton(
+                            icon = SymbolIconName.Edit,
+                            contentDescription = stringResource(R.string.song_detail_edit_desc),
+                            onClick = { viewModel.handleIntent(SongDetailIntent.EnterEditMode) }
+                        )
                     }
-                },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
-                )
+                }
             )
         }
     ) { paddingValues ->
@@ -322,7 +300,7 @@ private fun ViewModeContent(
     SongInfoSection(song = song, audioMetadata = uiState.audioMetadata)
 
     // 列表底部预留浮动导航栏空间。
-    Spacer(modifier = Modifier.height(SonLayout.bottomBarClearance))
+    Spacer(modifier = Modifier.height(appleBottomBarClearance()))
 }
 
 /**
@@ -359,16 +337,11 @@ private fun LyricsSection(
                 text = stringResource(R.string.song_detail_section_lyrics),
                 modifier = Modifier
             )
-            TextButton(onClick = onShowLyricsInfo) {
-                M3SymbolIcon(
-                    name = SymbolIconName.Checklist,
-                    filled = true,
-                    contentDescription = null,
-                    modifier = Modifier.size(SonSizes.buttonIcon)
-                )
-                Spacer(modifier = Modifier.width(SonSpacing.extraSmall))
-                Text(text = stringResource(R.string.song_detail_lyrics_info))
-            }
+            AppleTextAction(
+                label = stringResource(R.string.song_detail_lyrics_info),
+                icon = SymbolIconName.Checklist,
+                onClick = onShowLyricsInfo
+            )
         }
 
         when {
@@ -395,17 +368,14 @@ private fun LyricsSection(
                 }
 
                 if (lyrics.size > CollapsedLyricsLines) {
-                    TextButton(
+                    AppleTextAction(
+                        label = stringResource(
+                            if (expanded) R.string.song_detail_lyrics_collapse
+                            else R.string.song_detail_lyrics_expand
+                        ),
                         onClick = { expanded = !expanded },
                         modifier = Modifier.padding(top = SonSpacing.small)
-                    ) {
-                        Text(
-                            text = stringResource(
-                                if (expanded) R.string.song_detail_lyrics_collapse
-                                else R.string.song_detail_lyrics_expand
-                            )
-                        )
-                    }
+                    )
                 }
             }
         }
@@ -419,14 +389,14 @@ private fun LyricsLine(line: LyricsDisplayLine) {
     Column(verticalArrangement = Arrangement.spacedBy(SonSpacing.extraSmall)) {
         Text(
             text = line.text,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface
+            style = AppleType.body,
+            color = AppleTheme.colors.label
         )
         line.translation?.takeIf { it.isNotBlank() }?.let { translation ->
             Text(
                 text = translation,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = AppleType.footnote,
+                color = AppleTheme.colors.secondaryLabel
             )
         }
     }
@@ -438,28 +408,20 @@ private fun EmptyLyrics(onEditLyrics: () -> Unit) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = stringResource(R.string.song_detail_lyrics_empty),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            style = AppleType.footnote,
+            color = AppleTheme.colors.secondaryLabel
         )
-        TextButton(
-            onClick = onEditLyrics,
-            modifier = Modifier.padding(top = SonSpacing.extraSmall)
-        ) {
-            M3SymbolIcon(
-                name = SymbolIconName.Edit,
-                filled = true,
-                contentDescription = null,
-                modifier = Modifier.size(SonSizes.buttonIcon)
-            )
-            Spacer(modifier = Modifier.width(SonSpacing.small))
-            Text(text = stringResource(R.string.song_detail_lyrics_add))
-        }
+        Spacer(modifier = Modifier.height(SonSpacing.extraSmall))
+        AppleTextAction(
+            label = stringResource(R.string.song_detail_lyrics_add),
+            icon = SymbolIconName.Edit,
+            onClick = onEditLyrics
+        )
     }
 }
 
 @Composable
-private fun EditModeContent(
-    song: Song,
+private fun EditModeContent(    song: Song,
     uiState: SongDetailUiState,
     onIntent: (SongDetailIntent) -> Unit
 ) {
@@ -471,7 +433,7 @@ private fun EditModeContent(
         M3Artwork(
             artwork = song.albumArt,
             placeholderIcon = SymbolIconName.MusicNote,
-            shape = MaterialTheme.shapes.extraLarge,
+            shape = RoundedCornerShape(AppleDims.cornerL),
             modifier = Modifier
                 .size(SonSizes.headerArtwork)
                 .align(Alignment.CenterHorizontally)
@@ -479,37 +441,20 @@ private fun EditModeContent(
         )
 
         // 封面是立即生效的一次选择，没有草稿状态，所以入口放在封面上而不是表单末尾。
-        TextButton(
+        AppleTextAction(
+            label = stringResource(R.string.song_detail_cover_manage),
+            icon = SymbolIconName.Edit,
             onClick = { onIntent(SongDetailIntent.OpenCoverPicker) },
             modifier = Modifier.align(Alignment.CenterHorizontally)
-        ) {
-            M3SymbolIcon(
-                name = SymbolIconName.Edit,
-                filled = true,
-                contentDescription = null,
-                modifier = Modifier.size(SonSizes.buttonIcon)
-            )
-            Spacer(modifier = Modifier.width(SonSpacing.extraSmall))
-            Text(text = stringResource(R.string.song_detail_cover_manage))
-        }
+        )
 
         // 在线信息与封面共用同一批目录搜索结果：这里只把文本字段填进下面的表单，封面仍由上面的
         // 「更换封面」负责，两个动作互不代劳。放在表单最前面，因为填完之后要往下逐项检查。
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            TextButton(onClick = { onIntent(SongDetailIntent.OpenMetadataCandidates) }) {
-                M3SymbolIcon(
-                    name = SymbolIconName.AutoAwesome,
-                    filled = true,
-                    contentDescription = null,
-                    modifier = Modifier.size(SonSizes.buttonIcon)
-                )
-                Spacer(modifier = Modifier.width(SonSpacing.extraSmall))
-                Text(text = stringResource(R.string.song_detail_metadata_online_manage))
-            }
-        }
+        AppleTextAction(
+            label = stringResource(R.string.song_detail_metadata_online_manage),
+            icon = SymbolIconName.AutoAwesome,
+            onClick = { onIntent(SongDetailIntent.OpenMetadataCandidates) }
+        )
 
         Spacer(modifier = Modifier.height(SonSpacing.large))
 
@@ -622,8 +567,8 @@ private fun EditModeContent(
 
         Text(
             text = stringResource(R.string.song_detail_metadata_hint),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = AppleType.footnote,
+            color = AppleTheme.colors.secondaryLabel,
             modifier = Modifier.padding(top = SonSpacing.small, bottom = SonSpacing.medium)
         )
 
@@ -634,58 +579,60 @@ private fun EditModeContent(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(onClick = { onIntent(SongDetailIntent.OpenLyricsCandidates) }) {
-                M3SymbolIcon(
-                    name = SymbolIconName.QueueMusic,
-                    filled = true,
-                    contentDescription = null,
-                    modifier = Modifier.size(SonSizes.buttonIcon)
-                )
-                Spacer(modifier = Modifier.width(SonSpacing.extraSmall))
-                Text(text = stringResource(R.string.song_detail_lyrics_fetch))
-            }
-            TextButton(onClick = { onIntent(SongDetailIntent.OpenLyricsInfo) }) {
-                M3SymbolIcon(
-                    name = SymbolIconName.Checklist,
-                    filled = true,
-                    contentDescription = null,
-                    modifier = Modifier.size(SonSizes.buttonIcon)
-                )
-                Spacer(modifier = Modifier.width(SonSpacing.extraSmall))
-                Text(text = stringResource(R.string.song_detail_lyrics_info))
-            }
+            AppleTextAction(
+                label = stringResource(R.string.song_detail_lyrics_fetch),
+                icon = SymbolIconName.QueueMusic,
+                onClick = { onIntent(SongDetailIntent.OpenLyricsCandidates) }
+            )
+            AppleTextAction(
+                label = stringResource(R.string.song_detail_lyrics_info),
+                icon = SymbolIconName.Checklist,
+                onClick = { onIntent(SongDetailIntent.OpenLyricsInfo) }
+            )
         }
 
-        OutlinedTextField(
+        Text(
+            text = stringResource(R.string.song_detail_lyrics_label),
+            style = AppleType.footnote,
+            color = AppleTheme.colors.secondaryLabel,
+            modifier = Modifier.padding(top = SonSpacing.mediumSmall)
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        AppleTextField(
             value = uiState.editedLyrics,
             onValueChange = { onIntent(SongDetailIntent.UpdateLyrics(it)) },
-            label = { Text(text = stringResource(R.string.song_detail_lyrics_label)) },
-            placeholder = { Text(text = stringResource(R.string.song_detail_lyrics_placeholder)) },
-            supportingText = { Text(text = stringResource(R.string.song_detail_lyrics_hint)) },
-            minLines = 6,
-            maxLines = 14,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
-            modifier = Modifier.fillMaxWidth()
+            placeholder = stringResource(R.string.song_detail_lyrics_placeholder),
+            singleLine = false,
+            minHeight = 160.dp
+        )
+        Text(
+            text = stringResource(R.string.song_detail_lyrics_hint),
+            style = AppleType.footnote,
+            color = AppleTheme.colors.secondaryLabel,
+            modifier = Modifier.padding(top = 6.dp)
         )
 
         Spacer(modifier = Modifier.height(SonSpacing.large))
 
-        Button(
+        AppleActionButton(
+            label = if (uiState.isSaving) {
+                stringResource(R.string.song_detail_saving)
+            } else {
+                stringResource(R.string.song_detail_save)
+            },
             onClick = { onIntent(SongDetailIntent.SaveChanges) },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = uiState.hasChanges && !uiState.isSaving
-        ) {
-            Text(text = if (uiState.isSaving) stringResource(R.string.song_detail_saving) else stringResource(R.string.song_detail_save))
-        }
+            enabled = uiState.hasChanges && !uiState.isSaving,
+            modifier = Modifier.fillMaxWidth()
+        )
 
         Spacer(modifier = Modifier.height(SonSpacing.mediumSmall))
 
-        TextButton(
+        AppleActionButton(
+            label = stringResource(R.string.song_detail_cancel),
             onClick = { onIntent(SongDetailIntent.ExitEditMode) },
+            filled = false,
             modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(text = stringResource(R.string.song_detail_cancel))
-        }
+        )
 
         Spacer(modifier = Modifier.height(SonSpacing.extraLarge))
     }
@@ -699,14 +646,20 @@ private fun EditTextField(
     placeholder: String,
     keyboardType: KeyboardType = KeyboardType.Text
 ) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = { Text(text = label) },
-        placeholder = { Text(text = placeholder) },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = keyboardType)
-    )
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = label,
+            style = AppleType.footnote,
+            color = AppleTheme.colors.secondaryLabel
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        AppleTextField(
+            value = value,
+            onValueChange = onValueChange,
+            placeholder = placeholder,
+            keyboardType = keyboardType
+        )
+    }
 }
 
 @Composable
@@ -714,23 +667,14 @@ private fun DiscardChangesDialog(
     onDiscard: () -> Unit,
     onKeepEditing: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onKeepEditing,
-        title = { Text(text = stringResource(R.string.song_detail_discard_title)) },
-        text = { Text(text = stringResource(R.string.song_detail_discard_message)) },
-        confirmButton = {
-            TextButton(onClick = onDiscard) {
-                Text(
-                    text = stringResource(R.string.song_detail_discard),
-                    color = MaterialTheme.colorScheme.error
-                )
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onKeepEditing) {
-                Text(text = stringResource(R.string.song_detail_keep_editing))
-            }
-        }
+    AppleAlert(
+        title = stringResource(R.string.song_detail_discard_title),
+        message = stringResource(R.string.song_detail_discard_message),
+        confirmLabel = stringResource(R.string.song_detail_discard),
+        onConfirm = onDiscard,
+        onDismiss = onKeepEditing,
+        dismissLabel = stringResource(R.string.song_detail_keep_editing),
+        destructive = true
     )
 }
 
@@ -751,7 +695,7 @@ private fun SongHeader(
         M3Artwork(
             artwork = song.albumArt,
             placeholderIcon = SymbolIconName.MusicNote,
-            shape = MaterialTheme.shapes.extraLarge,
+            shape = RoundedCornerShape(AppleDims.cornerL),
             modifier = Modifier.size(SonSizes.headerArtwork)
         )
 
@@ -759,8 +703,8 @@ private fun SongHeader(
 
         Text(
             text = song.title,
-            style = MaterialTheme.typography.headlineMediumEmphasized,
-            color = MaterialTheme.colorScheme.onSurface,
+            style = AppleType.title2Emphasized,
+            color = AppleTheme.colors.label,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center
@@ -770,8 +714,8 @@ private fun SongHeader(
 
         Text(
             text = song.artist,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = AppleType.body,
+            color = AppleTheme.colors.secondaryLabel,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -780,46 +724,70 @@ private fun SongHeader(
 
         Text(
             text = song.album,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = AppleType.footnote,
+            color = AppleTheme.colors.secondaryLabel,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
 
         Spacer(modifier = Modifier.height(SonSpacing.large))
 
-        // 主动作 + 次要动作并排一行，取代原先"居中 FAB + 下一行图标按钮"的堆叠。
+        // 主动作 + 次要动作并排一行。
         Row(
             horizontalArrangement = Arrangement.spacedBy(SonSpacing.small),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Button(onClick = onPlay) {
-                M3SymbolIcon(
-                    name = SymbolIconName.PlayArrow,
-                    filled = true,
-                    contentDescription = null,
-                    modifier = Modifier.size(SonSizes.buttonIcon)
-                )
-                Spacer(modifier = Modifier.width(SonSpacing.small))
-                Text(text = stringResource(R.string.song_detail_play))
-            }
+            AppleActionButton(
+                label = stringResource(R.string.song_detail_play),
+                onClick = onPlay,
+                icon = SymbolIconName.PlayArrow
+            )
 
-            FilledTonalIconButton(onClick = onFavorite) {
-                M3SymbolIcon(
-                    name = SymbolIconName.Favorite,
-                    filled = isFavorite,
-                    contentDescription = if (isFavorite) stringResource(R.string.player_unfavorite_desc) else stringResource(R.string.player_favorite_desc)
-                )
-            }
+            AppleCircleIconButton(
+                icon = SymbolIconName.Favorite,
+                filled = isFavorite,
+                contentDescription = if (isFavorite) {
+                    stringResource(R.string.player_unfavorite_desc)
+                } else {
+                    stringResource(R.string.player_favorite_desc)
+                },
+                onClick = onFavorite
+            )
 
-            FilledTonalIconButton(onClick = onAddToPlaylist) {
-                M3SymbolIcon(
-                    name = SymbolIconName.PlaylistAdd,
-                    filled = true,
-                    contentDescription = stringResource(R.string.song_detail_add_to_playlist_desc)
-                )
-            }
+            AppleCircleIconButton(
+                icon = SymbolIconName.PlaylistAdd,
+                filled = true,
+                contentDescription = stringResource(R.string.song_detail_add_to_playlist_desc),
+                onClick = onAddToPlaylist
+            )
         }
+    }
+}
+
+/** 圆形填充图标按钮，对应 FilledTonalIconButton 的 iOS 形态。 */
+@Composable
+private fun AppleCircleIconButton(
+    icon: SymbolIconName,
+    filled: Boolean,
+    contentDescription: String?,
+    onClick: () -> Unit
+) {
+    val interaction = remember { MutableInteractionSource() }
+    Box(
+        modifier = Modifier
+            .size(AppleDims.actionHeight)
+            .clip(CircleShape)
+            .background(AppleTheme.colors.fill)
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        M3SymbolIcon(
+            name = icon,
+            contentDescription = contentDescription,
+            filled = filled,
+            tint = AppleTheme.colors.label,
+            size = 20.dp
+        )
     }
 }
 
@@ -907,8 +875,8 @@ private fun InfoSectionTitle(
 ) {
     Text(
         text = text,
-        style = MaterialTheme.typography.titleMediumEmphasized,
-        color = MaterialTheme.colorScheme.onSurface,
+        style = AppleType.sectionTitle,
+        color = AppleTheme.colors.label,
         modifier = modifier
     )
 }
@@ -921,24 +889,11 @@ private fun InfoItem(label: String, value: String) {
             .padding(vertical = SonSpacing.small),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface
-        )
+        Text(text = label, style = AppleType.body, color = AppleTheme.colors.secondaryLabel)
+        Text(text = value, style = AppleType.body, color = AppleTheme.colors.label)
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(1.dp)
-            .background(MaterialTheme.colorScheme.outlineVariant)
-    )
+    AppleSeparator()
 }
 
 @Composable
@@ -951,29 +906,21 @@ private fun PathItem(path: String) {
     ) {
         Text(
             text = path,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface,
+            style = AppleType.footnote,
+            color = AppleTheme.colors.label,
             modifier = Modifier.weight(1f)
         )
 
-        Spacer(modifier = Modifier.width(SonSpacing.small))
-
         val context = LocalContext.current
-        TextButton(
+        AppleTextAction(
+            label = stringResource(R.string.song_detail_copy),
+            icon = SymbolIconName.ContentCopy,
             onClick = {
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 val clip = ClipData.newPlainText("Song Path", path)
                 clipboard.setPrimaryClip(clip)
             }
-        ) {
-            M3SymbolIcon(
-                name = SymbolIconName.ContentCopy,
-                filled = true,
-                contentDescription = null
-            )
-            Spacer(modifier = Modifier.width(SonSpacing.small))
-            Text(stringResource(R.string.song_detail_copy))
-        }
+        )
     }
 }
 

@@ -2,13 +2,19 @@
 
 package com.cycling.presentation.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuGroup
 import androidx.compose.material3.DropdownMenuItem
@@ -16,8 +22,6 @@ import androidx.compose.material3.DropdownMenuPopup
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorPosition
 import androidx.compose.material3.MenuDefaults
@@ -25,28 +29,34 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
+import com.cycling.core.ui.apple.AppleDims
+import com.cycling.core.ui.apple.ApplePlayingBars
+import com.cycling.core.ui.apple.AppleTheme
+import com.cycling.core.ui.apple.AppleType
+import com.cycling.core.ui.apple.applePress
 import com.cycling.core.ui.components.M3SymbolIcon
 import com.cycling.core.ui.components.SymbolIconName
 import com.cycling.core.ui.components.M3Artwork
-import com.cycling.core.ui.theme.SonSizes
-import com.cycling.core.ui.theme.SonSpacing
 import com.cycling.domain.model.Song
 import com.cycling.presentation.R
 
 /**
- * 歌曲列表项。
+ * 歌曲列表项，按 Apple Music 的 `collection_page_list_item` 还原：
+ * 最小行高 48dp、标题 17sp（`SmallListATitleStyle`）、副标题 12sp（`SmallListASubTitleStyle`）、
+ * 时长用 12sp 落在行尾、更多按钮 26dp。
  *
- * 结构完全交给 [ListItem]：内边距、最小高度、按压形变、文字层级都由组件规范决定，
- * 这里只负责把领域模型的字段映射到插槽上。
+ * 与 Apple 原版的差异：原版行首是**曲目序号**（播放中换成跳动的音柱），这里保留 Sonic 的
+ * 封面缩略图 —— 全应用的行都以封面为锚点，且行组件同时被歌手页、收藏页、文件夹页复用。
  *
- * 默认**不画分割线**（quiet surface：行与行之间交给留白与封面）；需要表格感的地方
- * 显式传 `showDivider = true`。
+ * 默认**不画分割线**（quiet surface）；需要表格感的地方显式传 `showDivider = true`。
  */
 @Composable
 fun SongListItem(
@@ -62,6 +72,10 @@ fun SongListItem(
      * `selectionMode` 布尔量，是为了让"没有多选"这件事只有一个表示方式。
      */
     selected: Boolean? = null,
+    /** 曲目序号；传了就按 Apple 曲目表渲染（序号代替封面）。 */
+    trackNumber: Int? = null,
+    /** 该行是否为「正在播放」的曲目，为 true 时序号换成音柱。 */
+    isPlaying: Boolean = false,
     moreMenuExpanded: Boolean = false,
     onMoreClick: () -> Unit = {},
     onMoreDismiss: () -> Unit = {},
@@ -71,112 +85,115 @@ fun SongListItem(
     /** 歌单排序用的拖拽把手；不传就没有把手，行内容与之前完全一致。 */
     dragHandle: (@Composable () -> Unit)? = null
 ) {
-    val leadingContent: @Composable () -> Unit = {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (selected != null) {
-                Checkbox(checked = selected, onCheckedChange = null)
-                Spacer(modifier = Modifier.width(SonSpacing.small))
+    val colors = AppleTheme.colors
+    val selectedRow = selected == true
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(if (selectedRow) colors.fill else Color.Transparent)
+            .then(if (onClick != null) Modifier.applePress(onClick) else Modifier)
+            .heightIn(min = AppleDims.listItemHeight)
+            .padding(start = AppleDims.padding, end = 8.dp, top = 6.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (selected != null) {
+            Checkbox(checked = selected, onCheckedChange = null)
+            Spacer(modifier = Modifier.width(8.dp))
+        }
+
+        if (trackNumber != null) {
+            // 专辑 / 歌单曲目表：行首是序号，播放中换成音柱，**不显示封面**（与 Apple 一致）
+            Box(modifier = Modifier.width(24.dp), contentAlignment = Alignment.Center) {
+                if (isPlaying) {
+                    ApplePlayingBars()
+                } else {
+                    Text(
+                        text = trackNumber.toString(),
+                        style = AppleType.subhead,
+                        color = colors.tertiaryLabel
+                    )
+                }
             }
+            Spacer(modifier = Modifier.width(12.dp))
+        } else {
             M3Artwork(
                 artwork = song.albumArt,
                 placeholderIcon = SymbolIconName.MusicNote,
-                shape = MaterialTheme.shapes.medium,
-                modifier = Modifier.size(SonSizes.thumbnail)
+                shape = RoundedCornerShape(AppleDims.cornerS),
+                modifier = Modifier.size(AppleDims.listItemHeight)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+        }
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = song.title,
+                // SmallListATitleStyle：17sp，当前曲目换成品牌红
+                style = AppleType.body,
+                color = if (isCurrentSong) colors.systemRed else colors.label,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = subtitle ?: formatDuration(song.duration),
+                // SmallListASubTitleStyle：12sp
+                style = AppleType.caption1,
+                color = colors.secondaryLabel,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
-    }
-    val headlineContent: @Composable () -> Unit = {
-        Text(
-            text = song.title,
-            style = if (isCurrentSong) {
-                MaterialTheme.typography.bodyLargeEmphasized
-            } else {
-                MaterialTheme.typography.bodyLarge
-            },
-            color = if (isCurrentSong) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.onSurface
-            },
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-    val supportingContent: @Composable () -> Unit = {
-        Text(
-            text = subtitle ?: formatDuration(song.duration),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-    // ListItem 的 trailingContent 槽是 Box（子项互相叠放），时长与图标按钮必须自己排成一行，
-    // 否则会压在一起。
-    val trailing: @Composable () -> Unit = {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(SonSpacing.small)
-        ) {
-            if (showDuration && subtitle != null) {
-                Text(
-                    text = formatDuration(song.duration),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            trailingContent?.invoke()
-            if (showMoreButton) {
-                Box {
-                    IconButton(onClick = onMoreClick) {
-                        M3SymbolIcon(
-                            name = SymbolIconName.MoreVert,
-                            filled = true,
-                            contentDescription = stringResource(R.string.components_more_desc)
-                        )
-                    }
-                    if (moreMenuItems.isNotEmpty()) {
-                        DropdownMenuPopup(
-                            expanded = moreMenuExpanded,
-                            onDismissRequest = onMoreDismiss,
-                            // 贴着行尾的「更多」弹出，横向收 8dp 让菜单右缘对齐图标。
-                            popupPositionProvider =
-                                MenuDefaults.rememberDropdownMenuPopupPositionProvider(
-                                    MenuAnchorPosition.Below,
-                                    offset = DpOffset(x = (-8).dp, y = 8.dp)
-                                )
-                        ) {
-                            MenuItemGroup(items = moreMenuItems, onDismiss = onMoreDismiss)
-                        }
+
+        if (showDuration && subtitle != null) {
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = formatDuration(song.duration),
+                style = AppleType.caption1,
+                color = colors.secondaryLabel
+            )
+        }
+
+        trailingContent?.invoke()
+
+        if (showMoreButton) {
+            Box {
+                Box(
+                    modifier = Modifier
+                        .size(AppleDims.trailingIcon)
+                        .clip(RoundedCornerShape(AppleDims.cornerM))
+                        .applePress(onMoreClick),
+                    contentAlignment = Alignment.Center
+                ) {
+                    M3SymbolIcon(
+                        name = SymbolIconName.MoreVert,
+                        filled = true,
+                        contentDescription = stringResource(R.string.components_more_desc),
+                        tint = colors.secondaryLabel,
+                        size = 18.dp
+                    )
+                }
+                if (moreMenuItems.isNotEmpty()) {
+                    DropdownMenuPopup(
+                        expanded = moreMenuExpanded,
+                        onDismissRequest = onMoreDismiss,
+                        // 贴着行尾的「更多」弹出，横向收 8dp 让菜单右缘对齐图标。
+                        popupPositionProvider =
+                            MenuDefaults.rememberDropdownMenuPopupPositionProvider(
+                                MenuAnchorPosition.Below,
+                                offset = DpOffset(x = (-8).dp, y = 8.dp)
+                            )
+                    ) {
+                        MenuItemGroup(items = moreMenuItems, onDismiss = onMoreDismiss)
                     }
                 }
             }
-            // 把手放行尾：常驻行首会把封面与标题整列推离屏幕边距，列表看起来像表格。
-            if (dragHandle != null) {
-                dragHandle()
-            }
         }
-    }
 
-    // onClick 可空：有值时用可点击重载，无值时用静态重载，避免给不可点击的行加涟漪。
-    if (onClick != null) {
-        ListItem(
-            modifier = modifier,
-            onClick = onClick,
-            selected = selected == true,
-            leadingContent = leadingContent,
-            content = headlineContent,
-            supportingContent = supportingContent,
-            trailingContent = trailing
-        )
-    } else {
-        ListItem(
-            modifier = modifier,
-            leadingContent = leadingContent,
-            headlineContent = headlineContent,
-            supportingContent = supportingContent,
-            trailingContent = trailing
-        )
+        // 把手放行尾：常驻行首会把封面与标题整列推离屏幕边距，列表看起来像表格。
+        if (dragHandle != null) {
+            dragHandle()
+        }
     }
 
     if (showDivider) {
@@ -185,9 +202,8 @@ fun SongListItem(
     }
 }
 
-/** 歌曲行分隔线的起始缩进。 */
-private val songDividerIndent: Dp =
-    SonSizes.listItemHorizontalPadding + SonSizes.thumbnail + SonSpacing.medium
+/** 歌曲行分隔线的起始缩进：行首留白 + 封面 + 封面与文字间距。 */
+private val songDividerIndent: Dp = AppleDims.padding + AppleDims.listItemHeight + 12.dp
 
 /**
  * 一个菜单项。只描述"叫什么、什么图标、点了干什么"，长什么样由 [MenuItemGroup] 统一决定 ——

@@ -1,9 +1,0 @@
-device: M2104K10AC
-android: 13 (API 33)
-commit: a3039ab
-captured: 2026-10-17 23:28:12 +08:00
-matrix: A/B/C x light/dark x mini on/off
-decision: A (standard NavigationBar)
-winner evidence: a-light-mini-on.png, a-dark-mini-on.png, a-light-mini-off.png, a-dark-mini-off.png, a-light-mini-on-bottom.png, a-dark-mini-on-bottom.png
-rejected: b-*.png, c-*.png
-note: B trial ran on an Android Studio Apply Changes overlay and rendered one item; not treated as a full-build verdict. C shots captured while Home was still loading.

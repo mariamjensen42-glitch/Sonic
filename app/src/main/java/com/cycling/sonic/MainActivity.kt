@@ -30,7 +30,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cycling.core.ui.theme.SonLayout
 import com.cycling.core.ui.theme.SonicTheme
 import com.cycling.presentation.navigation.AppNavGraph
-import com.cycling.presentation.navigation.M3BottomNavigationBar
+import com.cycling.presentation.navigation.AppleBottomNavigationBar
 import com.cycling.presentation.navigation.Navigator
 import com.cycling.presentation.navigation.Screen
 import com.cycling.presentation.navigation.rememberBottomNavTabs
@@ -103,7 +103,10 @@ class MainActivity : ComponentActivity() {
                 filePath = playerUiState.currentSong?.path
             )
 
-            SonicTheme(backdropColors = artworkBackdrop) {
+            SonicTheme(
+                backdropColors = artworkBackdrop.colors,
+                backdropArtwork = artworkBackdrop.cells
+            ) {
                 val navigationState = rememberNavigationState(
                     startRoute = Screen.Home,
                     topLevelRoutes = setOf(Screen.Home, Screen.Library)
@@ -170,7 +173,7 @@ private fun MainScreen(
             }
         )
 
-        M3BottomNavigationBar(
+        AppleBottomNavigationBar(
             currentTab = navigationState.topLevelRoute,
             onTabSelected = { screen -> navigator.navigate(screen) },
             tabs = rememberBottomNavTabs(),
@@ -180,15 +183,13 @@ private fun MainScreen(
                 MiniPlayer(
                     currentSong = currentSong,
                     isPlaying = playerUiState.isPlaying,
-                    playbackPosition = playerUiState.playbackPosition,
-                    duration = playerUiState.duration,
-                    isFavorite = playerUiState.isFavorite,
                     onPlayPause = { playerViewModel.handleIntent(PlayerIntent.PlayPause) },
-                    onToggleFavorite = { playerViewModel.handleIntent(PlayerIntent.ToggleFavorite) },
+                    onSkipNext = { playerViewModel.handleIntent(PlayerIntent.SkipToNext) },
                     onClick = { navigator.navigate(Screen.Player) }
                 )
             },
-            modifier = Modifier.align(Alignment.BottomCenter)
+            modifier = Modifier.align(Alignment.BottomCenter),
+            onSearchClick = { navigator.navigate(Screen.Search) }
         )
     }
 }

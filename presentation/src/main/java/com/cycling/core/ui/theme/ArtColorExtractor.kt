@@ -64,6 +64,30 @@ object ArtColorExtractor {
             SonArtworkColors(seed = seed, backdrop = backdropOf(palette))
         }
 
+    /**
+     * 封面在 [grid]×[grid] 上的代表性颜色，行优先。
+     *
+     * 动态色面拿它当 4×4 控制点用：**保留封面的明暗与色相分布**，而不是只用 Palette 挑出的
+     * 两三个 swatch —— 后者只会得到一团平滑渐变，看不出「这是那张封面糊开的」。
+     *
+     * 缩放本身就是盒式平均（一次 `createScaledBitmap` + 16 次取色），不碰 blur / RenderEffect，
+     * 所以 API 30 上同样有效。
+     */
+    fun sampleGrid(bitmap: Bitmap, grid: Int = 4): List<Color> {
+        if (grid < 2 || bitmap.width < grid || bitmap.height < grid) return emptyList()
+        return runCatching {
+            val scaled = Bitmap.createScaledBitmap(bitmap, grid, grid, true)
+            val colors = ArrayList<Color>(grid * grid)
+            for (y in 0 until grid) {
+                for (x in 0 until grid) {
+                    colors += Color(scaled.getPixel(x, y) or COLOR_OPAQUE)
+                }
+            }
+            if (scaled !== bitmap) scaled.recycle()
+            colors
+        }.getOrDefault(emptyList())
+    }
+
     /** 种子色按 CAM16 彩度挑最「有颜色」的那一档，保证展开出的方案有性格。 */
     private fun seedOf(palette: Palette): Color? {
         val candidates = listOfNotNull(

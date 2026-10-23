@@ -12,6 +12,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -42,6 +45,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -49,6 +53,19 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.widget.Toast
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.ui.unit.dp
+import com.cycling.core.ui.apple.AppleChip
+import com.cycling.core.ui.apple.AppleTextAction
+import com.cycling.core.ui.apple.appleBottomBarClearance
+import com.cycling.core.ui.apple.AppleDims
+import com.cycling.core.ui.apple.AppleIconButton
+import com.cycling.core.ui.apple.AppleLargeListRow
+import com.cycling.core.ui.apple.AppleLargeTitle
+import com.cycling.core.ui.apple.AppleSearchField
+import com.cycling.core.ui.apple.AppleSongRow
+import com.cycling.core.ui.apple.AppleTheme
+import com.cycling.core.ui.apple.AppleType
+import com.cycling.core.ui.apple.applePress
 import com.cycling.core.ui.components.M3SymbolIcon
 import com.cycling.core.ui.components.SymbolIconName
 import com.cycling.core.ui.components.M3Artwork
@@ -104,89 +121,52 @@ fun SearchScreen(
         SearchTab.ARTISTS -> uiState.artists.isEmpty()
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = stringResource(R.string.search_title),
-                        style = MaterialTheme.typography.titleLarge,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        M3SymbolIcon(
-                            name = SymbolIconName.ArrowBack,
-                            filled = true,
-                            contentDescription = stringResource(R.string.search_back_desc)
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
-                )
-            )
-        },
-        containerColor = MaterialTheme.colorScheme.surface
-    ) { innerPadding ->
-        LazyColumn(
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(AppleTheme.colors.background)
+            .statusBarsPadding()
+    ) {
+        Row(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-            contentPadding = PaddingValues(bottom = SonLayout.bottomBarClearance)
+                .fillMaxWidth()
+                .height(44.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AppleIconButton(
+                icon = SymbolIconName.ArrowBack,
+                contentDescription = stringResource(R.string.search_back_desc),
+                onClick = onNavigateBack,
+                tint = AppleTheme.colors.key
+            )
+        }
+        AppleLargeTitle(title = stringResource(R.string.search_title))
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = appleBottomBarClearance())
         ) {
             // 输入框吸顶：结果很长时也不必滚回顶部才能改词
             stickyHeader {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surface)
+                        .background(AppleTheme.colors.background)
                         .padding(
-                            horizontal = SonLayout.screenMargin,
-                            vertical = SonSpacing.small
+                            horizontal = AppleDims.padding,
+                            vertical = 8.dp
                         )
                 ) {
-                    OutlinedTextField(
+                    AppleSearchField(
                         value = query,
                         onValueChange = {
                             viewModel.handleIntent(SearchIntent.SearchQueryChanged(it))
                         },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text(stringResource(R.string.search_placeholder)) },
-                        leadingIcon = {
-                            M3SymbolIcon(
-                                name = SymbolIconName.Search,
-                                filled = true,
-                                contentDescription = null
-                            )
+                        placeholder = stringResource(R.string.search_placeholder),
+                        onSearch = {
+                            viewModel.handleIntent(SearchIntent.SearchSubmitted(query))
                         },
-                        trailingIcon = if (query.isNotEmpty()) {
-                            {
-                                IconButton(
-                                    onClick = {
-                                        viewModel.handleIntent(SearchIntent.ClearSearch)
-                                    }
-                                ) {
-                                    M3SymbolIcon(
-                                        name = SymbolIconName.Close,
-                                        filled = true,
-                                        contentDescription = stringResource(R.string.search_clear_history)
-                                    )
-                                }
-                            }
-                        } else {
-                            null
-                        },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(
-                            onSearch = {
-                                viewModel.handleIntent(SearchIntent.SearchSubmitted(query))
-                            }
-                        )
+                        onClear = { viewModel.handleIntent(SearchIntent.ClearSearch) }
                     )
                 }
             }
@@ -219,8 +199,8 @@ fun SearchScreen(
                                 top = SonSpacing.large,
                                 bottom = SonSpacing.small
                             ),
-                            style = MaterialTheme.typography.titleSmallEmphasized,
-                            color = MaterialTheme.colorScheme.primary
+                            style = AppleType.sectionTitle,
+                            color = AppleTheme.colors.label
                         )
                     }
                     item {
@@ -232,30 +212,23 @@ fun SearchScreen(
                 }
 
                 item {
-                    SingleChoiceSegmentedButtonRow(
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(
-                                horizontal = SonLayout.screenMargin,
-                                vertical = SonSpacing.small
-                            ),
-                        space = SonSpacing.small
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         val options = SearchTab.entries.map { stringResource(it.labelRes()) }
                         val selectedIndex = SearchTab.entries.indexOf(tab)
                         options.forEachIndexed { index, label ->
-                            SegmentedButton(
+                            AppleChip(
+                                label = label,
                                 selected = index == selectedIndex,
                                 onClick = {
                                     viewModel.handleIntent(
                                         SearchIntent.TabSelected(SearchTab.entries[index])
                                     )
-                                },
-                                shape = SegmentedButtonDefaults.itemShape(
-                                    index = index,
-                                    count = options.size
-                                ),
-                                label = { Text(text = label) }
+                                }
                             )
                         }
                     }
@@ -274,8 +247,8 @@ fun SearchScreen(
                                         top = SonSpacing.large,
                                         bottom = SonSpacing.small
                                     ),
-                                    style = MaterialTheme.typography.titleSmallEmphasized,
-                                    color = MaterialTheme.colorScheme.primary
+                                    style = AppleType.footnoteEmphasized,
+                                    color = AppleTheme.colors.key
                                 )
                             }
                             items(uiState.onlineResults, key = { it.onlineKey }) { track ->
@@ -319,8 +292,8 @@ fun SearchScreen(
                                 top = SonSpacing.large,
                                 bottom = SonSpacing.small
                             ),
-                            style = MaterialTheme.typography.titleSmallEmphasized,
-                            color = MaterialTheme.colorScheme.primary
+                            style = AppleType.sectionTitle,
+                            color = AppleTheme.colors.label
                         )
                     }
                     items(uiState.songs, key = { it.id }) { song ->
@@ -341,8 +314,8 @@ fun SearchScreen(
                                 top = SonSpacing.large,
                                 bottom = SonSpacing.small
                             ),
-                            style = MaterialTheme.typography.titleSmallEmphasized,
-                            color = MaterialTheme.colorScheme.primary
+                            style = AppleType.sectionTitle,
+                            color = AppleTheme.colors.label
                         )
                     }
                     items(uiState.lyricsMatches, key = { it.song.id }) { match ->
@@ -364,8 +337,8 @@ fun SearchScreen(
                                 top = SonSpacing.large,
                                 bottom = SonSpacing.small
                             ),
-                            style = MaterialTheme.typography.titleSmallEmphasized,
-                            color = MaterialTheme.colorScheme.primary
+                            style = AppleType.sectionTitle,
+                            color = AppleTheme.colors.label
                         )
                     }
                     items(uiState.albums, key = { it.id }) { album ->
@@ -385,8 +358,8 @@ fun SearchScreen(
                                 top = SonSpacing.large,
                                 bottom = SonSpacing.small
                             ),
-                            style = MaterialTheme.typography.titleSmallEmphasized,
-                            color = MaterialTheme.colorScheme.primary
+                            style = AppleType.sectionTitle,
+                            color = AppleTheme.colors.label
                         )
                     }
                     items(uiState.artists, key = { it.id }) { artist ->
@@ -415,19 +388,19 @@ fun SearchScreen(
                                 filled = false,
                                 contentDescription = null,
                                 modifier = Modifier.size(SonSizes.iconExtraLarge),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                tint = AppleTheme.colors.secondaryLabel
                             )
                             Spacer(modifier = Modifier.height(SonSpacing.medium))
                             Text(
                                 text = stringResource(R.string.search_no_results),
-                                style = MaterialTheme.typography.titleMediumEmphasized,
-                                color = MaterialTheme.colorScheme.onSurface
+                                style = AppleType.headline,
+                                color = AppleTheme.colors.label
                             )
                             Spacer(modifier = Modifier.height(SonSpacing.extraSmall))
                             Text(
                                 text = stringResource(R.string.search_placeholder),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                style = AppleType.footnote,
+                                color = AppleTheme.colors.secondaryLabel
                             )
                         }
                     }
@@ -448,7 +421,7 @@ private fun SearchTab.labelRes(): Int = when (this) {
 // 区块标题 / 历史标签
 // ════════════════════════════════════════════════════════════════
 
-/** 区块标题用强调变体；带操作时操作是真正的按钮，保留点击态层。 */
+/** 区块标题：Apple 的 MusicTitle2（20sp Bold），操作文字用 key 色。 */
 @Composable
 private fun SearchSectionHeader(
     title: String,
@@ -461,40 +434,54 @@ private fun SearchSectionHeader(
         modifier = Modifier
             .fillMaxWidth()
             .padding(
-                start = SonLayout.screenMargin,
-                end = SonLayout.screenMargin,
-                top = SonSpacing.large,
-                bottom = SonSpacing.small
+                start = AppleDims.padding,
+                end = AppleDims.padding,
+                top = AppleDims.sectionTitleTop,
+                bottom = AppleDims.sectionTitleBottom
             )
     ) {
         Text(
             text = title,
-            style = MaterialTheme.typography.titleSmallEmphasized,
-            color = MaterialTheme.colorScheme.primary
+            style = AppleType.sectionTitle,
+            color = AppleTheme.colors.label
         )
         if (action != null && onActionClick != null) {
-            TextButton(onClick = onActionClick) {
-                Text(action)
-            }
+            Text(
+                text = action,
+                style = AppleType.subhead,
+                color = AppleTheme.colors.key,
+                modifier = Modifier.clickable(onClick = onActionClick)
+            )
         }
     }
 }
 
-/** 历史与补全都是一行可点的建议芯片。 */
+/** 历史与补全：Apple 的填充胶囊，32dp 高，横向滑动一排。 */
 @Composable
 private fun ChipRow(
     items: List<String>,
     onItemClick: (String) -> Unit
 ) {
+    val colors = AppleTheme.colors
     LazyRow(
-        contentPadding = PaddingValues(horizontal = SonLayout.screenMargin),
-        horizontalArrangement = Arrangement.spacedBy(SonSpacing.small)
+        contentPadding = PaddingValues(horizontal = AppleDims.padding),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         items(items) { item ->
-            SuggestionChip(
-                onClick = { onItemClick(item) },
-                label = { Text(text = item) }
-            )
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(AppleDims.cornerPill))
+                    .background(colors.fill)
+                    .clickable { onItemClick(item) }
+                    .padding(horizontal = 14.dp, vertical = 7.dp)
+            ) {
+                Text(
+                    text = item,
+                    style = AppleType.subhead,
+                    color = colors.label,
+                    maxLines = 1
+                )
+            }
         }
     }
 }
@@ -524,8 +511,8 @@ private fun OnlineSearchingRow() {
         Spacer(modifier = Modifier.width(SonSpacing.small))
         Text(
             text = stringResource(R.string.search_online_loading),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            style = AppleType.caption1,
+            color = AppleTheme.colors.secondaryLabel
         )
     }
 }
@@ -551,13 +538,14 @@ private fun OnlineLoadMoreRow(
             Spacer(modifier = Modifier.width(SonSpacing.small))
             Text(
                 text = stringResource(R.string.search_online_loading_more),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = AppleType.caption1,
+                color = AppleTheme.colors.secondaryLabel
             )
         } else {
-            TextButton(onClick = onClick) {
-                Text(stringResource(R.string.search_online_load_more))
-            }
+            AppleTextAction(
+                label = stringResource(R.string.search_online_load_more),
+                onClick = onClick
+            )
         }
     }
 }
@@ -573,8 +561,8 @@ private fun OnlineHintRow(text: String) {
             top = SonSpacing.small,
             bottom = SonSpacing.small
         ),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
+        style = AppleType.caption1,
+        color = AppleTheme.colors.secondaryLabel
     )
 }
 
@@ -589,48 +577,51 @@ private fun OnlineSongRow(
     resolving: Boolean,
     onClick: () -> Unit
 ) {
-    ListItem(
-        onClick = onClick,
-        overlineContent = {
+    val colors = AppleTheme.colors
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .applePress(onClick)
+            .padding(horizontal = AppleDims.padding, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        M3Artwork(
+            artwork = track.coverUrl,
+            shape = RoundedCornerShape(AppleDims.cornerS),
+            modifier = Modifier.size(AppleDims.listItemHeight)
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            // 来源压在最上面一行，用 key 色 —— 在线结果必须先说清"从哪来"
             Text(
                 text = track.source.displayName,
-                color = MaterialTheme.colorScheme.primary,
+                style = AppleType.caption2,
+                color = colors.key,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-        },
-        content = {
             Text(
                 text = track.title,
-                color = MaterialTheme.colorScheme.onSurface,
+                style = AppleType.body,
+                color = colors.label,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-        },
-        supportingContent = {
             Text(
                 text = listOf(track.artist, track.album)
                     .filter { it.isNotBlank() }
                     .joinToString(" · "),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = AppleType.caption1,
+                color = colors.secondaryLabel,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-        },
-        leadingContent = {
-            M3Artwork(
-                artwork = track.coverUrl,
-                placeholderIcon = SymbolIconName.MusicNote,
-                shape = MaterialTheme.shapes.small,
-                modifier = Modifier.size(SonSizes.thumbnail)
-            )
-        },
-        trailingContent = if (resolving) {
-            { LoadingIndicator(modifier = Modifier.size(SonSizes.iconSmall)) }
-        } else {
-            null
         }
-    )
+        if (resolving) {
+            Spacer(modifier = Modifier.width(8.dp))
+            LoadingIndicator(modifier = Modifier.size(16.dp))
+        }
+    }
 }
 
 @Composable
@@ -639,41 +630,20 @@ private fun SongRow(
     onClick: () -> Unit,
     onToggleFavorite: () -> Unit
 ) {
-    ListItem(
+    AppleSongRow(
+        artwork = song.albumArt,
+        title = song.title,
+        subtitle = song.artist,
         onClick = onClick,
-        content = {
-            Text(
-                text = song.title,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        },
-        supportingContent = {
-            Text(
-                text = song.artist,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        },
-        leadingContent = {
-            M3Artwork(
-                artwork = song.albumArt,
-                placeholderIcon = SymbolIconName.MusicNote,
-                shape = MaterialTheme.shapes.small,
-                modifier = Modifier.size(SonSizes.thumbnail)
-            )
-        },
         // 红心跟着歌曲的真实收藏状态走，点了会写进数据库
-        trailingContent = {
+        trailing = {
             IconButton(
                 onClick = onToggleFavorite,
                 colors = IconButtonDefaults.iconButtonColors(
                     contentColor = if (song.isFavorite) {
-                        MaterialTheme.colorScheme.primary
+                        AppleTheme.colors.systemRed
                     } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
+                        AppleTheme.colors.tertiaryLabel
                     }
                 )
             ) {
@@ -683,7 +653,8 @@ private fun SongRow(
                     contentDescription = stringResource(
                         if (song.isFavorite) R.string.player_unfavorite_desc
                         else R.string.player_favorite_desc
-                    )
+                    ),
+                    size = 18.dp
                 )
             }
         }
@@ -692,101 +663,59 @@ private fun SongRow(
 
 @Composable
 private fun LyricsMatchRow(match: LyricsMatch, onClick: () -> Unit) {
-    ListItem(
-        onClick = onClick,
-        overlineContent = {
-            Text(
-                text = match.song.artist,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        },
-        content = {
+    val colors = AppleTheme.colors
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .applePress(onClick)
+            .padding(horizontal = AppleDims.padding, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        M3Artwork(
+            artwork = match.song.albumArt,
+            shape = RoundedCornerShape(AppleDims.cornerS),
+            modifier = Modifier.size(56.dp)
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = match.song.title,
-                color = MaterialTheme.colorScheme.onSurface,
+                style = AppleType.body,
+                color = colors.label,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-        },
-        supportingContent = {
             Text(
                 // 命中原因比元数据更重要：这一行存在的意义就是让用户认出那句歌词。
                 text = match.snippet,
-                color = MaterialTheme.colorScheme.primary,
+                style = AppleType.caption1,
+                color = colors.key,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
-        },
-        leadingContent = {
-            M3Artwork(
-                artwork = match.song.albumArt,
-                placeholderIcon = SymbolIconName.MusicNote,
-                shape = MaterialTheme.shapes.small,
-                modifier = Modifier.size(SonSizes.thumbnail)
-            )
         }
-    )
+    }
 }
 
 @Composable
 private fun AlbumRow(album: Album, onClick: () -> Unit) {
-    ListItem(
+    AppleLargeListRow(
+        artwork = album.albumArt,
+        title = album.name,
+        subtitle = album.artist,
         onClick = onClick,
-        content = {
-            Text(
-                text = album.name,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        },
-        supportingContent = {
-            Text(
-                text = album.artist,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        },
-        leadingContent = {
-            M3Artwork(
-                artwork = album.albumArt,
-                placeholderIcon = SymbolIconName.Album,
-                shape = MaterialTheme.shapes.small,
-                modifier = Modifier.size(SonSizes.thumbnail)
-            )
-        }
+        imageSize = 56.dp
     )
 }
 
 @Composable
 private fun ArtistRow(artist: Artist, onClick: () -> Unit) {
-    ListItem(
+    AppleLargeListRow(
+        artwork = artist.artistArt,
+        title = artist.name,
+        subtitle = stringResource(R.string.search_artist_song_count, artist.numberOfTracks),
         onClick = onClick,
-        content = {
-            Text(
-                text = artist.name,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        },
-        supportingContent = {
-            Text(
-                text = stringResource(R.string.search_artist_song_count, artist.numberOfTracks),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1
-            )
-        },
-        leadingContent = {
-            M3Artwork(
-                artwork = artist.artistArt,
-                placeholderIcon = SymbolIconName.Person,
-                shape = CircleShape,
-                modifier = Modifier.size(SonSizes.thumbnail)
-            )
-        }
+        circular = true,
+        imageSize = 56.dp
     )
 }

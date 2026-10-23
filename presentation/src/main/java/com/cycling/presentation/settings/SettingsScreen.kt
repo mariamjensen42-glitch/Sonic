@@ -9,6 +9,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -74,6 +75,25 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.cycling.core.ui.apple.appleBottomBarClearance
+import com.cycling.core.ui.apple.AppleActionButton
+import com.cycling.core.ui.apple.AppleSeparator
+import com.cycling.core.ui.apple.AppleTextAction
+import com.cycling.core.ui.apple.AppleTextField
+import com.cycling.core.ui.apple.AppleAlert
+import com.cycling.core.ui.apple.AppleGroupedSection
+import com.cycling.core.ui.apple.AppleIconButton
+import com.cycling.core.ui.apple.AppleDims
+import com.cycling.core.ui.apple.AppleSettingsNavRow as SettingsNavigationRow
+import com.cycling.core.ui.apple.AppleSettingsRow as SettingsRow
+import com.cycling.core.ui.apple.AppleSettingsSwitchRow as SettingsSwitchRow
+import com.cycling.core.ui.apple.AppleSheet
+import com.cycling.core.ui.apple.AppleSheetRow
+import com.cycling.core.ui.apple.AppleSheetTitle
+import com.cycling.core.ui.apple.AppleType
+import com.cycling.core.ui.apple.applePress
+import com.cycling.core.ui.apple.AppleTheme
+import com.cycling.core.ui.apple.AppleTopBar
 import com.cycling.core.ui.components.M3SymbolIcon
 import com.cycling.core.ui.components.SymbolIconName
 import com.cycling.core.ui.components.HiResBadgeOverlay
@@ -216,47 +236,27 @@ fun SettingsScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = when (uiState.currentDestination) {
-                            SettingsDestination.MAIN -> stringResource(R.string.settings_title)
-                            SettingsDestination.SCAN -> stringResource(R.string.settings_scan_menu)
-                            SettingsDestination.EXCLUDE_FOLDERS -> stringResource(R.string.settings_exclude_menu)
-                            SettingsDestination.API_KEY_CONFIG -> stringResource(R.string.settings_api_config_menu)
-                            SettingsDestination.LIBRARY_STATS -> stringResource(R.string.settings_library_stats_menu)
-                            SettingsDestination.EQUALIZER -> stringResource(R.string.settings_equalizer_menu)
-                            SettingsDestination.ONLINE_SOURCES -> stringResource(R.string.settings_online_sources_menu)
-                        },
-                        style = MaterialTheme.typography.titleLarge
-                    )
+            AppleTopBar(
+                title = when (uiState.currentDestination) {
+                    SettingsDestination.MAIN -> stringResource(R.string.settings_title)
+                    SettingsDestination.SCAN -> stringResource(R.string.settings_scan_menu)
+                    SettingsDestination.EXCLUDE_FOLDERS -> stringResource(R.string.settings_exclude_menu)
+                    SettingsDestination.API_KEY_CONFIG -> stringResource(R.string.settings_api_config_menu)
+                    SettingsDestination.LIBRARY_STATS -> stringResource(R.string.settings_library_stats_menu)
+                    SettingsDestination.EQUALIZER -> stringResource(R.string.settings_equalizer_menu)
+                    SettingsDestination.ONLINE_SOURCES -> stringResource(R.string.settings_online_sources_menu)
                 },
-                navigationIcon = {
-                    IconButton(onClick = { viewModel.handleIntent(SettingsIntent.NavigateBack) }) {
-                        M3SymbolIcon(
-                            name = SymbolIconName.ArrowBack,
-                            filled = true,
-                            contentDescription = stringResource(R.string.settings_back_desc)
-                        )
-                    }
-                },
+                onNavigateBack = { viewModel.handleIntent(SettingsIntent.NavigateBack) },
+                backContentDescription = stringResource(R.string.settings_back_desc),
                 actions = {
                     if (uiState.currentDestination == SettingsDestination.EXCLUDE_FOLDERS) {
-                        IconButton(onClick = { folderPickerLauncher.launch(null) }) {
-                            M3SymbolIcon(
-                                name = SymbolIconName.Add,
-                                filled = true,
-                                contentDescription = stringResource(R.string.settings_add_folder_desc)
-                            )
-                        }
+                        AppleIconButton(
+                            icon = SymbolIconName.Add,
+                            contentDescription = stringResource(R.string.settings_add_folder_desc),
+                            onClick = { folderPickerLauncher.launch(null) }
+                        )
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface,
-                    actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                }
             )
         }
     ) { paddingValues ->
@@ -400,14 +400,14 @@ private fun SettingsHeader(
             modifier = Modifier
                 .size(SonSizes.thumbnailLarge)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primaryContainer),
+                .background(AppleTheme.colors.fill),
             contentAlignment = Alignment.Center
         ) {
             M3SymbolIcon(
                 name = SymbolIconName.GraphicEq,
                 filled = true,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                tint = AppleTheme.colors.label,
                 modifier = Modifier.size(SonSizes.iconLarge)
             )
         }
@@ -415,13 +415,13 @@ private fun SettingsHeader(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleMediumEmphasized,
-                color = MaterialTheme.colorScheme.onSurface
+                style = AppleType.settingsTitle,
+                color = AppleTheme.colors.label
             )
             Text(
                 text = subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = AppleType.settingsSubtitle,
+                color = AppleTheme.colors.secondaryLabel
             )
         }
         if (onClick != null) {
@@ -429,108 +429,14 @@ private fun SettingsHeader(
                 name = SymbolIconName.KeyboardArrowRight,
                 filled = true,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                tint = AppleTheme.colors.tertiaryLabel
             )
         }
     }
 }
 
-/** 可点击的导航型设置项：前置图标 + 标题（可带副标题）+ 尾部箭头。 */
-@Composable
-private fun SettingsNavigationRow(
-    icon: SymbolIconName,
-    title: String,
-    supporting: String? = null,
-    onClick: () -> Unit
-) {
-    SettingsRow(icon = icon, title = title, supporting = supporting, onClick = onClick) {
-        M3SymbolIcon(
-            name = SymbolIconName.KeyboardArrowRight,
-            filled = true,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-/** 开关型设置项：点击整行或开关本身都能切换；[enabled] 为 false 时整行只读。 */
-@Composable
-private fun SettingsSwitchRow(
-    icon: SymbolIconName,
-    title: String,
-    supporting: String? = null,
-    checked: Boolean,
-    enabled: Boolean = true,
-    onCheckedChange: (Boolean) -> Unit
-) {
-    SettingsRow(
-        icon = icon,
-        title = title,
-        supporting = supporting,
-        onClick = if (enabled) {
-            { onCheckedChange(!checked) }
-        } else {
-            null
-        }
-    ) {
-        Switch(
-            checked = checked && enabled,
-            onCheckedChange = if (enabled) onCheckedChange else null,
-            enabled = enabled
-        )
-    }
-}
-
-/** 设置项骨架：把领域字段映射到 [ListItem] 的插槽上。 */
-@Composable
-private fun SettingsRow(
-    icon: SymbolIconName,
-    title: String,
-    supporting: String? = null,
-    onClick: (() -> Unit)? = null,
-    trailingContent: @Composable () -> Unit
-) {
-    val supportingSlot: (@Composable () -> Unit)? = supporting?.let { text ->
-        {
-            Text(
-                text = text,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-    val leading: @Composable () -> Unit = {
-        M3SymbolIcon(
-            name = icon,
-            filled = true,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-    val headline: @Composable () -> Unit = {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-    }
-    if (onClick != null) {
-        ListItem(
-            onClick = onClick,
-            leadingContent = leading,
-            content = headline,
-            supportingContent = supportingSlot,
-            trailingContent = trailingContent
-        )
-    } else {
-        ListItem(
-            leadingContent = leading,
-            headlineContent = headline,
-            supportingContent = supportingSlot,
-            trailingContent = trailingContent
-        )
-    }
-}
+// 导航型 / 开关型 / 骨架行已上提到 core/ui/apple/AppleSettings.kt，
+// 与设置页的二级页（均衡器、在线源）共用一份实现。
 
 // ════════════════════════════════════════════════════════════════
 // 主设置页
@@ -599,10 +505,10 @@ private fun MainSettingsContent(
                 top = SonSpacing.large,
                 bottom = SonSpacing.small
             ),
-            style = MaterialTheme.typography.titleSmallEmphasized,
-            color = MaterialTheme.colorScheme.primary
+            style = AppleType.footnoteEmphasized,
+            color = AppleTheme.colors.secondaryLabel
         )
-        OutlinedCard(
+        AppleGroupedSection(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = SonLayout.screenMargin)
@@ -612,13 +518,13 @@ private fun MainSettingsContent(
                 title = stringResource(R.string.settings_scan_local),
                 onClick = onNavigateToScan
             )
-            HorizontalDivider(modifier = Modifier.padding(start = listDividerIndent))
+            AppleSeparator(leadingInset = listDividerIndent)
             SettingsNavigationRow(
                 icon = SymbolIconName.Folder,
                 title = stringResource(R.string.settings_exclude_folders),
                 onClick = onNavigateToExcludeFolders
             )
-            HorizontalDivider(modifier = Modifier.padding(start = listDividerIndent))
+            AppleSeparator(leadingInset = listDividerIndent)
             SettingsNavigationRow(
                 icon = SymbolIconName.BarChart,
                 title = stringResource(R.string.settings_library_stats),
@@ -634,10 +540,10 @@ private fun MainSettingsContent(
                 top = SonSpacing.large,
                 bottom = SonSpacing.small
             ),
-            style = MaterialTheme.typography.titleSmallEmphasized,
-            color = MaterialTheme.colorScheme.primary
+            style = AppleType.footnoteEmphasized,
+            color = AppleTheme.colors.secondaryLabel
         )
-        OutlinedCard(
+        AppleGroupedSection(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = SonLayout.screenMargin)
@@ -648,14 +554,14 @@ private fun MainSettingsContent(
                 supporting = stringResource(R.string.settings_equalizer_menu_subtitle),
                 onClick = onNavigateToEqualizer
             )
-            HorizontalDivider(modifier = Modifier.padding(start = listDividerIndent))
+            AppleSeparator(leadingInset = listDividerIndent)
             SettingsNavigationRow(
                 icon = SymbolIconName.Speed,
                 title = stringResource(R.string.settings_playback_speed),
                 supporting = formatSpeed(playbackSpeed),
                 onClick = { showSpeedDialog = true }
             )
-            HorizontalDivider(modifier = Modifier.padding(start = listDividerIndent))
+            AppleSeparator(leadingInset = listDividerIndent)
             SettingsNavigationRow(
                 icon = SymbolIconName.Bedtime,
                 title = stringResource(R.string.settings_sleep_timer),
@@ -664,7 +570,7 @@ private fun MainSettingsContent(
                 } ?: stringResource(R.string.settings_sleep_timer_off),
                 onClick = { showSleepTimerDialog = true }
             )
-            HorizontalDivider(modifier = Modifier.padding(start = listDividerIndent))
+            AppleSeparator(leadingInset = listDividerIndent)
             SettingsSwitchRow(
                 icon = SymbolIconName.VolumeOff,
                 title = stringResource(R.string.settings_skip_silence),
@@ -672,7 +578,7 @@ private fun MainSettingsContent(
                 checked = skipSilence,
                 onCheckedChange = onSetSkipSilence
             )
-            HorizontalDivider(modifier = Modifier.padding(start = listDividerIndent))
+            AppleSeparator(leadingInset = listDividerIndent)
             SettingsSwitchRow(
                 icon = SymbolIconName.VolumeUp,
                 title = stringResource(R.string.settings_replay_gain),
@@ -680,14 +586,14 @@ private fun MainSettingsContent(
                 checked = replayGainEnabled,
                 onCheckedChange = onSetReplayGain
             )
-            HorizontalDivider(modifier = Modifier.padding(start = listDividerIndent))
+            AppleSeparator(leadingInset = listDividerIndent)
             SettingsNavigationRow(
                 icon = SymbolIconName.Waves,
                 title = stringResource(R.string.settings_audio_fade),
                 supporting = formatFadeDuration(audioFadeDurationMs),
                 onClick = { showFadeDialog = true }
             )
-            HorizontalDivider(modifier = Modifier.padding(start = listDividerIndent))
+            AppleSeparator(leadingInset = listDividerIndent)
             SettingsSwitchRow(
                 icon = SymbolIconName.History,
                 title = stringResource(R.string.settings_remember_position),
@@ -695,7 +601,7 @@ private fun MainSettingsContent(
                 checked = rememberPlaybackPosition,
                 onCheckedChange = onSetRememberPlaybackPosition
             )
-            HorizontalDivider(modifier = Modifier.padding(start = listDividerIndent))
+            AppleSeparator(leadingInset = listDividerIndent)
             SettingsSwitchRow(
                 icon = SymbolIconName.PlayCircle,
                 title = stringResource(R.string.settings_open_player_on_play),
@@ -703,7 +609,7 @@ private fun MainSettingsContent(
                 checked = openPlayerOnPlay,
                 onCheckedChange = onSetOpenPlayerOnPlay
             )
-            HorizontalDivider(modifier = Modifier.padding(start = listDividerIndent))
+            AppleSeparator(leadingInset = listDividerIndent)
             SettingsSwitchRow(
                 icon = SymbolIconName.Autorenew,
                 title = stringResource(R.string.settings_auto_continue),
@@ -711,7 +617,7 @@ private fun MainSettingsContent(
                 checked = autoContinueEnabled,
                 onCheckedChange = onSetAutoContinue
             )
-            HorizontalDivider(modifier = Modifier.padding(start = listDividerIndent))
+            AppleSeparator(leadingInset = listDividerIndent)
             SettingsNavigationRow(
                 icon = SymbolIconName.HighQuality,
                 title = stringResource(R.string.settings_hi_res_badge),
@@ -728,10 +634,10 @@ private fun MainSettingsContent(
                 top = SonSpacing.large,
                 bottom = SonSpacing.small
             ),
-            style = MaterialTheme.typography.titleSmallEmphasized,
-            color = MaterialTheme.colorScheme.primary
+            style = AppleType.footnoteEmphasized,
+            color = AppleTheme.colors.secondaryLabel
         )
-        OutlinedCard(
+        AppleGroupedSection(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = SonLayout.screenMargin)
@@ -752,10 +658,10 @@ private fun MainSettingsContent(
                 top = SonSpacing.large,
                 bottom = SonSpacing.small
             ),
-            style = MaterialTheme.typography.titleSmallEmphasized,
-            color = MaterialTheme.colorScheme.primary
+            style = AppleType.footnoteEmphasized,
+            color = AppleTheme.colors.secondaryLabel
         )
-        OutlinedCard(
+        AppleGroupedSection(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = SonLayout.screenMargin)
@@ -768,7 +674,7 @@ private fun MainSettingsContent(
                 onCheckedChange = onToggleOnlineLyrics
             )
             if (onlineLyricsEnabled) {
-                HorizontalDivider(modifier = Modifier.padding(start = listDividerIndent))
+                AppleSeparator(leadingInset = listDividerIndent)
                 LyricsProviderOrder(
                     providers = lyricsProviderOrder,
                     onMoveProvider = onMoveLyricsProvider
@@ -784,10 +690,10 @@ private fun MainSettingsContent(
                 top = SonSpacing.large,
                 bottom = SonSpacing.small
             ),
-            style = MaterialTheme.typography.titleSmallEmphasized,
-            color = MaterialTheme.colorScheme.primary
+            style = AppleType.footnoteEmphasized,
+            color = AppleTheme.colors.secondaryLabel
         )
-        OutlinedCard(
+        AppleGroupedSection(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = SonLayout.screenMargin)
@@ -812,10 +718,10 @@ private fun MainSettingsContent(
                 top = SonSpacing.large,
                 bottom = SonSpacing.small
             ),
-            style = MaterialTheme.typography.titleSmallEmphasized,
-            color = MaterialTheme.colorScheme.primary
+            style = AppleType.footnoteEmphasized,
+            color = AppleTheme.colors.secondaryLabel
         )
-        OutlinedCard(
+        AppleGroupedSection(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = SonLayout.screenMargin)
@@ -826,7 +732,7 @@ private fun MainSettingsContent(
                 supporting = stringResource(R.string.settings_export_backup_subtitle),
                 onClick = { if (!isTransferring) onExportBackup() }
             )
-            HorizontalDivider(modifier = Modifier.padding(start = listDividerIndent))
+            AppleSeparator(leadingInset = listDividerIndent)
             SettingsNavigationRow(
                 icon = SymbolIconName.Restore,
                 title = stringResource(R.string.settings_import_backup),
@@ -837,7 +743,7 @@ private fun MainSettingsContent(
                 },
                 onClick = { if (!isTransferring) onImportBackup() }
             )
-            HorizontalDivider(modifier = Modifier.padding(start = listDividerIndent))
+            AppleSeparator(leadingInset = listDividerIndent)
             SettingsNavigationRow(
                 icon = SymbolIconName.UploadFile,
                 title = stringResource(R.string.settings_import_m3u),
@@ -854,10 +760,10 @@ private fun MainSettingsContent(
                 top = SonSpacing.large,
                 bottom = SonSpacing.small
             ),
-            style = MaterialTheme.typography.titleSmallEmphasized,
-            color = MaterialTheme.colorScheme.primary
+            style = AppleType.footnoteEmphasized,
+            color = AppleTheme.colors.secondaryLabel
         )
-        OutlinedCard(
+        AppleGroupedSection(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = SonLayout.screenMargin)
@@ -880,10 +786,10 @@ private fun MainSettingsContent(
                 top = SonSpacing.large,
                 bottom = SonSpacing.small
             ),
-            style = MaterialTheme.typography.titleSmallEmphasized,
-            color = MaterialTheme.colorScheme.primary
+            style = AppleType.footnoteEmphasized,
+            color = AppleTheme.colors.secondaryLabel
         )
-        OutlinedCard(
+        AppleGroupedSection(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = SonLayout.screenMargin)
@@ -896,7 +802,7 @@ private fun MainSettingsContent(
             )
         }
 
-        Spacer(modifier = Modifier.height(SonLayout.bottomBarClearance + bottomPadding))
+        Spacer(modifier = Modifier.height(appleBottomBarClearance() + bottomPadding))
     }
 
     if (showSpeedDialog) {
@@ -977,65 +883,61 @@ private fun HiResBadgeDialog(
     onClearImage: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.settings_hi_res_badge_dialog_title)) },
-        text = {
-            Column {
-                HiResBadgeOption(
-                    badge = HiResBadge.OFF,
-                    labelRes = R.string.settings_hi_res_badge_off,
-                    selected = current == HiResBadge.OFF,
-                    customUri = customUri,
-                    onClick = { onSelect(HiResBadge.OFF) }
-                )
-                HiResBadgeOption(
-                    badge = HiResBadge.HI_RES,
-                    labelRes = R.string.settings_hi_res_badge_hi_res,
-                    selected = current == HiResBadge.HI_RES,
-                    customUri = customUri,
-                    onClick = { onSelect(HiResBadge.HI_RES) }
-                )
-                HiResBadgeOption(
-                    badge = HiResBadge.HI_RES_WIRELESS,
-                    labelRes = R.string.settings_hi_res_badge_wireless,
-                    selected = current == HiResBadge.HI_RES_WIRELESS,
-                    customUri = customUri,
-                    onClick = { onSelect(HiResBadge.HI_RES_WIRELESS) }
-                )
-                HiResBadgeOption(
-                    badge = HiResBadge.GOLD_SEAL,
-                    labelRes = R.string.settings_hi_res_badge_gold,
-                    selected = current == HiResBadge.GOLD_SEAL,
-                    customUri = customUri,
-                    onClick = { onSelect(HiResBadge.GOLD_SEAL) }
-                )
-                HiResBadgeOption(
-                    badge = HiResBadge.CUSTOM,
-                    labelRes = R.string.settings_hi_res_badge_custom,
-                    selected = current == HiResBadge.CUSTOM,
-                    customUri = customUri,
-                    onClick = { onSelect(HiResBadge.CUSTOM) }
-                )
+    AppleSheet(onDismiss = onDismiss) {
+        AppleSheetTitle(title = stringResource(R.string.settings_hi_res_badge_dialog_title))
+        HiResBadgeOption(
+            badge = HiResBadge.OFF,
+            labelRes = R.string.settings_hi_res_badge_off,
+            selected = current == HiResBadge.OFF,
+            customUri = customUri,
+            onClick = { onSelect(HiResBadge.OFF) }
+        )
+        HiResBadgeOption(
+            badge = HiResBadge.HI_RES,
+            labelRes = R.string.settings_hi_res_badge_hi_res,
+            selected = current == HiResBadge.HI_RES,
+            customUri = customUri,
+            onClick = { onSelect(HiResBadge.HI_RES) }
+        )
+        HiResBadgeOption(
+            badge = HiResBadge.HI_RES_WIRELESS,
+            labelRes = R.string.settings_hi_res_badge_wireless,
+            selected = current == HiResBadge.HI_RES_WIRELESS,
+            customUri = customUri,
+            onClick = { onSelect(HiResBadge.HI_RES_WIRELESS) }
+        )
+        HiResBadgeOption(
+            badge = HiResBadge.GOLD_SEAL,
+            labelRes = R.string.settings_hi_res_badge_gold,
+            selected = current == HiResBadge.GOLD_SEAL,
+            customUri = customUri,
+            onClick = { onSelect(HiResBadge.GOLD_SEAL) }
+        )
+        HiResBadgeOption(
+            badge = HiResBadge.CUSTOM,
+            labelRes = R.string.settings_hi_res_badge_custom,
+            selected = current == HiResBadge.CUSTOM,
+            customUri = customUri,
+            onClick = { onSelect(HiResBadge.CUSTOM) }
+        )
 
-                Row(horizontalArrangement = Arrangement.spacedBy(SonSpacing.small)) {
-                    TextButton(onClick = onPickImage) {
-                        Text(stringResource(R.string.settings_hi_res_badge_pick))
-                    }
-                    if (customUri != null) {
-                        TextButton(onClick = onClearImage) {
-                            Text(stringResource(R.string.settings_hi_res_badge_clear))
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.settings_dialog_done))
+        Row(
+            modifier = Modifier.padding(start = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            AppleTextAction(
+                label = stringResource(R.string.settings_hi_res_badge_pick),
+                onClick = onPickImage
+            )
+            if (customUri != null) {
+                AppleTextAction(
+                    label = stringResource(R.string.settings_hi_res_badge_clear),
+                    onClick = onClearImage,
+                    tint = AppleTheme.colors.systemRed
+                )
             }
         }
-    )
+    }
 }
 
 @Composable
@@ -1046,11 +948,12 @@ private fun HiResBadgeOption(
     customUri: String?,
     onClick: () -> Unit
 ) {
+    val colors = AppleTheme.colors
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(vertical = SonSpacing.mediumSmall),
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
@@ -1062,20 +965,28 @@ private fun HiResBadgeOption(
                     name = SymbolIconName.Close,
                     filled = false,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    tint = colors.tertiaryLabel
                 )
             } else {
                 HiResBadgeOverlay(badge = badge, customUri = customUri)
             }
         }
-        Spacer(modifier = Modifier.width(SonSpacing.medium))
+        Spacer(modifier = Modifier.width(16.dp))
         Text(
             text = stringResource(labelRes),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface,
+            style = AppleType.body,
+            color = colors.label,
             modifier = Modifier.weight(1f)
         )
-        RadioButton(selected = selected, onClick = onClick)
+        if (selected) {
+            M3SymbolIcon(
+                name = SymbolIconName.Check,
+                filled = true,
+                contentDescription = null,
+                tint = colors.key,
+                modifier = Modifier.size(20.dp)
+            )
+        }
     }
 }
 
@@ -1121,35 +1032,35 @@ private fun CacheManagerSheet(
     var showLimitDialog by remember { mutableStateOf(false) }
     val usage = state.usage
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.surfaceContainer
-    ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = SonSpacing.medium)) {
+    AppleSheet(onDismiss = onDismiss) {
+        Column(modifier = Modifier.fillMaxWidth()) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = stringResource(R.string.settings_cache_title),
-                        style = MaterialTheme.typography.titleLarge
+                        style = AppleType.title2Emphasized,
+                        color = AppleTheme.colors.label
                     )
                     Text(
                         text = usage?.let {
                             stringResource(R.string.settings_cache_usage, formatCacheSize(it.diskBytes))
                         } ?: stringResource(R.string.settings_cache_calculating),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        style = AppleType.footnote,
+                        color = AppleTheme.colors.secondaryLabel
                     )
                 }
-                TextButton(
-                    onClick = { pendingClear = CacheClearTarget.All },
-                    enabled = usage != null
-                ) {
-                    Text(stringResource(R.string.settings_cache_clear_all))
+                if (usage != null) {
+                    AppleTextAction(
+                        label = stringResource(R.string.settings_cache_clear_all),
+                        onClick = { pendingClear = CacheClearTarget.All },
+                        tint = AppleTheme.colors.systemRed
+                    )
                 }
             }
 
@@ -1168,11 +1079,11 @@ private fun CacheManagerSheet(
                         name = SymbolIconName.KeyboardArrowRight,
                         filled = true,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        tint = AppleTheme.colors.secondaryLabel
                     )
                 }
             )
-            HorizontalDivider(modifier = Modifier.padding(start = listDividerIndent))
+            AppleSeparator(leadingInset = listDividerIndent)
             CacheRow(
                 label = stringResource(R.string.settings_cache_auto_clean),
                 supporting = stringResource(R.string.settings_cache_auto_clean_desc),
@@ -1188,7 +1099,7 @@ private fun CacheManagerSheet(
             if (usage != null && (usage.diskCaches.isNotEmpty() || usage.lyricsEntries > 0 ||
                     usage.aiInfoEntries > 0)
             ) {
-                HorizontalDivider(modifier = Modifier.padding(start = listDividerIndent))
+                AppleSeparator(leadingInset = listDividerIndent)
                 usage.diskCaches.forEach { cache ->
                     val label = diskCacheLabel(cache.id)
                     CacheRow(
@@ -1196,55 +1107,53 @@ private fun CacheManagerSheet(
                         supporting = formatCacheSize(cache.bytes),
                         onClick = null,
                         trailing = {
-                            IconButton(onClick = {
-                                pendingClear = CacheClearTarget.Disk(cache.id, label)
-                            }) {
-                                M3SymbolIcon(
-                                    name = SymbolIconName.Delete,
-                                    filled = true,
-                                    contentDescription = stringResource(R.string.settings_cache_clear_desc)
-                                )
-                            }
+                            AppleIconButton(
+                                icon = SymbolIconName.Delete,
+                                contentDescription = stringResource(R.string.settings_cache_clear_desc),
+                                onClick = { pendingClear = CacheClearTarget.Disk(cache.id, label) },
+                                tint = AppleTheme.colors.systemRed,
+                                size = 20.dp
+                            )
                         }
                     )
-                    HorizontalDivider(modifier = Modifier.padding(start = listDividerIndent))
+                    AppleSeparator(leadingInset = listDividerIndent)
                 }
                 CacheRow(
                     label = stringResource(R.string.settings_cache_lyrics),
                     supporting = stringResource(R.string.settings_cache_entries, usage.lyricsEntries),
                     onClick = null,
                     trailing = {
-                        IconButton(onClick = { pendingClear = CacheClearTarget.Lyrics }) {
-                            M3SymbolIcon(
-                                name = SymbolIconName.Delete,
-                                filled = true,
-                                contentDescription = stringResource(R.string.settings_cache_clear_desc)
-                            )
-                        }
+                        AppleIconButton(
+                            icon = SymbolIconName.Delete,
+                            contentDescription = stringResource(R.string.settings_cache_clear_desc),
+                            onClick = { pendingClear = CacheClearTarget.Lyrics },
+                            tint = AppleTheme.colors.systemRed,
+                            size = 20.dp
+                        )
                     }
                 )
-                HorizontalDivider(modifier = Modifier.padding(start = listDividerIndent))
+                AppleSeparator(leadingInset = listDividerIndent)
                 CacheRow(
                     label = stringResource(R.string.settings_cache_ai),
                     supporting = stringResource(R.string.settings_cache_entries, usage.aiInfoEntries),
                     onClick = null,
                     trailing = {
-                        IconButton(onClick = { pendingClear = CacheClearTarget.AiInfo }) {
-                            M3SymbolIcon(
-                                name = SymbolIconName.Delete,
-                                filled = true,
-                                contentDescription = stringResource(R.string.settings_cache_clear_desc)
-                            )
-                        }
+                        AppleIconButton(
+                            icon = SymbolIconName.Delete,
+                            contentDescription = stringResource(R.string.settings_cache_clear_desc),
+                            onClick = { pendingClear = CacheClearTarget.AiInfo },
+                            tint = AppleTheme.colors.systemRed,
+                            size = 20.dp
+                        )
                     }
                 )
             }
 
             Text(
                 text = stringResource(R.string.settings_cache_hint),
-                modifier = Modifier.padding(top = SonSpacing.medium),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = SonSpacing.medium),
+                style = AppleType.footnote,
+                color = AppleTheme.colors.secondaryLabel
             )
 
             Spacer(modifier = Modifier.height(SonSpacing.medium))
@@ -1280,55 +1189,42 @@ private val CacheLimitPresetsMb = listOf(128, 256, 512, 1024, 2048)
 
 @Composable
 private fun CacheLimitDialog(currentBytes: Long, onSelect: (Long) -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.settings_cache_limit)) },
-        text = {
-            Column {
-                Text(
-                    text = stringResource(R.string.settings_cache_limit_desc),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(SonSpacing.small))
-                CacheLimitPresetsMb.forEach { mb ->
-                    val bytes = mb.toLong() * 1024 * 1024
-                    val selected = bytes == currentBytes
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(MaterialTheme.shapes.small)
-                            .clickable {
-                                onSelect(bytes)
-                                onDismiss()
-                            }
-                            .padding(vertical = SonSpacing.mediumSmall),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = stringResource(R.string.settings_cache_limit_mb, mb),
-                            style = MaterialTheme.typography.bodyLarge
+    AppleSheet(onDismiss = onDismiss) {
+        AppleSheetTitle(
+            title = stringResource(R.string.settings_cache_limit),
+            subtitle = stringResource(R.string.settings_cache_limit_desc)
+        )
+        CacheLimitPresetsMb.forEach { mb ->
+            val bytes = mb.toLong() * 1024 * 1024
+            AppleSheetRow(
+                title = stringResource(R.string.settings_cache_limit_mb, mb),
+                onClick = {
+                    onSelect(bytes)
+                    onDismiss()
+                },
+                trailing = {
+                    if (bytes == currentBytes) {
+                        M3SymbolIcon(
+                            name = SymbolIconName.Check,
+                            filled = true,
+                            contentDescription = null,
+                            tint = AppleTheme.colors.key,
+                            modifier = Modifier.size(18.dp)
                         )
-                        if (selected) {
-                            M3SymbolIcon(
-                                name = SymbolIconName.Check,
-                                filled = true,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
                     }
                 }
-            }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.settings_cache_cancel))
-            }
+            )
         }
-    )
+        Spacer(modifier = Modifier.height(8.dp))
+        AppleActionButton(
+            label = stringResource(R.string.settings_cache_cancel),
+            onClick = onDismiss,
+            filled = false,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+        )
+    }
 }
 
 @Composable
@@ -1344,23 +1240,17 @@ private fun CacheConfirmDialog(
         CacheClearTarget.AiInfo -> stringResource(R.string.settings_cache_confirm_ai)
         CacheClearTarget.All -> stringResource(R.string.settings_cache_confirm_all)
     }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.settings_cache_confirm_title)) },
-        text = { Text(description) },
-        confirmButton = {
-            TextButton(onClick = {
-                onConfirm()
-                onDismiss()
-            }) {
-                Text(stringResource(R.string.settings_cache_confirm_action))
-            }
+    AppleAlert(
+        title = stringResource(R.string.settings_cache_confirm_title),
+        message = description,
+        confirmLabel = stringResource(R.string.settings_cache_confirm_action),
+        onConfirm = {
+            onConfirm()
+            onDismiss()
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.settings_cache_cancel))
-            }
-        }
+        onDismiss = onDismiss,
+        dismissLabel = stringResource(R.string.settings_cache_cancel),
+        destructive = true
     )
 }
 
@@ -1375,16 +1265,16 @@ private fun CacheRow(
         modifier = Modifier
             .fillMaxWidth()
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(vertical = SonSpacing.small),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = label, style = MaterialTheme.typography.bodyLarge)
+            Text(text = label, style = AppleType.body, color = AppleTheme.colors.label)
             Text(
                 text = supporting,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = AppleType.footnote,
+                color = AppleTheme.colors.secondaryLabel
             )
         }
         trailing()
@@ -1419,47 +1309,27 @@ private fun SleepTimerDialog(
     onCancelTimer: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.settings_sleep_timer)) },
-        text = {
-            Column {
-                presets.forEach { minutes ->
-                    Text(
-                        text = stringResource(R.string.sleep_timer_minutes, minutes),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                onSelect(minutes)
-                                onDismiss()
-                            }
-                            .padding(vertical = SonSpacing.mediumSmall)
-                    )
+    AppleSheet(onDismiss = onDismiss) {
+        AppleSheetTitle(title = stringResource(R.string.settings_sleep_timer))
+        presets.forEach { minutes ->
+            AppleSheetRow(
+                title = stringResource(R.string.sleep_timer_minutes, minutes),
+                onClick = {
+                    onSelect(minutes)
+                    onDismiss()
                 }
-                if (isTimerRunning) {
-                    Text(
-                        text = stringResource(R.string.sleep_timer_cancel),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                onCancelTimer()
-                                onDismiss()
-                            }
-                            .padding(vertical = SonSpacing.mediumSmall)
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.settings_dialog_done))
-            }
+            )
         }
-    )
+        if (isTimerRunning) {
+            AppleSheetRow(
+                title = stringResource(R.string.sleep_timer_cancel),
+                onClick = {
+                    onCancelTimer()
+                    onDismiss()
+                }
+            )
+        }
+    }
 }
 
 /** 向上取整到秒：显示 0:00 却还在响会显得定时器坏了。 */
@@ -1480,33 +1350,29 @@ private fun PlaybackSpeedDialog(
     onSpeedChange: (Float) -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.settings_playback_speed)) },
-        text = {
-            Column {
-                Text(
-                    text = formatSpeed(speed),
-                    style = MaterialTheme.typography.headlineMediumEmphasized,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center
-                )
-                Slider(
-                    value = speed,
-                    onValueChange = onSpeedChange,
-                    valueRange = MIN_PLAYBACK_SPEED..MAX_PLAYBACK_SPEED,
-                    // 0.5..2.0 之间每 0.1 一档，端点之外还有 14 个中间值
-                    steps = 13
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.settings_dialog_done))
-            }
+    AppleAlert(
+        title = stringResource(R.string.settings_playback_speed),
+        confirmLabel = stringResource(R.string.settings_dialog_done),
+        onConfirm = onDismiss,
+        onDismiss = onDismiss
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = formatSpeed(speed),
+                style = AppleType.title2Emphasized,
+                color = AppleTheme.colors.label,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
+            )
+            Slider(
+                value = speed,
+                onValueChange = onSpeedChange,
+                valueRange = MIN_PLAYBACK_SPEED..MAX_PLAYBACK_SPEED,
+                // 0.5..2.0 之间每 0.1 一档，端点之外还有 14 个中间值
+                steps = 13
+            )
         }
-    )
+    }
 }
 
 private fun formatSpeed(speed: Float): String =
@@ -1532,33 +1398,29 @@ private fun AudioFadeDialog(
     onDurationChange: (Long) -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.settings_audio_fade)) },
-        text = {
-            Column {
-                Text(
-                    text = formatFadeDuration(durationMs),
-                    style = MaterialTheme.typography.headlineMediumEmphasized,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center
-                )
-                Slider(
-                    value = durationMs.toFloat(),
-                    onValueChange = { onDurationChange(it.toLong()) },
-                    valueRange = 0f..MAX_AUDIO_FADE_DURATION_MS.toFloat(),
-                    // 每 100ms 一档：0 / 100 / … / 2000，端点之外还有 19 个中间值
-                    steps = (MAX_AUDIO_FADE_DURATION_MS / 100L).toInt() - 1
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.settings_dialog_done))
-            }
+    AppleAlert(
+        title = stringResource(R.string.settings_audio_fade),
+        confirmLabel = stringResource(R.string.settings_dialog_done),
+        onConfirm = onDismiss,
+        onDismiss = onDismiss
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = formatFadeDuration(durationMs),
+                style = AppleType.title2Emphasized,
+                color = AppleTheme.colors.label,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
+            )
+            Slider(
+                value = durationMs.toFloat(),
+                onValueChange = { onDurationChange(it.toLong()) },
+                valueRange = 0f..MAX_AUDIO_FADE_DURATION_MS.toFloat(),
+                // 每 100ms 一档：0 / 100 / … / 2000，端点之外还有 19 个中间值
+                steps = (MAX_AUDIO_FADE_DURATION_MS / 100L).toInt() - 1
+            )
         }
-    )
+    }
 }
 
 /**
@@ -1574,8 +1436,8 @@ private fun LyricsProviderOrder(
 ) {
     Text(
         text = stringResource(R.string.settings_lyrics_provider_order),
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = AppleType.caption1Emphasized,
+        color = AppleTheme.colors.secondaryLabel,
         modifier = Modifier.padding(
             start = SonSizes.listItemHorizontalPadding,
             top = SonSpacing.mediumSmall,
@@ -1610,14 +1472,14 @@ private fun LyricsProviderRow(
     ) {
         Text(
             text = position.toString(),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = AppleType.caption1Emphasized,
+            color = AppleTheme.colors.secondaryLabel,
             modifier = Modifier.width(SonSizes.iconLarge)
         )
         Text(
             text = stringResource(provider.labelRes()),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface,
+            style = AppleType.body,
+            color = AppleTheme.colors.label,
             modifier = Modifier.weight(1f)
         )
         IconButton(
@@ -1696,7 +1558,7 @@ private fun ScanContent(
                 ) {
                     Text(stringResource(R.string.settings_rescan))
                 }
-                Spacer(modifier = Modifier.height(SonLayout.bottomBarClearance))
+                Spacer(modifier = Modifier.height(appleBottomBarClearance()))
             }
         }
         uiState.isScanning -> {
@@ -1749,20 +1611,20 @@ private fun EmptyStateContent(
             filled = false,
             contentDescription = null,
             modifier = Modifier.size(SonSizes.iconExtraLarge),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
+            tint = AppleTheme.colors.secondaryLabel
         )
         Spacer(modifier = Modifier.height(SonSpacing.medium))
         Text(
             text = title,
-            style = MaterialTheme.typography.titleMediumEmphasized,
-            color = MaterialTheme.colorScheme.onSurface
+            style = AppleType.headline,
+            color = AppleTheme.colors.label
         )
         if (subtitle != null) {
             Spacer(modifier = Modifier.height(SonSpacing.small))
             Text(
                 text = subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = AppleType.footnote,
+                color = AppleTheme.colors.secondaryLabel
             )
         }
         Spacer(modifier = Modifier.height(SonSpacing.large))
@@ -1772,7 +1634,7 @@ private fun EmptyStateContent(
 
 @Composable
 private fun ScanResultContent(result: ScanResult) {
-    OutlinedCard(
+    AppleGroupedSection(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = SonLayout.screenMargin)
@@ -1780,8 +1642,8 @@ private fun ScanResultContent(result: ScanResult) {
         Column(modifier = Modifier.padding(SonSpacing.medium)) {
             Text(
                 text = stringResource(R.string.settings_scan_complete),
-                style = MaterialTheme.typography.titleMediumEmphasized,
-                color = MaterialTheme.colorScheme.onSurface
+                style = AppleType.headline,
+                color = AppleTheme.colors.label
             )
             Spacer(modifier = Modifier.height(SonSpacing.mediumSmall))
             ScanStatRow(stringResource(R.string.settings_songs_found), stringResource(R.string.settings_songs_count, result.songsFound))
@@ -1802,13 +1664,13 @@ private fun ScanStatRow(label: String, value: String) {
     ) {
         Text(
             text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            style = AppleType.footnote,
+            color = AppleTheme.colors.secondaryLabel
         )
         Text(
             text = value,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface
+            style = AppleType.footnote,
+            color = AppleTheme.colors.label
         )
     }
 }
@@ -1820,12 +1682,12 @@ private fun ScanningProgressContent(uiState: SettingsUiState, modifier: Modifier
             .fillMaxWidth()
             .padding(SonSpacing.medium)
     ) {
-        OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+        AppleGroupedSection(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(SonSpacing.medium)) {
                 Text(
                     text = stringResource(R.string.settings_scanning),
-                    style = MaterialTheme.typography.titleMediumEmphasized,
-                    color = MaterialTheme.colorScheme.onSurface
+                    style = AppleType.headline,
+                    color = AppleTheme.colors.label
                 )
                 Spacer(modifier = Modifier.height(SonSpacing.medium))
                 LinearWavyProgressIndicator(
@@ -1835,8 +1697,8 @@ private fun ScanningProgressContent(uiState: SettingsUiState, modifier: Modifier
                 Spacer(modifier = Modifier.height(SonSpacing.mediumSmall))
                 Text(
                     text = stringResource(R.string.settings_scan_progress, uiState.songsProcessed, uiState.totalSongs),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    style = AppleType.footnote,
+                    color = AppleTheme.colors.secondaryLabel
                 )
                 Text(
                     text = when (uiState.scanStep) {
@@ -1844,8 +1706,8 @@ private fun ScanningProgressContent(uiState: SettingsUiState, modifier: Modifier
                         SettingsScanStep.SavingToDatabase -> stringResource(R.string.settings_scan_saving)
                         else -> ""
                     },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    style = AppleType.caption1,
+                    color = AppleTheme.colors.secondaryLabel
                 )
             }
         }
@@ -1876,7 +1738,7 @@ private fun ExcludeFoldersContent(
             modifier = modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 top = SonSpacing.small,
-                bottom = SonLayout.bottomBarClearance
+                bottom = appleBottomBarClearance()
             )
         ) {
             items(folders, key = { it.path }) { folder ->
@@ -1894,55 +1756,42 @@ private fun ExcludedFolderItem(
     folder: ExcludedFolder,
     onDelete: () -> Unit
 ) {
-    ListItem(
-        leadingContent = {
-            Box(
-                modifier = Modifier
-                    .size(SonSizes.iconExtraLarge)
-                    .clip(MaterialTheme.shapes.small)
-                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
-                contentAlignment = Alignment.Center
-            ) {
-                M3SymbolIcon(
-                    name = SymbolIconName.Folder,
-                    filled = true,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(SonSizes.iconSmall)
-                )
-            }
-        },
-        headlineContent = {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        M3SymbolIcon(
+            name = SymbolIconName.Folder,
+            filled = true,
+            contentDescription = null,
+            tint = AppleTheme.colors.secondaryLabel,
+            size = 20.dp
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = getFolderDisplayName(folder.path),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface
+                style = AppleType.settingsTitle,
+                color = AppleTheme.colors.label
             )
-        },
-        supportingContent = {
             Text(
                 text = folder.path,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = AppleType.settingsSubtitle,
+                color = AppleTheme.colors.secondaryLabel,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-        },
-        trailingContent = {
-            IconButton(
-                onClick = onDelete,
-                colors = IconButtonDefaults.iconButtonColors(
-                    contentColor = MaterialTheme.colorScheme.error
-                )
-            ) {
-                M3SymbolIcon(
-                    name = SymbolIconName.Delete,
-                    filled = true,
-                    contentDescription = stringResource(R.string.settings_delete_desc)
-                )
-            }
         }
-    )
+        AppleIconButton(
+            icon = SymbolIconName.Delete,
+            contentDescription = stringResource(R.string.settings_delete_desc),
+            onClick = onDelete,
+            tint = AppleTheme.colors.systemRed,
+            size = 20.dp
+        )
+    }
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -1970,89 +1819,88 @@ private fun ApiKeyConfigContent(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(MaterialTheme.shapes.small)
-                    .background(MaterialTheme.colorScheme.secondaryContainer)
-                    .padding(SonSpacing.mediumSmall),
+                    .clip(RoundedCornerShape(AppleDims.cornerS))
+                    .background(AppleTheme.colors.fill)
+                    .padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 M3SymbolIcon(
                     name = SymbolIconName.CheckCircle,
                     filled = true,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                    modifier = Modifier.size(SonSizes.iconSmall)
+                    tint = AppleTheme.colors.key,
+                    size = 18.dp
                 )
-                Spacer(Modifier.width(SonSpacing.small))
+                Spacer(Modifier.width(8.dp))
                 Text(
                     text = stringResource(R.string.settings_api_configured),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                    style = AppleType.footnote,
+                    color = AppleTheme.colors.label
                 )
             }
-            Spacer(modifier = Modifier.height(SonSpacing.medium))
+            Spacer(modifier = Modifier.height(16.dp))
         }
 
         Text(
             text = stringResource(R.string.settings_api_key_title),
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface
+            style = AppleType.sectionTitle,
+            color = AppleTheme.colors.label
         )
 
-        Spacer(modifier = Modifier.height(SonSpacing.small))
+        Spacer(modifier = Modifier.height(6.dp))
 
         Text(
             text = stringResource(R.string.settings_api_key_description),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            style = AppleType.footnote,
+            color = AppleTheme.colors.secondaryLabel
         )
 
         Spacer(modifier = Modifier.height(SonSpacing.large))
 
         key(showApiKey) {
-            OutlinedTextField(
+            AppleTextField(
                 value = apiKeyInput,
                 onValueChange = onApiKeyInputChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text(stringResource(R.string.settings_api_key_label)) },
-                placeholder = { Text(stringResource(R.string.settings_api_key_placeholder)) },
-                visualTransformation = if (showApiKey) VisualTransformation.None else PasswordVisualTransformation(),
-                singleLine = true
-            )
-        }
-
-        Spacer(modifier = Modifier.height(SonSpacing.small))
-
-        TextButton(onClick = { showApiKey = !showApiKey }) {
-            Text(
-                text = if (showApiKey) {
-                    stringResource(R.string.settings_hide_api_key)
+                placeholder = stringResource(R.string.settings_api_key_placeholder),
+                visualTransformation = if (showApiKey) {
+                    VisualTransformation.None
                 } else {
-                    stringResource(R.string.settings_show_api_key)
+                    PasswordVisualTransformation()
                 }
             )
         }
 
+        Spacer(modifier = Modifier.height(8.dp))
+
+        AppleTextAction(
+            label = if (showApiKey) {
+                stringResource(R.string.settings_hide_api_key)
+            } else {
+                stringResource(R.string.settings_show_api_key)
+            },
+            onClick = { showApiKey = !showApiKey }
+        )
+
         Spacer(modifier = Modifier.height(SonSpacing.large))
 
-        Button(
+        AppleActionButton(
+            label = stringResource(R.string.settings_save),
             onClick = onSaveApiKey,
             enabled = apiKeyInput.isNotBlank(),
             modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(stringResource(R.string.settings_save))
-        }
+        )
 
         if (hasExistingKey) {
             Spacer(modifier = Modifier.height(SonSpacing.medium))
-            OutlinedButton(
+            AppleActionButton(
+                label = stringResource(R.string.settings_clear_api_key),
                 onClick = onClearApiKey,
+                filled = false,
                 modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(stringResource(R.string.settings_clear_api_key))
-            }
+            )
         }
 
-        Spacer(modifier = Modifier.height(SonLayout.bottomBarClearance))
+        Spacer(modifier = Modifier.height(appleBottomBarClearance()))
     }
 }
 
@@ -2079,7 +1927,7 @@ private fun LibraryStatsContent(
             ChartSection(stats = stats)
             Spacer(modifier = Modifier.height(SonSpacing.large))
             StatsDetailSection(stats = stats)
-            Spacer(modifier = Modifier.height(SonLayout.bottomBarClearance))
+            Spacer(modifier = Modifier.height(appleBottomBarClearance()))
         }
         else -> EmptyStateContent(
             icon = SymbolIconName.LibraryMusic,
@@ -2093,10 +1941,10 @@ private fun LibraryStatsContent(
 /** 各音质档位对应的图表语义色，全部取自主题角色。 */
 @Composable
 private fun qualityColor(quality: AudioQuality): Color = when (quality) {
-    AudioQuality.HR -> MaterialTheme.colorScheme.primary
-    AudioQuality.SQ -> MaterialTheme.colorScheme.tertiary
-    AudioQuality.HQ -> MaterialTheme.colorScheme.secondary
-    AudioQuality.OTHERS -> MaterialTheme.colorScheme.outline
+    AudioQuality.HR -> AppleTheme.colors.systemRed
+    AudioQuality.SQ -> AppleTheme.colors.key
+    AudioQuality.HQ -> AppleTheme.colors.secondaryLabel
+    AudioQuality.OTHERS -> AppleTheme.colors.tertiaryLabel
 }
 
 @Composable
@@ -2110,7 +1958,7 @@ private fun ChartSection(stats: LibraryStats) {
         PieChartData(stats.othersCount.toFloat(), qualityColor(AudioQuality.OTHERS), "Others")
     ).filter { it.value > 0 }
 
-    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+    AppleGroupedSection(modifier = Modifier.fillMaxWidth()) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
@@ -2119,8 +1967,8 @@ private fun ChartSection(stats: LibraryStats) {
         ) {
             Text(
                 text = stringResource(R.string.settings_audio_quality_title),
-                style = MaterialTheme.typography.titleMediumEmphasized,
-                color = MaterialTheme.colorScheme.onSurface
+                style = AppleType.headline,
+                color = AppleTheme.colors.label
             )
             Spacer(modifier = Modifier.height(SonSpacing.medium))
 
@@ -2134,8 +1982,8 @@ private fun ChartSection(stats: LibraryStats) {
 
             Text(
                 text = stringResource(R.string.settings_stats_total, stats.totalSongs),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = AppleType.footnote,
+                color = AppleTheme.colors.secondaryLabel
             )
 
             if (selectedIndex in pieData.indices) {
@@ -2144,7 +1992,7 @@ private fun ChartSection(stats: LibraryStats) {
                 val percentage = (selected.value / stats.totalSongs.toFloat() * 100).toInt()
                 Text(
                     text = "${selected.label}: ${percentage}%",
-                    style = MaterialTheme.typography.titleSmallEmphasized,
+                    style = AppleType.footnoteEmphasized,
                     color = selected.color
                 )
             }
@@ -2164,16 +2012,16 @@ private fun StatsDetailSection(stats: LibraryStats) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = stringResource(R.string.settings_stats_detail),
-            style = MaterialTheme.typography.titleMediumEmphasized,
-            color = MaterialTheme.colorScheme.onSurface,
+            style = AppleType.headline,
+            color = AppleTheme.colors.label,
             modifier = Modifier.padding(bottom = SonSpacing.mediumSmall)
         )
 
-        OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+        AppleGroupedSection(modifier = Modifier.fillMaxWidth()) {
             items.forEachIndexed { index, item ->
                 StatItemRow(item = item)
                 if (index < items.lastIndex) {
-                    HorizontalDivider(modifier = Modifier.padding(start = listDividerIndent))
+                    AppleSeparator(leadingInset = listDividerIndent)
                 }
             }
         }
@@ -2205,53 +2053,49 @@ private fun StatItemRow(item: QualityStatItemUi) {
         )
     }
 
-    ListItem(
-        leadingContent = {
-            Box(
-                modifier = Modifier
-                    .size(SonSizes.iconExtraLarge)
-                    .clip(MaterialTheme.shapes.small)
-                    .background(item.color.copy(alpha = 0.2f)),
-                contentAlignment = Alignment.Center
-            ) {
-                M3SymbolIcon(
-                    name = icon,
-                    filled = true,
-                    contentDescription = null,
-                    tint = item.color,
-                    modifier = Modifier.size(SonSizes.iconMedium)
-                )
-            }
-        },
-        headlineContent = {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(30.dp)
+                .clip(RoundedCornerShape(AppleDims.cornerS))
+                .background(item.color.copy(alpha = 0.2f)),
+            contentAlignment = Alignment.Center
+        ) {
+            M3SymbolIcon(
+                name = icon,
+                filled = true,
+                contentDescription = null,
+                tint = item.color,
+                size = 18.dp
             )
-        },
-        supportingContent = {
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = title, style = AppleType.settingsTitle, color = AppleTheme.colors.label)
             Text(
                 text = description,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = AppleType.settingsSubtitle,
+                color = AppleTheme.colors.secondaryLabel
             )
-        },
-        trailingContent = {
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    text = stringResource(R.string.settings_quality_count, item.count),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = item.color
-                )
-                Text(
-                    text = "%.1f%%".format(item.percentage),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
         }
-    )
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                text = stringResource(R.string.settings_quality_count, item.count),
+                style = AppleType.footnoteEmphasized,
+                color = item.color
+            )
+            Text(
+                text = "%.1f%%".format(item.percentage),
+                style = AppleType.caption1,
+                color = AppleTheme.colors.secondaryLabel
+            )
+        }
+    }
 }
 
 // ════════════════════════════════════════════════════════════════

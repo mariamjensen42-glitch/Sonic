@@ -45,6 +45,10 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cycling.core.ui.components.M3Artwork
+import com.cycling.core.ui.apple.AppleTheme
+import com.cycling.core.ui.apple.AppleType
+import com.cycling.core.ui.apple.AppleChip
+import com.cycling.core.ui.apple.AppleTopBar
 import com.cycling.core.ui.components.M3SymbolIcon
 import com.cycling.core.ui.components.SymbolIconName
 import com.cycling.core.ui.theme.SonLayout
@@ -93,32 +97,20 @@ fun LeaderboardScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(text = stringResource(R.string.leaderboard_title)) },
-                navigationIcon = {
-                    IconButton(onClick = { viewModel.handleIntent(LeaderboardIntent.NavigateBack) }) {
-                        M3SymbolIcon(
-                            name = SymbolIconName.ArrowBack,
-                            filled = true,
-                            contentDescription = stringResource(R.string.leaderboard_back)
-                        )
-                    }
-                },
+            AppleTopBar(
+                title = stringResource(R.string.leaderboard_title),
+                subtitle = null,
+                onNavigateBack = { viewModel.handleIntent(LeaderboardIntent.NavigateBack) },
+                backContentDescription = stringResource(R.string.leaderboard_back),
                 actions = {
                     IconButton(onClick = { viewModel.handleIntent(LeaderboardIntent.NavigateToStats) }) {
-                        M3SymbolIcon(
-                            name = SymbolIconName.BarChart,
-                            filled = false,
-                            contentDescription = stringResource(R.string.stats_title)
-                        )
+                    M3SymbolIcon(
+                    name = SymbolIconName.BarChart,
+                    filled = false,
+                    contentDescription = stringResource(R.string.stats_title)
+                    )
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                }
             )
         }
     ) { innerPadding ->
@@ -176,13 +168,13 @@ private fun LeaderboardContent(
             ) {
                 Text(
                     text = stringResource(R.string.leaderboard_list_title),
-                    style = MaterialTheme.typography.titleLargeEmphasized,
-                    color = MaterialTheme.colorScheme.onSurface
+                    style = AppleType.title2Emphasized,
+                    color = AppleTheme.colors.label
                 )
                 Text(
                     text = rangeHint(uiState.range),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    style = AppleType.footnote,
+                    color = AppleTheme.colors.secondaryLabel
                 )
             }
         }
@@ -227,19 +219,19 @@ private fun FilterSection(
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(SonSpacing.small)) {
             LeaderboardMetric.entries.forEach { metric ->
-                FilterChip(
+                AppleChip(
+                    label = metricLabel(metric),
                     selected = uiState.metric == metric,
-                    onClick = { onIntent(LeaderboardIntent.SelectMetric(metric)) },
-                    label = { Text(text = metricLabel(metric)) }
+                    onClick = { onIntent(LeaderboardIntent.SelectMetric(metric)) }
                 )
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(SonSpacing.small)) {
             LeaderboardRange.entries.forEach { range ->
-                FilterChip(
+                AppleChip(
+                    label = rangeLabel(range),
                     selected = uiState.range == range,
-                    onClick = { onIntent(LeaderboardIntent.SelectRange(range)) },
-                    label = { Text(text = rangeLabel(range)) }
+                    onClick = { onIntent(LeaderboardIntent.SelectRange(range)) }
                 )
             }
         }
@@ -259,7 +251,7 @@ private fun ListenerProfileCard(profile: ListenerProfile) {
             .fillMaxWidth()
             .padding(horizontal = SonLayout.screenMargin, vertical = SonSpacing.small),
         shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh
+        color = AppleTheme.colors.tertiaryBackground
     ) {
         Column(modifier = Modifier.padding(SonSpacing.medium)) {
             Row(
@@ -268,20 +260,20 @@ private fun ListenerProfileCard(profile: ListenerProfile) {
             ) {
                 Text(
                     text = stringResource(R.string.leaderboard_profile_title),
-                    style = MaterialTheme.typography.titleMediumEmphasized,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    style = AppleType.headline,
+                    color = AppleTheme.colors.label,
                     modifier = Modifier.weight(1f)
                 )
                 Box(
                     modifier = Modifier
                         .clip(MaterialTheme.shapes.small)
-                        .background(MaterialTheme.colorScheme.tertiaryContainer)
+                        .background(AppleTheme.colors.fill)
                         .padding(horizontal = SonSpacing.mediumSmall, vertical = SonSpacing.extraSmall)
                 ) {
                     Text(
                         text = stringResource(R.string.leaderboard_level, profile.level),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                        style = AppleType.caption1Emphasized,
+                        color = AppleTheme.colors.label
                     )
                 }
             }
@@ -300,8 +292,8 @@ private fun ListenerProfileCard(profile: ListenerProfile) {
                         profile.level + 1
                     )
                 } ?: stringResource(R.string.leaderboard_level_max),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = AppleType.caption1,
+                color = AppleTheme.colors.secondaryLabel
             )
 
             Spacer(modifier = Modifier.height(SonSpacing.medium))
@@ -339,15 +331,15 @@ private fun ProfileStat(value: String, caption: String, modifier: Modifier = Mod
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             text = value,
-            style = MaterialTheme.typography.titleMediumEmphasized,
-            color = MaterialTheme.colorScheme.onSurface,
+            style = AppleType.headline,
+            color = AppleTheme.colors.label,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
         Text(
             text = caption,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = AppleType.caption1,
+            color = AppleTheme.colors.secondaryLabel,
             maxLines = 1
         )
     }
@@ -379,11 +371,11 @@ private fun LeaderboardRow(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = rank.toString(),
-                style = MaterialTheme.typography.titleMediumEmphasized,
+                style = AppleType.headline,
                 color = if (rank <= TOP_RANK_COUNT) {
-                    MaterialTheme.colorScheme.tertiary
+                    AppleTheme.colors.key
                 } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
+                    AppleTheme.colors.secondaryLabel
                 },
                 textAlign = TextAlign.Center,
                 modifier = Modifier.width(RankWidth)
@@ -398,15 +390,15 @@ private fun LeaderboardRow(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = song.title,
-                    style = MaterialTheme.typography.titleMediumEmphasized,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    style = AppleType.headline,
+                    color = AppleTheme.colors.label,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = song.artist,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = AppleType.footnote,
+                    color = AppleTheme.colors.secondaryLabel,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -415,14 +407,14 @@ private fun LeaderboardRow(
             Column(horizontalAlignment = Alignment.End) {
                 Text(
                     text = metricValue(song, metric),
-                    style = MaterialTheme.typography.titleMediumEmphasized,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    style = AppleType.headline,
+                    color = AppleTheme.colors.label,
                     maxLines = 1
                 )
                 Text(
                     text = stringResource(R.string.leaderboard_plays_count, song.playCount),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = AppleType.caption1,
+                    color = AppleTheme.colors.secondaryLabel,
                     maxLines = 1
                 )
             }

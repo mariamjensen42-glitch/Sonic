@@ -1,6 +1,7 @@
 package com.cycling.presentation.artistdetail
 
 import androidx.lifecycle.viewModelScope
+import com.cycling.domain.repository.AlbumRepository
 import com.cycling.domain.repository.ArtistRepository
 import com.cycling.domain.repository.PlaylistRepository
 import com.cycling.domain.repository.PlayerRepository
@@ -21,6 +22,7 @@ import kotlin.coroutines.cancellation.CancellationException
 @HiltViewModel(assistedFactory = ArtistDetailViewModel.Factory::class)
 class ArtistDetailViewModel @AssistedInject constructor(
     private val artistRepository: ArtistRepository,
+    private val albumRepository: AlbumRepository,
     private val songRepository: SongRepository,
     playlistRepository: PlaylistRepository,
     playerRepository: PlayerRepository,
@@ -46,6 +48,13 @@ class ArtistDetailViewModel @AssistedInject constructor(
                 val artist = artistRepository.getArtistById(artistId)
                 _uiState.update {
                     it.copy(title = artist?.name, artwork = artist?.artistArt)
+                }
+
+                // 歌手页页尾的「专辑」横滑：这条查询独立于曲目表，失败不应拖垮整页。
+                launch {
+                    albumRepository.getAlbumsByArtist(artistId).collect { albums ->
+                        _uiState.update { it.copy(albums = albums) }
+                    }
                 }
 
                 songRepository.getSongsByArtist(artistId).collect { songs ->

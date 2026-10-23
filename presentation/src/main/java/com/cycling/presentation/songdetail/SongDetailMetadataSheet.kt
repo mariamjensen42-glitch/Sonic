@@ -1,37 +1,38 @@
-@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@file:OptIn(ExperimentalMaterial3ExpressiveApi::class)
 
 package com.cycling.presentation.songdetail
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.LoadingIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.cycling.core.ui.apple.AppleDims
+import com.cycling.core.ui.apple.AppleSheet
+import com.cycling.core.ui.apple.AppleSheetRow
+import com.cycling.core.ui.apple.AppleSheetTitle
+import com.cycling.core.ui.apple.AppleTheme
+import com.cycling.core.ui.apple.AppleType
 import com.cycling.core.ui.components.M3Artwork
 import com.cycling.core.ui.components.M3SymbolIcon
 import com.cycling.core.ui.components.SymbolIconName
-import com.cycling.core.ui.theme.SonSizes
-import com.cycling.core.ui.theme.SonSpacing
 import com.cycling.domain.model.CoverCandidate
 import com.cycling.presentation.R
 
@@ -52,91 +53,89 @@ internal fun MetadataCandidatesSheet(
     onRetry: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = SonSpacing.large)
-        ) {
-            Text(
-                text = stringResource(R.string.song_detail_metadata_online_title),
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(horizontal = SonSpacing.large, vertical = SonSpacing.small)
-            )
-            Text(
-                text = stringResource(R.string.song_detail_metadata_online_hint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = SonSpacing.large)
-            )
+    AppleSheet(onDismiss = onDismiss) {
+        AppleSheetTitle(
+            title = stringResource(R.string.song_detail_metadata_online_title),
+            subtitle = stringResource(R.string.song_detail_metadata_online_hint)
+        )
 
-            Row(
-                modifier = Modifier.padding(horizontal = SonSpacing.small),
-                verticalAlignment = Alignment.CenterVertically
+        Row(modifier = Modifier.padding(horizontal = 8.dp)) {
+            SheetSearchAction(
+                label = stringResource(R.string.song_detail_cover_search),
+                onClick = onRetry
+            )
+        }
+
+        when {
+            isLoading -> Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                TextButton(onClick = onRetry) {
-                    M3SymbolIcon(
-                        name = SymbolIconName.Refresh,
-                        filled = true,
-                        contentDescription = null,
-                        modifier = Modifier.size(SonSizes.buttonIcon)
-                    )
-                    Spacer(Modifier.width(SonSpacing.extraSmall))
-                    Text(text = stringResource(R.string.song_detail_cover_search))
-                }
+                LoadingIndicator()
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = stringResource(R.string.song_detail_metadata_online_searching),
+                    style = AppleType.footnote,
+                    color = AppleTheme.colors.secondaryLabel
+                )
             }
 
-            when {
-                isLoading -> Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = SonSpacing.extraLarge),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    LoadingIndicator()
-                    Spacer(Modifier.height(SonSpacing.small))
-                    Text(
-                        text = stringResource(R.string.song_detail_metadata_online_searching),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+            candidates.isEmpty() -> Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = stringResource(R.string.song_detail_metadata_online_empty),
+                    style = AppleType.body,
+                    color = AppleTheme.colors.secondaryLabel,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.song_detail_metadata_online_empty_hint),
+                    style = AppleType.footnote,
+                    color = AppleTheme.colors.secondaryLabel,
+                    textAlign = TextAlign.Center
+                )
+            }
 
-                candidates.isEmpty() -> Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(SonSpacing.large),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = stringResource(R.string.song_detail_metadata_online_empty),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
+            else -> LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 460.dp)
+            ) {
+                items(candidates, key = { it.id }) { candidate ->
+                    MetadataCandidateItem(
+                        candidate = candidate,
+                        onClick = { onSelect(candidate.id) }
                     )
-                    Spacer(Modifier.height(SonSpacing.extraSmall))
-                    Text(
-                        text = stringResource(R.string.song_detail_metadata_online_empty_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
-                    )
-                }
-
-                else -> LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                    items(candidates, key = { it.id }) { candidate ->
-                        MetadataCandidateItem(
-                            candidate = candidate,
-                            onClick = { onSelect(candidate.id) }
-                        )
-                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SheetSearchAction(label: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        M3SymbolIcon(
+            name = SymbolIconName.Refresh,
+            contentDescription = null,
+            filled = true,
+            tint = AppleTheme.colors.key,
+            modifier = Modifier.size(18.dp)
+        )
+        Spacer(modifier = Modifier.size(4.dp))
+        Text(text = label, style = AppleType.body, color = AppleTheme.colors.key)
     }
 }
 
@@ -145,43 +144,36 @@ private fun MetadataCandidateItem(
     candidate: CoverCandidate,
     onClick: () -> Unit
 ) {
-    ListItem(
-        leadingContent = {
+    AppleSheetRow(
+        title = candidate.title ?: candidate.album.orEmpty(),
+        subtitle = buildString {
+            val artistAlbum = listOfNotNull(candidate.artist, candidate.album)
+                .joinToString(" · ")
+            if (artistAlbum.isNotEmpty()) append(artistAlbum)
+            val facts = candidateFacts(candidate)
+            if (facts.isNotEmpty()) {
+                if (isNotEmpty()) append(" · ")
+                append(facts)
+            }
+        },
+        onClick = onClick,
+        leading = {
             M3Artwork(
                 artwork = candidate.imageUrl,
                 placeholderIcon = SymbolIconName.Album,
-                shape = MaterialTheme.shapes.small,
-                modifier = Modifier.size(SonSizes.thumbnailLarge)
+                shape = RoundedCornerShape(AppleDims.cornerS),
+                modifier = Modifier.size(48.dp)
             )
         },
-        // 可点击的 ListItem 里，主内容槽叫 content。
-        content = {
-            Text(
-                text = candidate.title ?: candidate.album.orEmpty(),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        },
-        supportingContent = {
-            Column {
-                val artistAlbum = listOfNotNull(candidate.artist, candidate.album)
-                    .joinToString(" · ")
-                if (artistAlbum.isNotEmpty()) {
-                    Text(text = artistAlbum, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-                Text(text = candidateFacts(candidate), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-        },
-        trailingContent = {
+        trailing = {
             if (candidate.isBestMatch) {
                 Text(
                     text = stringResource(R.string.song_detail_cover_best_match),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary
+                    style = AppleType.caption1Emphasized,
+                    color = AppleTheme.colors.key
                 )
             }
-        },
-        onClick = onClick
+        }
     )
 }
 

@@ -37,8 +37,8 @@ object SonLayout {
     /** 列表底部额外留白，避免被底部导航与迷你播放器遮挡。 */
     val bottomBarClearance = 96.dp
 
-    /** 迷你播放器存在时的额外底部留白。 */
-    val miniPlayerClearance = 64.dp
+    /** 迷你播放器存在时的额外底部留白（48dp 胶囊 + 8dp 间隙）。 */
+    val miniPlayerClearance = 56.dp
 
     /** 网格间距（专辑/歌手卡片）。 */
     val gridGap = 12.dp

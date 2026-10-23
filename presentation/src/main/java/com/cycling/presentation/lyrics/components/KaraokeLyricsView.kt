@@ -95,6 +95,8 @@ fun KaraokeLyricsView(
     /** 行文本在可用宽度内居中；关掉就是按语言方向靠起始侧。 */
     alignCenter: Boolean = false,
     offset: Dp = SonSpacing.extraLarge,
+    /** 非当前行整行的不透明度。当前行恒为 1，伴奏行按它的 0.6 倍。 */
+    inactiveLineAlpha: Float = 0.5f,
 ) {
     val density = LocalDensity.current
     val extended = LocalSonExtendedColors.current
@@ -381,7 +383,9 @@ fun KaraokeLyricsView(
 
                     val blurRadiusState = animateFloatAsState(
                         targetValue = if (distanceWeightState.value > 0 && (!listState.isScrollInProgress || scrollInCode.value)) {
-                            distanceWeightState.value * 4f
+                            // 每行距离的系数：4f 会把远处的词糊成一团雾（离当前行 10 行就是 40px），
+                            // 1.2f 只做轻微离焦，靠 alpha 区分层级才是歌词该有的读法。
+                            distanceWeightState.value * 1.2f
                         } else {
                             0f
                         },
@@ -415,7 +419,7 @@ fun KaraokeLyricsView(
                                     onLinePressed = { onLinePressed(line) },
                                     blurRadius = { blurRadiusState.value },
                                     activeAlpha = lineAlpha,
-                                    inactiveAlpha = 0.5f,
+                                    inactiveAlpha = inactiveLineAlpha,
                                 ) {
                                     KaraokeLineText(
                                         line = line,
@@ -476,7 +480,7 @@ fun KaraokeLyricsView(
                                         onLinePressed = { onLinePressed(line) },
                                         blurRadius = { blurRadiusState.value },
                                         activeAlpha = 0.6f,
-                                        inactiveAlpha = 0.3f
+                                        inactiveAlpha = inactiveLineAlpha * 0.6f
                                     ) {
                                         KaraokeLineText(
                                             line = line,
@@ -503,7 +507,7 @@ fun KaraokeLyricsView(
                                 onLinePressed = { onLinePressed(line) },
                                 blurRadius = { blurRadiusState.value },
                                 activeAlpha = lineAlpha,
-                                inactiveAlpha = 0.5f,
+                                inactiveAlpha = inactiveLineAlpha,
                             ) {
                                 SyncedLineText(
                                     line = line,

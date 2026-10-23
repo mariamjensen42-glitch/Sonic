@@ -13,12 +13,15 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -73,9 +76,28 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.cycling.core.ui.apple.appleBottomBarClearance
+import com.cycling.core.ui.apple.AppleActionButton
+import com.cycling.core.ui.apple.AppleAlert
+import com.cycling.core.ui.apple.AppleChip
+import com.cycling.core.ui.apple.AppleDims
+import com.cycling.core.ui.apple.AppleIconButton
+import com.cycling.core.ui.apple.AppleLargeListRow
+import com.cycling.core.ui.apple.AppleLargeTitle
+import com.cycling.core.ui.apple.AppleMenuRow
+import com.cycling.core.ui.apple.AppleSectionHeader
+import com.cycling.core.ui.apple.AppleSheet
+import com.cycling.core.ui.apple.AppleSheetRow
+import com.cycling.core.ui.apple.AppleSheetTitle
+import com.cycling.core.ui.apple.AppleTextField
+import com.cycling.core.ui.apple.AppleSeparator
+import com.cycling.core.ui.apple.AppleSongRow
+import com.cycling.core.ui.apple.AppleTheme
+import com.cycling.core.ui.apple.AppleType
 import com.cycling.core.ui.components.M3SymbolIcon
 import com.cycling.core.ui.components.SymbolIconName
 import com.cycling.core.ui.components.M3Artwork
@@ -123,8 +145,6 @@ fun MyMusicScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showCreateDialog by remember { mutableStateOf(false) }
-    // 音乐库是工具型页面：标题时刻只由 large flexible 顶栏承担，内容区保持安静。
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
     // 收藏列表有自己的顶栏，是盖住整个 tab 的一页：底栏在这一页让位。
     // onDispose 里必须放回来 —— 页面被移出组合时若还留着 true，底栏就再也回不来了。
@@ -180,49 +200,27 @@ fun MyMusicScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface)
+            .background(AppleTheme.colors.background)
+            // 收藏子页有自己的 Material Scaffold/TopAppBar，会自己吃 inset；
+            // 只有歌单列表（自绘大标题）需要在这里补状态栏间距。
+            .then(if (uiState.showFavoriteSongs) Modifier else Modifier.statusBarsPadding())
     ) {
         if (!uiState.showFavoriteSongs) {
-            // 标题时刻：display 级「音乐库」+ 一行歌单数量；搜索与新建降为 actions。
-            LargeFlexibleTopAppBar(
-                title = {
-                    Text(
-                        text = stringResource(R.string.mymusic_title_library),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                },
-                subtitle = {
-                    Text(
-                        text = stringResource(R.string.mymusic_subtitle_library, uiState.playlists.size),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                },
+            AppleLargeTitle(
+                title = stringResource(R.string.mymusic_title_library),
+                subtitle = stringResource(R.string.mymusic_subtitle_library, uiState.playlists.size),
                 actions = {
-                    IconButton(onClick = onNavigateToSearch) {
-                        M3SymbolIcon(
-                            name = SymbolIconName.Search,
-                            filled = true,
-                            contentDescription = stringResource(R.string.mymusic_search_desc)
-                        )
-                    }
-                    IconButton(onClick = { showCreateDialog = true }) {
-                        M3SymbolIcon(
-                            name = SymbolIconName.Add,
-                            filled = true,
-                            contentDescription = stringResource(R.string.mymusic_create_playlist_desc)
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    scrolledContainerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface,
-                    subtitleContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                ),
-                scrollBehavior = scrollBehavior
+                    AppleIconButton(
+                        icon = SymbolIconName.Search,
+                        contentDescription = stringResource(R.string.mymusic_search_desc),
+                        onClick = onNavigateToSearch
+                    )
+                    AppleIconButton(
+                        icon = SymbolIconName.Add,
+                        contentDescription = stringResource(R.string.mymusic_create_playlist_desc),
+                        onClick = { showCreateDialog = true }
+                    )
+                }
             )
         }
 
@@ -255,7 +253,7 @@ fun MyMusicScreen(
                 onRename = { viewModel.handleIntent(MyMusicIntent.ShowRenameDialog(it)) },
                 onDelete = { viewModel.handleIntent(MyMusicIntent.DeletePlaylist(it)) },
                 bottomPadding = bottomPadding,
-                contentModifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection)
+                contentModifier = Modifier
             )
         }
     }
@@ -322,7 +320,7 @@ private fun FavoritesContent(
 
                 val extended = LocalSonExtendedColors.current
                 Scaffold(
-                    containerColor = MaterialTheme.colorScheme.surface,
+                    containerColor = AppleTheme.colors.background,
                     contentWindowInsets = WindowInsets(0, 0, 0, 0),
                     topBar = {
                         CenterAlignedTopAppBar(
@@ -333,7 +331,7 @@ private fun FavoritesContent(
                                         M3Artwork(
                                             artwork = songs.firstOrNull()?.albumArt,
                                             placeholderIcon = SymbolIconName.Favorite,
-                                            shape = MaterialTheme.shapes.small,
+                                            shape = RoundedCornerShape(AppleDims.cornerS),
                                             modifier = Modifier
                                                 .size(SonSizes.appBarArtwork)
                                                 .graphicsLayer { alpha = titleAlpha }
@@ -341,7 +339,7 @@ private fun FavoritesContent(
                                         Spacer(Modifier.size(SonSpacing.small))
                                         Text(
                                             text = stringResource(R.string.mymusic_title_favorites),
-                                            style = MaterialTheme.typography.titleMediumEmphasized,
+                                            style = AppleType.headline,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
                                             modifier = Modifier.graphicsLayer { alpha = titleAlpha }
@@ -369,18 +367,18 @@ private fun FavoritesContent(
                             colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                                 containerColor = lerp(
                                     Color.Transparent,
-                                    MaterialTheme.colorScheme.surface,
+                                    AppleTheme.colors.background,
                                     (collapse.value * 1.6f).coerceIn(0f, 1f)
                                 ),
-                                scrolledContainerColor = MaterialTheme.colorScheme.surface,
+                                scrolledContainerColor = AppleTheme.colors.background,
                                 navigationIconContentColor = lerp(
                                     extended.onArtwork,
-                                    MaterialTheme.colorScheme.onSurface,
+                                    AppleTheme.colors.label,
                                     collapse.value
                                 ),
                                 titleContentColor = lerp(
                                     extended.onArtwork,
-                                    MaterialTheme.colorScheme.onSurface,
+                                    AppleTheme.colors.label,
                                     collapse.value
                                 )
                             )
@@ -391,7 +389,7 @@ private fun FavoritesContent(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(
-                            bottom = SonLayout.bottomBarClearance + bottomPadding
+                            bottom = appleBottomBarClearance() + bottomPadding
                         )
                     ) {
                         item(key = "favorites-hero") {
@@ -450,7 +448,7 @@ private fun FavoritesContent(
                                     IconButton(
                                         onClick = { onToggleFavorite(song) },
                                         colors = IconButtonDefaults.iconButtonColors(
-                                            contentColor = MaterialTheme.colorScheme.primary
+                                            contentColor = AppleTheme.colors.key
                                         )
                                     ) {
                                         M3SymbolIcon(
@@ -485,7 +483,7 @@ private fun FavoritesStandaloneScaffold(
 ) {
     Scaffold(
         modifier = Modifier.fillMaxSize(),
-        containerColor = MaterialTheme.colorScheme.surface,
+        containerColor = AppleTheme.colors.background,
         // 与收藏页内容态同一套：状态栏交给顶栏，内容从顶栏下沿开始。
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
@@ -507,9 +505,9 @@ private fun FavoritesStandaloneScaffold(
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface
+                    containerColor = AppleTheme.colors.background,
+                    titleContentColor = AppleTheme.colors.label,
+                    navigationIconContentColor = AppleTheme.colors.label
                 )
             )
         }
@@ -535,34 +533,19 @@ private fun SongList(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
             top = SonLayout.contentTopPadding,
-            bottom = SonLayout.bottomBarClearance + bottomPadding
+            bottom = appleBottomBarClearance() + bottomPadding
         )
     ) {
         items(songs, key = { it.id }) { song ->
             val trailingSlot: (@Composable () -> Unit)? = trailingContent?.let { content ->
                 { content(song) }
             }
-            ListItem(
+            AppleSongRow(
+                artwork = song.albumArt,
+                title = song.title,
+                subtitle = song.artist,
                 onClick = { onSongClick(song) },
-                content = {
-                    Text(
-                        text = song.title,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                },
-                supportingContent = {
-                    Text(
-                        text = song.artist,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                },
-                trailingContent = trailingSlot
+                trailing = trailingSlot
             )
         }
     }
@@ -586,34 +569,56 @@ private fun PlaylistsContent(
     bottomPadding: Dp,
     contentModifier: Modifier = Modifier
 ) {
-    when {
-        isLoading -> SonLoadingState()
-        playlists.isEmpty() -> LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .then(contentModifier),
-            contentPadding = PaddingValues(
-                bottom = SonLayout.bottomBarClearance + bottomPadding
-            )
-        ) {
-            item { AllSongsItem(onClick = onAllSongsClick) }
-            item { FavoriteSongsItem(onClick = onFavoriteSongsClick) }
-            item { ListeningSection(onStatsClick = onStatsClick, onLeaderboardClick = onLeaderboardClick) }
-            item { SonSectionHeader(title = stringResource(R.string.mymusic_section_playlists)) }
-            item { EmptyPlaylistsHint() }
+    if (isLoading) {
+        Box(modifier = Modifier.fillMaxSize())
+        return
+    }
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .then(contentModifier),
+        contentPadding = PaddingValues(
+            // 悬浮胶囊不吃布局高度，导航栏 inset 要自己让出来
+            bottom = appleBottomBarClearance() + bottomPadding
+        )
+    ) {
+        // ── 固定入口：Apple 资料库的图标菜单行 ──
+        item {
+            Column {
+                AppleMenuRow(
+                    icon = SymbolIconName.MusicNote,
+                    label = stringResource(R.string.mymusic_all_songs_label),
+                    onClick = onAllSongsClick
+                )
+                AppleSeparator(leadingInset = 58.dp)
+                AppleMenuRow(
+                    icon = SymbolIconName.Favorite,
+                    label = stringResource(R.string.mymusic_favorites_label),
+                    onClick = onFavoriteSongsClick
+                )
+                AppleSeparator(leadingInset = 58.dp)
+                AppleMenuRow(
+                    icon = SymbolIconName.BarChart,
+                    label = stringResource(R.string.mymusic_stats_label),
+                    onClick = onStatsClick
+                )
+                AppleSeparator(leadingInset = 58.dp)
+                AppleMenuRow(
+                    icon = SymbolIconName.GraphicEq,
+                    label = stringResource(R.string.mymusic_leaderboard_label),
+                    onClick = onLeaderboardClick
+                )
+                AppleSeparator(leadingInset = 58.dp)
+            }
         }
-        else -> LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .then(contentModifier),
-            contentPadding = PaddingValues(
-                bottom = SonLayout.bottomBarClearance + bottomPadding
-            )
-        ) {
-            item { AllSongsItem(onClick = onAllSongsClick) }
-            item { FavoriteSongsItem(onClick = onFavoriteSongsClick) }
-            item { ListeningSection(onStatsClick = onStatsClick, onLeaderboardClick = onLeaderboardClick) }
-            item { SonSectionHeader(title = stringResource(R.string.mymusic_section_playlists)) }
+
+        item {
+            AppleSectionHeader(title = stringResource(R.string.mymusic_section_playlists))
+        }
+
+        if (playlists.isEmpty()) {
+            item { EmptyPlaylistsHint() }
+        } else {
             items(playlists, key = { it.id }) { playlist ->
                 PlaylistItem(
                     playlist = playlist,
@@ -626,139 +631,35 @@ private fun PlaylistsContent(
     }
 }
 
-/**
- * 听歌足迹的两个入口。
- *
- * 和「全部歌曲 / 我喜欢」并排放在音乐库顶部，而不是塞进设置页：统计是"我的音乐"的一部分，
- * 用户是在看自己的收藏和歌单时顺手想到"我到底听了多少"。
- */
-@Composable
-private fun ListeningSection(
-    onStatsClick: () -> Unit,
-    onLeaderboardClick: () -> Unit
-) {
-    Column {
-        SonSectionHeader(title = stringResource(R.string.mymusic_section_listening))
-        LibraryShortcutItem(
-            icon = SymbolIconName.BarChart,
-            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-            title = stringResource(R.string.mymusic_stats_label),
-            subtitle = stringResource(R.string.mymusic_stats_subtitle),
-            onClick = onStatsClick
-        )
-        LibraryShortcutItem(
-            icon = SymbolIconName.GraphicEq,
-            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-            title = stringResource(R.string.mymusic_leaderboard_label),
-            subtitle = stringResource(R.string.mymusic_leaderboard_subtitle),
-            onClick = onLeaderboardClick
-        )
-    }
-}
-
-/** 全部歌曲：本地曲库的完整列表，点进去是 SongsScreen（排序 / 多选 / 播放全部都在那儿）。 */
-@Composable
-private fun AllSongsItem(onClick: () -> Unit) {
-    LibraryShortcutItem(
-        icon = SymbolIconName.MusicNote,
-        containerColor = MaterialTheme.colorScheme.primaryContainer,
-        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        title = stringResource(R.string.mymusic_all_songs_label),
-        subtitle = stringResource(R.string.mymusic_all_songs_subtitle),
-        onClick = onClick
-    )
-}
-
-@Composable
-private fun FavoriteSongsItem(onClick: () -> Unit) {
-    LibraryShortcutItem(
-        icon = SymbolIconName.Favorite,
-        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-        title = stringResource(R.string.mymusic_favorites_label),
-        subtitle = stringResource(R.string.mymusic_favorites_subtitle),
-        onClick = onClick
-    )
-}
-
-/**
- * 音乐库里的固定入口行：图标放在同尺寸的圆角容器里，保证两个入口的左侧节奏完全一致。
- */
-@Composable
-private fun LibraryShortcutItem(
-    icon: SymbolIconName,
-    containerColor: Color,
-    contentColor: Color,
-    title: String,
-    subtitle: String,
-    onClick: () -> Unit
-) {
-    ListItem(
-        onClick = onClick,
-        leadingContent = {
-            Box(
-                modifier = Modifier
-                    .size(SonSizes.thumbnail)
-                    .clip(MaterialTheme.shapes.small)
-                    .background(containerColor),
-                contentAlignment = Alignment.Center
-            ) {
-                M3SymbolIcon(
-                    name = icon,
-                    filled = true,
-                    contentDescription = null,
-                    modifier = Modifier.size(SonSizes.iconMedium),
-                    tint = contentColor
-                )
-            }
-        },
-        content = {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMediumEmphasized,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1
-            )
-        },
-        supportingContent = {
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    )
-}
 
 @Composable
 private fun EmptyPlaylistsHint() {
+    val colors = AppleTheme.colors
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(SonSpacing.large),
+            .padding(AppleDims.padding * 2),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(Modifier.height(SonSpacing.extraLarge))
+        Spacer(Modifier.height(AppleDims.topMargin))
         M3SymbolIcon(
             name = SymbolIconName.QueueMusic,
             filled = false,
             contentDescription = null,
-            modifier = Modifier.size(SonSizes.iconExtraLarge),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
+            modifier = Modifier.size(48.dp),
+            tint = colors.tertiaryLabel
         )
-        Spacer(Modifier.height(SonSpacing.medium))
+        Spacer(Modifier.height(12.dp))
         Text(
             text = stringResource(R.string.mymusic_empty_playlists),
-            style = MaterialTheme.typography.titleMediumEmphasized,
-            color = MaterialTheme.colorScheme.onSurface
+            style = AppleType.body,
+            color = colors.secondaryLabel
         )
-        Spacer(Modifier.height(SonSpacing.small))
+        Spacer(Modifier.height(4.dp))
         Text(
             text = stringResource(R.string.mymusic_empty_playlists_subtitle),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            style = AppleType.footnote,
+            color = colors.tertiaryLabel
         )
     }
 }
@@ -771,40 +672,20 @@ private fun PlaylistItem(
     onDelete: () -> Unit
 ) {
     var showMenu by remember { mutableStateOf(false) }
-    ListItem(
+    AppleLargeListRow(
+        artwork = playlist.albumArt,
+        title = playlist.name,
+        subtitle = stringResource(R.string.mymusic_song_count, playlist.numberOfSongs),
         onClick = onClick,
-        leadingContent = {
-            M3Artwork(
-                artwork = playlist.albumArt,
-                placeholderIcon = SymbolIconName.QueueMusic,
-                shape = MaterialTheme.shapes.small,
-                modifier = Modifier.size(SonSizes.thumbnail)
-            )
-        },
-        content = {
-            Text(
-                text = playlist.name,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1
-            )
-        },
-        supportingContent = {
-            Text(
-                text = stringResource(R.string.mymusic_song_count, playlist.numberOfSongs),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        },
-        trailingContent = {
+        trailing = {
             Box {
-                IconButton(onClick = { showMenu = true }) {
-                    M3SymbolIcon(
-                        name = SymbolIconName.MoreVert,
-                        filled = true,
-                        contentDescription = stringResource(R.string.mymusic_more_desc)
-                    )
-                }
+                AppleIconButton(
+                    icon = SymbolIconName.MoreVert,
+                    contentDescription = stringResource(R.string.mymusic_more_desc),
+                    onClick = { showMenu = true },
+                    tint = AppleTheme.colors.secondaryLabel,
+                    size = 20.dp
+                )
                 DropdownMenuPopup(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                     MenuItemGroup(
                         items = listOf(
@@ -846,34 +727,30 @@ private fun CreatePlaylistDialog(
     var manualName by remember { mutableStateOf("") }
     var aiMode by remember { mutableStateOf(AiMode.RANDOM) }
     var sliderValue by remember { mutableFloatStateOf(uiState.selectedSongCount.toFloat()) }
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-    ) {
+    AppleSheet(onDismiss = onDismiss) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .imePadding()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = SonSpacing.large)
+                .padding(horizontal = 16.dp)
                 .padding(bottom = SonSpacing.extraLarge)
         ) {
             val createModeOptions = listOf(
                 stringResource(R.string.mymusic_create_manual),
                 stringResource(R.string.mymusic_create_ai)
             )
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 createModeOptions.forEachIndexed { index, label ->
-                    SegmentedButton(
+                    AppleChip(
+                        label = label,
                         selected = (if (createMode == CreateMode.MANUAL) 0 else 1) == index,
                         onClick = {
                             createMode = if (index == 0) CreateMode.MANUAL else CreateMode.AI
-                        },
-                        shape = SegmentedButtonDefaults.itemShape(index = index, count = createModeOptions.size),
-                        label = { Text(label) }
+                        }
                     )
                 }
             }
@@ -883,20 +760,19 @@ private fun CreatePlaylistDialog(
                 CreateMode.MANUAL -> {
                     Text(
                         text = stringResource(R.string.mymusic_new_playlist_dialog_title),
-                        style = MaterialTheme.typography.titleMediumEmphasized,
-                        color = MaterialTheme.colorScheme.onSurface
+                        style = AppleType.headline,
+                        color = AppleTheme.colors.label
                     )
                     Spacer(Modifier.height(SonSpacing.medium))
-                    OutlinedTextField(
+                    AppleTextField(
                         value = manualName,
                         onValueChange = { manualName = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text(stringResource(R.string.mymusic_new_playlist_placeholder)) },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences)
+                        placeholder = stringResource(R.string.mymusic_new_playlist_placeholder),
+                        modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(Modifier.height(SonSpacing.large))
-                    Button(
+                    AppleActionButton(
+                        label = stringResource(R.string.mymusic_create),
                         onClick = {
                             if (manualName.isNotBlank()) {
                                 onManualCreate(manualName.trim())
@@ -904,11 +780,14 @@ private fun CreatePlaylistDialog(
                         },
                         enabled = manualName.isNotBlank(),
                         modifier = Modifier.fillMaxWidth()
-                    ) { Text(stringResource(R.string.mymusic_create)) }
+                    )
                     Spacer(Modifier.height(SonSpacing.small))
-                    TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
-                        Text(stringResource(R.string.mymusic_cancel))
-                    }
+                    AppleActionButton(
+                        label = stringResource(R.string.mymusic_cancel),
+                        onClick = onDismiss,
+                        filled = false,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
 
                 CreateMode.AI -> {
@@ -920,23 +799,27 @@ private fun CreatePlaylistDialog(
 
                     Text(
                         text = stringResource(R.string.mymusic_ai_dialog_title),
-                        style = MaterialTheme.typography.titleMediumEmphasized,
-                        color = MaterialTheme.colorScheme.onSurface
+                        style = AppleType.headline,
+                        color = AppleTheme.colors.label
                     )
                     Spacer(Modifier.height(SonSpacing.medium))
                     Text(
                         text = stringResource(R.string.mymusic_ai_dialog_subtitle),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        style = AppleType.footnote,
+                        color = AppleTheme.colors.secondaryLabel
                     )
                     Spacer(Modifier.height(SonSpacing.mediumSmall))
                     val aiModeOptions = listOf(
                         stringResource(R.string.mymusic_ai_random),
                         stringResource(R.string.mymusic_ai_theme)
                     )
-                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         aiModeOptions.forEachIndexed { index, label ->
-                            SegmentedButton(
+                            AppleChip(
+                                label = label,
                                 selected = (if (aiMode == AiMode.RANDOM) 0 else 1) == index,
                                 onClick = {
                                     aiMode = if (index == 0) AiMode.RANDOM else AiMode.THEME
@@ -945,9 +828,7 @@ private fun CreatePlaylistDialog(
                                             if (aiMode == AiMode.RANDOM) AiCreateMode.RANDOM else AiCreateMode.THEME
                                         )
                                     )
-                                },
-                                shape = SegmentedButtonDefaults.itemShape(index = index, count = aiModeOptions.size),
-                                label = { Text(label) }
+                                }
                             )
                         }
                     }
@@ -958,8 +839,8 @@ private fun CreatePlaylistDialog(
                         } else {
                             stringResource(R.string.mymusic_ai_theme_desc)
                         },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        style = AppleType.caption1,
+                        color = AppleTheme.colors.secondaryLabel
                     )
 
                     if (showResults) {
@@ -968,8 +849,8 @@ private fun CreatePlaylistDialog(
                             text = uiState.aiGeneratedPlaylistName.ifEmpty {
                                 if (aiMode == AiMode.RANDOM) stringResource(R.string.mymusic_ai_fallback_name) else uiState.themeInput
                             },
-                            style = MaterialTheme.typography.titleMediumEmphasized,
-                            color = MaterialTheme.colorScheme.onSurface,
+                            style = AppleType.headline,
+                            color = AppleTheme.colors.label,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -985,8 +866,8 @@ private fun CreatePlaylistDialog(
                                         Spacer(Modifier.height(SonSpacing.medium))
                                         Text(
                                             text = stringResource(R.string.mymusic_ai_generating),
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            style = AppleType.footnote,
+                                            color = AppleTheme.colors.secondaryLabel
                                         )
                                     }
                                 }
@@ -997,14 +878,14 @@ private fun CreatePlaylistDialog(
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                         Text(
                                             text = stringResource(R.string.mymusic_ai_generate_failed),
-                                            style = MaterialTheme.typography.titleMediumEmphasized,
-                                            color = MaterialTheme.colorScheme.error
+                                            style = AppleType.headline,
+                                            color = AppleTheme.colors.systemRed
                                         )
                                         Spacer(Modifier.height(SonSpacing.small))
                                         Text(
                                             text = stringResource(uiState.aiCreateError),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            style = AppleType.caption1,
+                                            color = AppleTheme.colors.secondaryLabel
                                         )
                                     }
                                 }
@@ -1014,8 +895,8 @@ private fun CreatePlaylistDialog(
                                 ) {
                                     Text(
                                         text = stringResource(R.string.mymusic_ai_no_songs),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        style = AppleType.footnote,
+                                        color = AppleTheme.colors.secondaryLabel
                                     )
                                 }
                                 else -> LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
@@ -1028,47 +909,55 @@ private fun CreatePlaylistDialog(
                                 Spacer(Modifier.height(SonSpacing.small))
                                 Text(
                                     text = stringResource(R.string.mymusic_ai_song_count_total, uiState.aiGeneratedSongs.size),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    style = AppleType.caption1,
+                                    color = AppleTheme.colors.secondaryLabel
                                 )
                             }
                         }
                         Spacer(Modifier.height(SonSpacing.medium))
                         if (!uiState.isAiGenerating && uiState.aiCreateError == null && uiState.aiGeneratedSongs.isNotEmpty()) {
-                            Button(
-                                onClick = { onIntent(MyMusicIntent.ConfirmAiPlaylist); onDismiss() },
+                            AppleActionButton(
+                                label = stringResource(R.string.mymusic_ai_create_confirm),
+                                onClick = {
+                                    onIntent(MyMusicIntent.ConfirmAiPlaylist)
+                                    onDismiss()
+                                },
                                 modifier = Modifier.fillMaxWidth()
-                            ) { Text(stringResource(R.string.mymusic_ai_create_confirm)) }
+                            )
                             Spacer(Modifier.height(SonSpacing.small))
-                            TextButton(
+                            AppleActionButton(
+                                label = stringResource(R.string.mymusic_ai_regenerate),
                                 onClick = { onIntent(MyMusicIntent.GenerateAiPlaylist) },
+                                filled = false,
                                 modifier = Modifier.fillMaxWidth()
-                            ) { Text(stringResource(R.string.mymusic_ai_regenerate)) }
+                            )
                         }
                     } else {
                         Spacer(Modifier.height(SonSpacing.medium))
                         if (aiMode == AiMode.THEME) {
-                            OutlinedTextField(
+                            Text(
+                                text = stringResource(R.string.mymusic_ai_theme_label),
+                                style = AppleType.footnote,
+                                color = AppleTheme.colors.secondaryLabel
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            AppleTextField(
                                 value = uiState.themeInput,
                                 onValueChange = { onIntent(MyMusicIntent.SetThemeInput(it)) },
-                                modifier = Modifier.fillMaxWidth(),
-                                label = { Text(stringResource(R.string.mymusic_ai_theme_label)) },
-                                placeholder = { Text(stringResource(R.string.mymusic_ai_theme_placeholder)) },
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences)
+                                placeholder = stringResource(R.string.mymusic_ai_theme_placeholder)
                             )
                             Spacer(Modifier.height(SonSpacing.medium))
                         }
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(
                                 text = stringResource(R.string.mymusic_ai_song_count_label),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface
+                                style = AppleType.footnote,
+                                color = AppleTheme.colors.label
                             )
                             Text(
                                 text = stringResource(R.string.mymusic_ai_song_count_value, sliderValue.toInt()),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.primary
+                                style = AppleType.footnote,
+                                color = AppleTheme.colors.key
                             )
                         }
                         Spacer(Modifier.height(SonSpacing.small))
@@ -1084,27 +973,31 @@ private fun CreatePlaylistDialog(
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(
                                 text = "$minCount",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                style = AppleType.caption1,
+                                color = AppleTheme.colors.secondaryLabel
                             )
                             Text(
                                 text = "$maxCount",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                style = AppleType.caption1,
+                                color = AppleTheme.colors.secondaryLabel
                             )
                         }
                         Spacer(Modifier.height(SonSpacing.large))
-                        Button(
+                        AppleActionButton(
+                            label = stringResource(R.string.mymusic_ai_generate),
                             onClick = { onIntent(MyMusicIntent.GenerateAiPlaylist) },
                             enabled = !(aiMode == AiMode.THEME && uiState.themeInput.isBlank()),
                             modifier = Modifier.fillMaxWidth()
-                        ) { Text(stringResource(R.string.mymusic_ai_generate)) }
+                        )
                     }
 
                     Spacer(Modifier.height(SonSpacing.small))
-                    TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
-                        Text(stringResource(R.string.mymusic_cancel))
-                    }
+                    AppleActionButton(
+                        label = stringResource(R.string.mymusic_cancel),
+                        onClick = onDismiss,
+                        filled = false,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
         }
@@ -1113,32 +1006,16 @@ private fun CreatePlaylistDialog(
 
 @Composable
 private fun PreviewSongItem(song: Song, modifier: Modifier = Modifier) {
-    ListItem(
+    AppleSheetRow(
         modifier = modifier,
-        leadingContent = {
+        title = song.title,
+        subtitle = song.artist,
+        leading = {
             M3Artwork(
                 artwork = song.albumArt,
                 placeholderIcon = SymbolIconName.MusicNote,
-                shape = MaterialTheme.shapes.small,
-                modifier = Modifier.size(SonSizes.thumbnail)
-            )
-        },
-        headlineContent = {
-            Text(
-                text = song.title,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        },
-        supportingContent = {
-            Text(
-                text = song.artist,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                shape = RoundedCornerShape(AppleDims.cornerS),
+                modifier = Modifier.size(40.dp)
             )
         }
     )
@@ -1147,29 +1024,18 @@ private fun PreviewSongItem(song: Song, modifier: Modifier = Modifier) {
 @Composable
 private fun RenamePlaylistDialog(playlist: Playlist, onDismiss: () -> Unit, onRename: (String) -> Unit) {
     var name by remember { mutableStateOf(playlist.name) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.mymusic_rename_dialog_title)) },
-        text = {
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text(stringResource(R.string.mymusic_rename_placeholder)) },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences)
-            )
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { if (name.isNotBlank()) onRename(name.trim()) },
-                enabled = name.isNotBlank()
-            ) { Text(stringResource(R.string.mymusic_rename_confirm)) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.mymusic_rename_cancel))
-            }
-        }
-    )
+    AppleAlert(
+        title = stringResource(R.string.mymusic_rename_dialog_title),
+        confirmLabel = stringResource(R.string.mymusic_rename_confirm),
+        onConfirm = { if (name.isNotBlank()) onRename(name.trim()) },
+        onDismiss = onDismiss,
+        dismissLabel = stringResource(R.string.mymusic_rename_cancel),
+        confirmEnabled = name.isNotBlank()
+    ) {
+        AppleTextField(
+            value = name,
+            onValueChange = { name = it },
+            placeholder = stringResource(R.string.mymusic_rename_placeholder)
+        )
+    }
 }

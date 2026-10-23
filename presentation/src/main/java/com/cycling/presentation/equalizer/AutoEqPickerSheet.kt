@@ -1,7 +1,9 @@
-@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@file:OptIn(ExperimentalMaterial3ExpressiveApi::class)
 
 package com.cycling.presentation.equalizer
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,24 +16,25 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.LoadingIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import com.cycling.core.ui.apple.AppleChip
+import com.cycling.core.ui.apple.AppleSearchField
+import com.cycling.core.ui.apple.AppleSeparator
+import com.cycling.core.ui.apple.AppleSheet
+import com.cycling.core.ui.apple.AppleSheetRow
+import com.cycling.core.ui.apple.AppleSheetTitle
+import com.cycling.core.ui.apple.AppleTheme
+import com.cycling.core.ui.apple.AppleType
 import com.cycling.core.ui.theme.SonSpacing
 import com.cycling.domain.model.AppliedAutoEq
 import com.cycling.domain.model.AutoEqEntry
@@ -59,173 +62,125 @@ fun AutoEqPickerSheet(
     onClear: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ) {
-        Column(
+    AppleSheet(onDismiss = onDismiss) {
+        AppleSheetTitle(
+            title = stringResource(R.string.autoeq_title),
+            subtitle = stringResource(R.string.autoeq_subtitle, catalogSize)
+        )
+
+        AppleSearchField(
+            value = query,
+            onValueChange = onQueryChange,
+            placeholder = stringResource(R.string.autoeq_search_hint),
+            onClear = { onQueryChange("") },
+            modifier = Modifier.padding(horizontal = 16.dp)
+        )
+
+        FlowRow(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = SonSpacing.large)
+                .padding(start = 16.dp, end = 16.dp, top = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(SonSpacing.small)
         ) {
-            Text(
-                text = stringResource(R.string.autoeq_title),
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(
-                    start = SonSpacing.large,
-                    end = SonSpacing.large,
-                    bottom = SonSpacing.extraSmall
-                )
+            AppleChip(
+                label = stringResource(R.string.autoeq_filter_all),
+                selected = formFactor == null,
+                onClick = { onFormFactorChange(null) }
             )
-            Text(
-                text = stringResource(R.string.autoeq_subtitle, catalogSize),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = SonSpacing.large)
+            AppleChip(
+                label = stringResource(R.string.autoeq_filter_in_ear),
+                selected = formFactor == AutoEqFormFactor.IN_EAR,
+                onClick = { onFormFactorChange(AutoEqFormFactor.IN_EAR) }
             )
-            Spacer(modifier = Modifier.height(SonSpacing.medium))
-
-            OutlinedTextField(
-                value = query,
-                onValueChange = onQueryChange,
-                singleLine = true,
-                placeholder = { Text(text = stringResource(R.string.autoeq_search_hint)) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = SonSpacing.large)
+            AppleChip(
+                label = stringResource(R.string.autoeq_filter_earbud),
+                selected = formFactor == AutoEqFormFactor.EARBUD,
+                onClick = { onFormFactorChange(AutoEqFormFactor.EARBUD) }
             )
+            AppleChip(
+                label = stringResource(R.string.autoeq_filter_over_ear),
+                selected = formFactor == AutoEqFormFactor.OVER_EAR,
+                onClick = { onFormFactorChange(AutoEqFormFactor.OVER_EAR) }
+            )
+        }
 
-            FlowRow(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        start = SonSpacing.large,
-                        end = SonSpacing.large,
-                        top = SonSpacing.small
-                    ),
-                horizontalArrangement = Arrangement.spacedBy(SonSpacing.small)
-            ) {
-                FormFactorChip(
-                    label = stringResource(R.string.autoeq_filter_all),
-                    selected = formFactor == null,
-                    onClick = { onFormFactorChange(null) }
-                )
-                FormFactorChip(
-                    label = stringResource(R.string.autoeq_filter_in_ear),
-                    selected = formFactor == AutoEqFormFactor.IN_EAR,
-                    onClick = { onFormFactorChange(AutoEqFormFactor.IN_EAR) }
-                )
-                FormFactorChip(
-                    label = stringResource(R.string.autoeq_filter_earbud),
-                    selected = formFactor == AutoEqFormFactor.EARBUD,
-                    onClick = { onFormFactorChange(AutoEqFormFactor.EARBUD) }
-                )
-                FormFactorChip(
-                    label = stringResource(R.string.autoeq_filter_over_ear),
-                    selected = formFactor == AutoEqFormFactor.OVER_EAR,
-                    onClick = { onFormFactorChange(AutoEqFormFactor.OVER_EAR) }
-                )
-            }
+        Spacer(modifier = Modifier.height(12.dp))
 
-            if (applied != null) {
-                ListItem(
-                    content = {
-                        Text(
-                            text = stringResource(R.string.autoeq_applied, applied.name),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    },
-                    supportingContent = {
-                        Text(
-                            text = stringResource(
-                                R.string.autoeq_applied_detail,
-                                applied.source,
-                                applied.preampDb
-                            ),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    },
-                    trailingContent = {
-                        TextButton(onClick = onClear) {
-                            Text(text = stringResource(R.string.autoeq_clear))
-                        }
-                    }
-                )
-            }
-
-            when {
-                isSearching -> Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = SonSpacing.extraLarge),
-                    contentAlignment = Alignment.Center
-                ) {
-                    LoadingIndicator()
+        if (applied != null) {
+            AppleSheetRow(
+                title = stringResource(R.string.autoeq_applied, applied.name),
+                subtitle = stringResource(
+                    R.string.autoeq_applied_detail,
+                    applied.source,
+                    applied.preampDb
+                ),
+                trailing = {
+                    val interaction = remember { MutableInteractionSource() }
+                    Text(
+                        text = stringResource(R.string.autoeq_clear),
+                        style = AppleType.body,
+                        color = AppleTheme.colors.systemRed,
+                        modifier = Modifier
+                            .clickable(
+                                interactionSource = interaction,
+                                indication = null,
+                                onClick = onClear
+                            )
+                            .padding(vertical = 4.dp, horizontal = 4.dp)
+                    )
                 }
+            )
+            AppleSeparator()
+        }
 
-                results.isEmpty() -> Text(
-                    text = stringResource(R.string.autoeq_empty),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(SonSpacing.large)
-                )
+        when {
+            isSearching -> Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = SonSpacing.extraLarge),
+                contentAlignment = Alignment.Center
+            ) {
+                LoadingIndicator()
+            }
 
-                else -> LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = RESULTS_MAX_HEIGHT)
-                ) {
-                    items(results, key = { it.id }) { entry ->
-                        ListItem(
-                            content = {
+            results.isEmpty() -> Text(
+                text = stringResource(R.string.autoeq_empty),
+                style = AppleType.body,
+                color = AppleTheme.colors.secondaryLabel,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(SonSpacing.large)
+            )
+
+            else -> LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = RESULTS_MAX_HEIGHT)
+            ) {
+                items(results, key = { it.id }) { entry ->
+                    AppleSheetRow(
+                        title = entry.name,
+                        subtitle = stringResource(
+                            R.string.autoeq_entry_detail,
+                            entry.source,
+                            formFactorLabel(entry.formFactor)
+                        ),
+                        onClick = { onSelect(entry.id) },
+                        trailing = {
+                            if (entry.id == applied?.id) {
                                 Text(
-                                    text = entry.name,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                                    text = stringResource(R.string.autoeq_in_use),
+                                    style = AppleType.caption1Emphasized,
+                                    color = AppleTheme.colors.key
                                 )
-                            },
-                            supportingContent = {
-                                Text(
-                                    text = stringResource(
-                                        R.string.autoeq_entry_detail,
-                                        entry.source,
-                                        formFactorLabel(entry.formFactor)
-                                    ),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            },
-                            trailingContent = {
-                                if (entry.id == applied?.id) {
-                                    Text(
-                                        text = stringResource(R.string.autoeq_in_use),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                            },
-                            onClick = { onSelect(entry.id) }
-                        )
-                    }
+                            }
+                        }
+                    )
                 }
             }
         }
     }
-}
-
-@Composable
-private fun FormFactorChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    FilterChip(
-        selected = selected,
-        onClick = onClick,
-        label = { Text(text = label) }
-    )
 }
 
 @Composable

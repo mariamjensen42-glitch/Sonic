@@ -30,6 +30,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -77,6 +79,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.cycling.core.ui.components.M3SymbolIcon
 import com.cycling.core.ui.components.SymbolIconName
+import com.cycling.core.ui.apple.appleBottomBarClearance
+import com.cycling.core.ui.apple.AppleDims
+import com.cycling.core.ui.apple.AppleTheme
+import com.cycling.core.ui.apple.AppleType
+import com.cycling.core.ui.apple.applePress
 import com.cycling.core.ui.components.M3Artwork
 import com.cycling.core.ui.theme.LocalSonExtendedColors
 import com.cycling.core.ui.theme.SonColorFieldBackground
@@ -173,6 +180,8 @@ fun CollectionDetailScreen(
     /** 行菜单里的收藏 / 取消收藏；行尾已经有心形的页面（歌手页）不必传。 */
     onToggleFavorite: ((Song) -> Unit)? = null,
     headerExtra: @Composable (ColumnScope.() -> Unit)? = null,
+    /** 曲目表之后的附加区块（歌手页的「专辑」横滑）。 */
+    songsFooter: (@Composable () -> Unit)? = null,
     emptyText: String? = null,
     /** 传了才开启拖拽排序；专辑/歌手等固定顺序的列表不传，行为完全不变。 */
     onMoveSong: ((fromIndex: Int, toIndex: Int) -> Unit)? = null,
@@ -229,7 +238,7 @@ fun CollectionDetailScreen(
         }
 
         Scaffold(
-            containerColor = MaterialTheme.colorScheme.surface,
+            containerColor = AppleTheme.colors.background,
             // 内容自行处理状态栏：顶栏透明，封面必须一路铺到屏幕顶端，
             // 若沿用 Scaffold 默认的 contentWindowInsets，内容区会被下推一个状态栏高度，
             // 封面底部就会露出等高的空白带。
@@ -270,7 +279,8 @@ fun CollectionDetailScreen(
                                 Spacer(modifier = Modifier.width(SonSpacing.small))
                                 Text(
                                     text = title,
-                                    style = MaterialTheme.typography.titleMediumEmphasized,
+                                    style = AppleType.subheadEmphasized,
+                                    color = AppleTheme.colors.label,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -400,7 +410,7 @@ fun CollectionDetailScreen(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
-                        bottom = SonLayout.bottomBarClearance + bottomPadding +
+                        bottom = appleBottomBarClearance() + bottomPadding +
                             if (uiState.selectionMode) SelectionBarHeight else 0.dp
                     )
                 ) {
@@ -520,6 +530,7 @@ fun CollectionDetailScreen(
                                         selectionMode = uiState.selectionMode,
                                         selected = song.id in uiState.selectedSongIds,
                                         subtitle = songSubtitle(song),
+                                        trackNumber = index + 1,
                                         onClick = {
                                             onIntent(SongCollectionIntent.SongClick(song))
                                         },
@@ -562,6 +573,14 @@ fun CollectionDetailScreen(
                                             null
                                         }
                                     )
+                                }
+                            }
+                        }
+
+                        songsFooter?.let { footer ->
+                            item {
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    footer()
                                 }
                             }
                         }
@@ -684,53 +703,85 @@ fun CollectionActions(
     onPlayAll: () -> Unit,
     onShuffle: () -> Unit,
     onAddToPlaylist: (() -> Unit)? = null,
-    containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
-    contentColor: Color = MaterialTheme.colorScheme.onSurfaceVariant
+    containerColor: Color = AppleTheme.colors.fill,
+    contentColor: Color = AppleTheme.colors.label
 ) {
-    Box(
+    val colors = AppleTheme.colors
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = SonLayout.screenMargin, vertical = SonSpacing.medium),
-        contentAlignment = Alignment.Center
+            .padding(horizontal = AppleDims.padding, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Surface(
-            shape = CircleShape,
-            color = containerColor,
-            contentColor = contentColor
+        // 播放：实心胶囊，用品牌红
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .height(AppleDims.actionHeight)
+                .clip(RoundedCornerShape(AppleDims.cornerPill))
+                .background(colors.systemRed)
+                .applePress(onPlayAll),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier.padding(SonSpacing.extraSmall),
-                horizontalArrangement = Arrangement.spacedBy(SonSpacing.extraSmall),
-                verticalAlignment = Alignment.CenterVertically
+            M3SymbolIcon(
+                name = SymbolIconName.PlayArrow,
+                filled = true,
+                contentDescription = null,
+                tint = Color.White,
+                size = 20.dp
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = stringResource(R.string.collection_detail_play_all),
+                style = AppleType.subheadEmphasized,
+                color = Color.White
+            )
+        }
+
+        // 随机播放：描边胶囊
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .height(AppleDims.actionHeight)
+                .clip(RoundedCornerShape(AppleDims.cornerPill))
+                .background(containerColor)
+                .applePress(onShuffle),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            M3SymbolIcon(
+                name = SymbolIconName.Shuffle,
+                filled = true,
+                contentDescription = null,
+                tint = contentColor,
+                size = 20.dp
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = stringResource(R.string.collection_detail_shuffle_desc),
+                style = AppleType.subheadEmphasized,
+                color = contentColor
+            )
+        }
+
+        if (onAddToPlaylist != null) {
+            Box(
+                modifier = Modifier
+                    .size(AppleDims.actionHeight)
+                    .clip(CircleShape)
+                    .background(containerColor)
+                    .applePress(onAddToPlaylist),
+                contentAlignment = Alignment.Center
             ) {
-                IconButton(onClick = onShuffle) {
-                    M3SymbolIcon(
-                        name = SymbolIconName.Shuffle,
-                        filled = true,
-                        contentDescription = stringResource(R.string.collection_detail_shuffle_desc)
-                    )
-                }
-
-                Button(onClick = onPlayAll) {
-                    M3SymbolIcon(
-                        name = SymbolIconName.PlayArrow,
-                        filled = true,
-                        contentDescription = null,
-                        modifier = Modifier.size(SonSizes.buttonIcon)
-                    )
-                    Spacer(modifier = Modifier.width(SonSpacing.small))
-                    Text(text = stringResource(R.string.collection_detail_play_all))
-                }
-
-                if (onAddToPlaylist != null) {
-                    IconButton(onClick = onAddToPlaylist) {
-                        M3SymbolIcon(
-                            name = SymbolIconName.PlaylistAdd,
-                            filled = true,
-                            contentDescription = stringResource(R.string.collection_detail_add_desc)
-                        )
-                    }
-                }
+                M3SymbolIcon(
+                    name = SymbolIconName.PlaylistAdd,
+                    filled = true,
+                    contentDescription = stringResource(R.string.collection_detail_add_desc),
+                    tint = contentColor,
+                    size = 20.dp
+                )
             }
         }
     }
@@ -887,19 +938,19 @@ private fun HeroCopy(
     ) {
         Text(
             text = name,
-            // 海报级标题：与正文拉开一个数量级，这一屏的 expressive moment 由它承担。
-            style = MaterialTheme.typography.displaySmallEmphasized,
+            // Apple 的大标题位：32sp Bold，压在封面之上
+            style = AppleType.title0,
             color = extended.onArtwork,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center
         )
 
-        Spacer(modifier = Modifier.height(SonSpacing.small))
+        Spacer(modifier = Modifier.height(6.dp))
 
         Text(
             text = subtitle,
-            style = MaterialTheme.typography.labelLarge,
+            style = AppleType.body,
             color = extended.onArtwork.copy(alpha = HeroSubTextAlpha),
             textAlign = TextAlign.Center
         )
@@ -1074,6 +1125,7 @@ private fun CollectionSongRow(
     selectionMode: Boolean,
     selected: Boolean,
     subtitle: String?,
+    trackNumber: Int,
     onClick: () -> Unit,
     onToggleSelection: () -> Unit,
     trailingContent: @Composable () -> Unit,
@@ -1087,6 +1139,8 @@ private fun CollectionSongRow(
         song = song,
         subtitle = subtitle,
         isCurrentSong = isCurrentSong,
+        trackNumber = trackNumber,
+        isPlaying = isCurrentSong,
         selected = if (selectionMode) selected else null,
         // 排序模式下整行不再响应点击：此刻的触摸意图是调整顺序，误触起播会打断手势。
         onClick = when {

@@ -370,6 +370,10 @@ class PlayerViewModel @Inject constructor(
                 Timber.d("handleIntent: ToggleViewMode")
                 toggleViewMode()
             }
+
+            is PlayerIntent.SetViewMode -> {
+                _uiState.update { it.copy(viewMode = intent.mode) }
+            }
             is PlayerIntent.RefreshLyrics -> {
                 Timber.d("handleIntent: RefreshLyrics")
                 refreshLyrics()
@@ -517,6 +521,7 @@ class PlayerViewModel @Inject constructor(
             val newViewMode = when (state.viewMode) {
                 PlayerViewMode.COVER -> PlayerViewMode.LYRICS
                 PlayerViewMode.LYRICS -> PlayerViewMode.COVER
+                PlayerViewMode.QUEUE -> PlayerViewMode.COVER
             }
             state.copy(viewMode = newViewMode)
         }
