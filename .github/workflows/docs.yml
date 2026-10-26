@@ -12,6 +12,8 @@ on:
       - "zensical.toml"
       - "pyproject.toml"
       - "uv.lock"
+      - "CHANGELOG.md"        # 被 site/changelog.md 直接嵌入
+      - "CONTRIBUTING.md"    # 被 site/contributing.md 直接嵌入
       - ".github/workflows/docs.yml"
   workflow_dispatch:
 

@@ -16,8 +16,8 @@
 - **播放**：Media3 ExoPlayer 1.9.0 + MediaSessionService（前台服务后台播放）
 - **图片**：Coil 3.1.0
 - **导航**：Navigation 3（`androidx.navigation3`）+ `@Serializable` 类型安全路由
-- **其他**：kotlinx-coroutines/serialization、OkHttp、Timber（日志）、mp3agic（MP3 标签/歌词）、
-  kotlinx-io（`:taglib` 的字节流/文件抽象）、palette-ktx（取色）
+- **其他**：kotlinx-coroutines/serialization、OkHttp、Timber（日志）、jaudiotagger（多格式标签读写）、
+  palette-ktx（取色）
 - **JDK**：17（`jvmToolchain(17)`）；**compileSdk**：37（+ `compileSdkMinor = 1`，因 material3 1.5.0-alpha29
   与 Compose 1.13.0-alpha01 的 AAR 要求 `minCompileSdk = 37`）；**targetSdk**：36；**minSdk**：30
 - **AGP**：9.3.0
@@ -47,14 +47,35 @@
 ./gradlew lint                   # Android Lint
 ```
 
+### 文档站点（Zensical + uv）
+
+文档站源文件在 `site/`，配置 `zensical.toml`，依赖由 `uv` 管理（`pyproject.toml` / `uv.lock`）。
+构建产物写到 `site/build/`（已 gitignore）。发布到 GitHub Pages：
+<https://mariamjensen42-glitch.github.io/Sonic/>
+
+```bash
+uv sync                          # 装依赖（zensical 在 dev 组）
+uv run zensical serve            # 本地预览 → http://localhost:8000
+uv run zensical build --clean    # 构建到 site/build/
+uv update --dev                  # 升级 zensical
+```
+
+- `pyproject.toml` 里 `link-mode = "copy"` **不可改回 symlink** —— Zensical 的主题资源打包在
+  wheel 里，symlink 模式会破坏它（官方说明暂不支持）。
+- 改完文档要同步 `zensical.toml` 的 `nav`，否则页面进不了导航。
+- `CHANGELOG.md` / `CONTRIBUTING.md` 用 `{% include-markdown %}` 直接嵌仓库根的原件，
+  不要在 `site/` 下再抄一份。
+- 仓库已转 **public**，签名密钥**不再入库**：CI 用 Actions secret
+  （`SONIC_KEYSTORE_BASE64` / `SONIC_STORE_PASSWORD` / `SONIC_KEY_ALIAS` / `SONIC_KEY_PASSWORD`）
+  还原，`key.properties` 与 `*.keystore` 必须留在 `.gitignore` 里。
+
 ## Architecture
 
-六个 Gradle 模块（`settings.gradle.kts` 中 `:app :domain :data :presentation :taglib :benchmark`），依赖方向严格单向：
+五个 Gradle 模块（`settings.gradle.kts` 中 `:app :domain :data :presentation :benchmark`），依赖方向严格单向：
 
 ```
 app → presentation → domain ← data
 app → domain, app → data
-data → taglib（多格式标签库，vendored）
 benchmark ⇢ app（com.android.test，targetProjectPath，不在产品依赖链上）
 ```
 
@@ -64,22 +85,33 @@ benchmark ⇢ app（com.android.test，targetProjectPath，不在产品依赖链
   - `repository/` — 仓库**接口**（`interface XxxRepository`，返回 `Flow<T>` 或 `suspend`）
   - `usecase/` — 用例（`class XxxUseCase @Inject constructor`，`operator fun invoke`）
   - `lyrics/` — 歌词子系统：`parser/`（`ILyricsParser` 接口 + LRC/TTML/Syllable 等实现）、`model/`、`exporter/`、`utils/`
-- **data** (`com.cycling.data`)：依赖 `:domain` 与 `:taglib`，实现所有 repository。
+  - `scrape/` — 元数据刮削的**匹配规则**（`ScrapeMatch`：归一化标题、置信度打分、缺失字段判定）。
+    纯函数，批量自动刮削靠它决定「这条结果能不能不问用户就写」
+- **data** (`com.cycling.data`)：依赖 `:domain`，实现所有 repository。
   - `local/` — `database/`(`AppDatabase`)、`dao/`、`entity/`、`mediastore/`、`scanner/`、`lyrics/`、`metadata/`
-    （`metadata/AudioMetadataHelper.kt` 是标签读写入口：MP3 用 mp3agic，FLAC/OGG/M4A 用 `:taglib`）
-  - `api/` — 远程 API：DeepSeek（`DeepSeekApiService` 类 + `dto/`）、在线歌词（`api/lyrics/`，`OnlineLyricsProvider` 的 AMLL / 网易云 / QQ 音乐 / 酷狗 / LRCLIB 实现 + `dto/`）、在线封面与元数据（`api/cover/`）、在线目录搜索（`api/search/`，网易云 / QQ / 酷狗 / 酷我 / 咪咕 → 带平台 id 的 `MusicInfo`）
+    （`metadata/AudioMetadataHelper.kt` 是标签读写入口，统一走 jaudiotagger：MP3/FLAC/OGG/MP4/WAV/AIFF/WMA/DSF
+    读写、DFF 只读；Opus 与裸 AAC 退到 `MediaMetadataRetriever` 拿基础字段）
+  - `api/` — 远程 API：DeepSeek（`DeepSeekApiService` 类 + `dto/`）、在线歌词（`api/lyrics/`，`OnlineLyricsProvider` 的 AMLL / 网易云 / QQ 音乐 / 酷狗 / LRCLIB / 音源脚本（`LxLyricsProvider`）实现 + `dto/`）、在线封面与元数据（`api/cover/`）、在线目录搜索（`api/search/`，网易云 / QQ / 酷狗 / 酷我 / 咪咕 → 带平台 id 的 `MusicInfo`）
+  - `online/` — LX 音源脚本（洛雪协议）：`lx/` 是 QuickJS 运行时（`LxJsRuntime`）、脚本生命周期（`LxScriptRunner`）、宿主桥（`LxHttpBridge`、`LxJsUtils`）、插件管理（`LxPluginManager`：导入/排序/屏蔽/取链/取词/取封面）、QRC 解码器（`QrcCodec`）；`PlayUrlProbe` 负责取链后的可播性探测；`store/OnlineStore` 持久化插件清单与脚本正文
   - `player/` — `PlayerManager`、`PlayerService`（Media3 MediaSessionService）
+  - `download/` — 离线下载：`DownloadTransfer`（OkHttp 流式 + Range 断点续传）、`DownloadService`
+    （`dataSync` 类型前台服务，只负责保活与进度通知，不持有状态）；任务状态机在
+    `repository/DownloadRepositoryImpl`。落盘顺序是**先补后缀再写标签**：
+    `task-N.part` → 改成真实容器后缀（标签 writer 按扩展名挑，`.part` 会被判成"不支持"）→
+    `updateAudioTags` + `writeCoverArtwork`（封面必须内嵌，MediaStore 的专辑封面是扫描时从文件里
+    生成的）→ `local/mediastore/MediaStoreWriter`（`IS_PENDING` 流程 → 扫描入库）。
+    取链统一走 `online/CachedPlaySourceResolver`（先查 `play_url_cache` 再跑脚本）
   - `repository/` — `XxxRepositoryImpl`（`@Singleton`，`@Inject constructor`）
   - `mapper/` — Entity ↔ Domain Model 映射（`Mappers.kt`）
   - `store/` — DataStore 封装（`ApiKeyStore`、`AiInfoCacheStore`）
   - `cache/` — 缓存上限的检查与淘汰（`CacheJanitor`：超上限按占用从大到小**整目录**清空，由 `SonicApplication` 启动时跑一次、之后每小时一次）
   - `di/` — Hilt 模块（`RepositoryModule` 用 `@Binds`，`DatabaseModule`/`PlayerModule`/`AiModule` 用 `@Provides`）
-- **taglib** (`com.cycling.salt.audiotag`)：从本地 SaltAudioTag 工程的 `core` 模块整包搬入的
-  多格式音频标签库（LGPL-2.1，见 `taglib/LICENSE` 与每个源文件头）。读写 MP3 / FLAC /
-  OGG-Vorbis / MP4(M4A)，Opus 只读。换用/升级时整包替换，不要在这里写业务逻辑，也不要让
-  `:domain` / `:presentation` 直接依赖它 —— 只有 `:data` 的 `AudioMetadataHelper` 使用。
 - **presentation** (`com.cycling.presentation` + `com.cycling.core.ui`)：依赖 `:domain`，含 Compose UI。
   - `presentation/<feature>/` — 每个功能一个包，内含 `XxxContract.kt`（UiState/Intent/Effect）、`XxxViewModel.kt`、`XxxScreen.kt`
+  - `presentation/scrape/` — 元数据刮削页（`ScrapeScreen`）：列出元数据不全的本地歌，
+    「全部刮削」只应用可信匹配，点某行展开候选手动挑
+  - `presentation/download/` — 下载管理页（`DownloadScreen`）+ 全局下载入口 `DownloadRequestProvider`
+    （`LocalDownloadRequester`，歌曲菜单读它；音质弹层挂在导航壳根部，不随页面销毁）
   - `presentation/navigation/` — `Screen`/`LibraryDestination`/`SettingsDestination`（`sealed interface : NavKey`）、`AppNavGraph`、`Navigator`
   - `presentation/lyrics/` — 卡拉OK 歌词 UI（`components/`、`utils/`）
   - `core/ui/theme/` — Material 3 Expressive 主题系统：`Theme.kt`（`SonicTheme`）、`Color.kt`、`Hct.kt`、`TonalPalette.kt`、`Typography.kt`、`Shape.kt`、`MotionTiming.kt`、`Spacing.kt`、`ArtColorExtractor.kt`（`androidx.palette` 取封面颜色）、`CoverArtworkLoader.kt`（封面位图读取：MediaStore 缩略图 → 图片流 → 内嵌封面）、`SonColorField.kt`（静态色面）、`SonDynamicBackdrop.kt`（播放页 / 歌词页的动态色面）
@@ -130,6 +162,10 @@ benchmark ⇢ app（com.android.test，targetProjectPath，不在产品依赖链
   这条边界的意思是**不按封面重建整套配色方案**，不是「封面上不能有图像」。
 - **颜色**：只能取自 `MaterialTheme.colorScheme.*`；M3 角色无法表达时才用
   `LocalSonExtendedColors.current`（封面占位、封面之上内容、歌词高亮、波形）。
+  **歌词页是个例外，只有一处取色点**：整页文字色（正文 / 非当前行 / 伴奏 / 译文 / 占位）由
+  `presentation/lyrics/LyricsPalette` 从「这一页的前景色」派生，经 `LocalLyricsPalette` 下发。
+  页内组件不得各自去取 `lyricsActive` / `lyricsInactive` —— 那对 token 跟随系统主题，而歌词页
+  压在动态色面上（播放页那页恒为深底），浅色主题下会压出黑字。
   **禁止**在页面里写 `Color(0x...)`/`Color.White`/`Color.Gray`（`Color.Transparent` 仅用于表达真透明）。
 - **排版**：只能用 `MaterialTheme.typography.*`（含 `*Emphasized` 强调变体）。
   **禁止**在 `Text` 上写 `fontSize`/`fontWeight`。字体族见 `SonFontFamily`（**MiSans** 的
