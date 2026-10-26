@@ -1,0 +1,116 @@
+# Zensical 配置 —— Sonic 文档站点
+# 依赖用 uv 管理：uv sync / uv run zensical build
+
+[project]
+site_name = "Sonic"
+site_url = "https://mariamjensen42-glitch.github.io/Sonic/"
+site_description = "Sonic —— 现代化 Android 音乐播放器：Material 3 Expressive 设计、AI 音乐洞察、卡拉 OK 歌词、在线音源。"
+site_author = "Sonic Contributors"
+copyright = "Copyright &copy; 2025 Sonic Contributors · MIT License"
+
+# 文档源文件放在 site/ 下，构建产物写到 site/build/
+docs_dir = "site"
+site_dir = "site/build"
+
+# 仓库信息（决定顶栏的 GitHub 链接与「编辑此页」）
+repo_url = "https://github.com/mariamjensen42-glitch/Sonic"
+repo_name = "Sonic"
+edit_uri = "edit/master/site/"
+
+use_directory_urls = true
+strict = false
+
+# ---------------------------------------------------------------- 导航
+nav = [
+  { "首页" = "index.md" },
+  { "快速开始" = "getting-started.md" },
+  { "功能" = [
+    { "播放与队列" = "features/playback.md" },
+    { "歌词" = "features/lyrics.md" },
+    { "音乐库" = "features/library.md" },
+    { "AI 音乐洞察" = "features/ai-insights.md" },
+    { "在线音源" = "features/online-sources.md" },
+    { "下载与离线" = "features/downloads.md" },
+    { "均衡器与统计" = "features/tools.md" },
+  ]},
+  { "架构" = "architecture.md" },
+  { "开发" = [
+    { "参与贡献" = "contributing.md" },
+    { "文档站点" = "development/docs-site.md" },
+    { "设计笔记" = "development/design-notes.md" },
+    { "更新日志" = "changelog.md" },
+  ]},
+  { "GitHub 仓库" = "https://github.com/mariamjensen42-glitch/Sonic" },
+]
+
+# ---------------------------------------------------------------- 主题
+[project.theme]
+language = "zh"
+logo = "assets/images/logo.svg"
+favicon = "assets/images/favicon.svg"
+variant = "modern"
+
+features = [
+  "navigation.instant",
+  "navigation.tracking",
+  "navigation.tabs",
+  "navigation.sections",
+  "navigation.expand",
+  "navigation.top",
+  "navigation.path",
+  "navigation.footer",
+  "toc.follow",
+  "search.highlight",
+  "search.share",
+  "content.code.copy",
+  "content.code.annotate",
+  "content.action.edit",
+  "content.action.view",
+  "content.tooltips",
+]
+
+palette = [
+  { media = "(prefers-color-scheme: light)", scheme = "default", primary = "indigo", accent = "indigo", toggle = { icon = "lucide/moon", name = "切换到深色模式" } },
+  { media = "(prefers-color-scheme: dark)", scheme = "slate", primary = "indigo", accent = "indigo", toggle = { icon = "lucide/sun", name = "切换到浅色模式" } },
+]
+
+font = { text = "Inter", code = "JetBrains Mono" }
+
+[project.theme.icon]
+logo = "lucide/audio-lines"
+repo = "fontawesome/brands/github"
+edit = "lucide/file-pen"
+view = "lucide/file-code-2"
+top = "lucide/circle-arrow-up"
+search = "lucide/search"
+
+# ---------------------------------------------------------------- Markdown
+markdown_extensions = [
+  "abbr",
+  "admonition",
+  "attr_list",
+  "def_list",
+  "footnotes",
+  "md_in_html",
+  "toc",
+  "pymdownx.arithmatex",
+  "pymdownx.betterem",
+  "pymdownx.caret",
+  "pymdownx.details",
+  "pymdownx.emoji",
+  "pymdownx.highlight",
+  "pymdownx.inlinehilite",
+  "pymdownx.keys",
+  "pymdownx.magiclink",
+  "pymdownx.mark",
+  "pymdownx.smartsymbols",
+  "pymdownx.superfences",
+  "pymdownx.tabbed",
+  "pymdownx.tasklist",
+  "pymdownx.tilde",
+]
+
+# ---------------------------------------------------------------- 插件
+# include-markdown：页面里用 {% include-markdown "../CHANGELOG.md" %} 把仓库根的
+# CHANGELOG.md / CONTRIBUTING.md 直接嵌进来，避免文档站与仓库各维护一份内容。
+[project.plugins.include-markdown]

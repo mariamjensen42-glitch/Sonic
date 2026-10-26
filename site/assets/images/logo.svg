@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="108" height="108" role="img" aria-label="Sonic">
+  <rect width="108" height="108" rx="24" fill="#6C4DFF"/>
+  <g fill="#FFFFFF">
+    <path d="M29,49 a3,3 0 0 1 6,0 v10 a3,3 0 0 1 -6,0 z"/>
+    <path d="M40,43 a3,3 0 0 1 6,0 v22 a3,3 0 0 1 -6,0 z"/>
+    <path d="M51,37 a3,3 0 0 1 6,0 v34 a3,3 0 0 1 -6,0 z"/>
+    <path d="M62,43 a3,3 0 0 1 6,0 v22 a3,3 0 0 1 -6,0 z"/>
+    <path d="M73,49 a3,3 0 0 1 6,0 v10 a3,3 0 0 1 -6,0 z"/>
+  </g>
+</svg>

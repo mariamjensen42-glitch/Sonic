@@ -1,0 +1,16 @@
+[project]
+name = "sonic"
+version = "0.1.0"
+description = "Sonic 文档站点 —— Zensical 静态站点生成器，依赖由 uv 管理"
+requires-python = ">=3.11"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "zensical>=0.0.72",
+]
+
+[tool.uv]
+# Zensical 的主题与资源是打包在 wheel 里的，uv 的 symlink 链接模式会破坏它，
+# 官方明确说明暂不支持，必须走 copy（见 zensical.org/docs/get-started/）。
+link-mode = "copy"

@@ -32,8 +32,8 @@ Be respectful and inclusive. We welcome contributions from everyone.
 
 - Android Studio Hedgehog (2023.1.1) or later
 - JDK 17
-- Android SDK with API 36
-- Kotlin 2.0.21
+- Android SDK with API 37 (compileSdk 37, targetSdk 36)
+- Kotlin 2.3.0
 
 ### Building the Project
 
@@ -55,11 +55,13 @@ cd sonic
 ### Project Structure
 
 ```
-sonic/
-├── app/              # Main application module
+Sonic/
+├── app/              # Main application module (assembly only)
 ├── data/             # Data layer (repositories, database, API)
 ├── domain/           # Domain layer (use cases, models)
 ├── presentation/     # UI layer (Compose screens, ViewModels)
+├── benchmark/        # Macrobenchmark module
+├── site/             # Documentation site sources (Zensical)
 └── gradle/           # Gradle configuration
 ```
 
@@ -167,7 +169,7 @@ Use the [Feature Request template](.github/ISSUE_TEMPLATE/feature_request.yml) a
 
 If you have questions, feel free to:
 
-- Open a [Discussion](https://github.com/cycling74/sonic/discussions)
+- Open a [Discussion](https://github.com/mariamjensen42-glitch/Sonic/discussions)
 - Ask in the issue tracker
 
 Thank you for contributing! 🎵

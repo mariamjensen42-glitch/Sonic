@@ -9,7 +9,8 @@
   <a href="https://kotlinlang.org"><img src="https://img.shields.io/badge/Kotlin-2.0.21-purple.svg" alt="Kotlin"></a>
   <a href="https://developer.android.com/jetpack/compose"><img src="https://img.shields.io/badge/Jetpack%20Compose-2024.10.01-brightgreen.svg" alt="Compose"></a>
   <a href="https://android-arsenal.com/api?level=30"><img src="https://img.shields.io/badge/API-30%2B-orange.svg" alt="API Level"></a>
-  <a href="https://github.com/cycling02/Sonic/actions"><img src="https://img.shields.io/github/actions/workflow/status/cycling02/Sonic/android.yml?branch=main" alt="Build Status"></a>
+  <a href="https://github.com/mariamjensen42-glitch/Sonic/actions"><img src="https://img.shields.io/github/actions/workflow/status/mariamjensen42-glitch/Sonic/android.yml?branch=main" alt="Build Status"></a>
+  <a href="https://mariamjensen42-glitch.github.io/Sonic/"><img src="https://img.shields.io/badge/Docs-Zensical-6C4DFF" alt="Documentation"></a>
 </p>
 
 <p align="center">
@@ -203,7 +204,7 @@ Sonic/
 
 ```bash
 # Clone the repository
-git clone https://github.com/cycling02/Sonic.git
+git clone https://github.com/mariamjensen42-glitch/Sonic.git
 cd sonic
 
 # Build the project
@@ -231,8 +232,8 @@ cd sonic
 ## 📥 Download
 
 <p align="center">
-  <a href="https://github.com/cycling02/Sonic/releases/latest">
-    <img src="https://img.shields.io/github/v/release/cycling02/Sonic?label=Download%20Latest&style=for-the-badge&color=blue" alt="Download Latest Release">
+  <a href="https://github.com/mariamjensen42-glitch/Sonic/releases/latest">
+    <img src="https://img.shields.io/github/v/release/mariamjensen42-glitch/Sonic?label=Download%20Latest&style=for-the-badge&color=blue" alt="Download Latest Release">
   </a>
 </p>
 
@@ -306,10 +307,10 @@ copies or substantial portions of the Software.
 </p>
 
 <p align="center">
-  <a href="https://github.com/cycling02/Sonic/stargazers">
-    <img src="https://img.shields.io/github/stars/cycling02/Sonic?style=social" alt="Star this repo">
+  <a href="https://github.com/mariamjensen42-glitch/Sonic/stargazers">
+    <img src="https://img.shields.io/github/stars/mariamjensen42-glitch/Sonic?style=social" alt="Star this repo">
   </a>
-  <a href="https://github.com/cycling02/Sonic/network/members">
-    <img src="https://img.shields.io/github/forks/cycling02/Sonic?style=social" alt="Fork this repo">
+  <a href="https://github.com/mariamjensen42-glitch/Sonic/network/members">
+    <img src="https://img.shields.io/github/forks/mariamjensen42-glitch/Sonic?style=social" alt="Fork this repo">
   </a>
 </p>

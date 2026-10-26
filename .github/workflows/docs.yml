@@ -1,0 +1,53 @@
+name: Documentation
+
+# 文档站发布：push 到 master 即重建并发布到 GitHub Pages
+# 站点源文件在 site/，配置在 zensical.toml，依赖由 uv 管理（pyproject.toml / uv.lock）。
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - "site/**"
+      - "zensical.toml"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: docs-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      # pyproject.toml 里已固定 link-mode = "copy"（Zensical 不支持 uv 的 symlink 模式）
+      - name: Build site
+        run: uv run --frozen zensical build --clean
+
+      - uses: actions/configure-pages@v6
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site/build
+
+      - uses: actions/deploy-pages@v5
+        id: deployment
