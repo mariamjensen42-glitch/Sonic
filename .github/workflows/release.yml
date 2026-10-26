@@ -32,9 +32,22 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      # 签名直接用仓库根的 key.properties + sonic-release.keystore（路径相对 :app 解析）。
-      # 不再现生成临时 keystore：签名一换，装了旧版的用户就无法覆盖安装。
+      # 签名材料不再入库：仓库已转 public，keystore 放在 Actions secret 里，
+      # 这里还原到仓库根，再由 SONIC_* 环境变量喂给 app/build.gradle.kts。
+      # 仍然用同一把密钥、不重新生成 —— 签名一换，装了旧版的用户就无法覆盖安装。
+      - name: Restore release signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.SONIC_KEYSTORE_BASE64 }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > sonic-release.keystore
+          chmod 600 sonic-release.keystore
+
       - name: Build release APK
+        env:
+          SONIC_STORE_FILE: ../sonic-release.keystore
+          SONIC_STORE_PASSWORD: ${{ secrets.SONIC_STORE_PASSWORD }}
+          SONIC_KEY_ALIAS: ${{ secrets.SONIC_KEY_ALIAS }}
+          SONIC_KEY_PASSWORD: ${{ secrets.SONIC_KEY_PASSWORD }}
         run: ./gradlew :app:assembleRelease
 
       - name: Upload APK

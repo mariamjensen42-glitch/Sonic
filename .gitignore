@@ -15,10 +15,11 @@
 local.properties
 
 
-# Signing files (removed for this project)
-# *.keystore
-# *.jks
-# key.properties
+# 签名材料：仓库已转 public，密钥绝不能再入库。
+# CI 侧用 Actions secrets 还原（见 .github/workflows/release.yml）。
+*.keystore
+*.jks
+key.properties
 /.tmp/
 /.workbuddy-ai/
 /.trae/
