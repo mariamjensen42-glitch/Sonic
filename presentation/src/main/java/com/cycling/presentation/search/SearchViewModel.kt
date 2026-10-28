@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cycling.domain.online.model.MusicInfo
 import com.cycling.domain.online.model.MusicQuality
+import com.cycling.domain.online.model.OnlineSource
 import com.cycling.domain.online.model.PlaySourceResolution
 import com.cycling.domain.online.model.toSong
 import com.cycling.domain.online.usecase.ResolveOnlinePlaySourceUseCase
@@ -87,7 +88,8 @@ class SearchViewModel @Inject constructor(
                             onlineSearching = false,
                             onlinePage = 1,
                             onlineHasMore = false,
-                            onlineLoadingMore = false
+                            onlineLoadingMore = false,
+                            selectedOnlineSource = null
                         )
                     }
                 }
@@ -107,6 +109,7 @@ class SearchViewModel @Inject constructor(
             is SearchIntent.AlbumClicked -> handleAlbumClick(intent.album)
             is SearchIntent.ArtistClicked -> handleArtistClick(intent.artist)
             is SearchIntent.OnlineTrackClicked -> playOnline(intent.track)
+            is SearchIntent.OnlineSourceSelected -> handleOnlineSourceSelected(intent.source)
             is SearchIntent.LoadMoreOnline -> loadMoreOnline()
             is SearchIntent.ClearSearch -> handleClearSearch()
         }
@@ -151,6 +154,10 @@ class SearchViewModel @Inject constructor(
 
     private fun handleTabSelected(tab: SearchTab) {
         _uiState.update { it.copy(selectedTab = tab) }
+    }
+
+    private fun handleOnlineSourceSelected(source: OnlineSource?) {
+        _uiState.update { it.copy(selectedOnlineSource = source) }
     }
 
     private fun handleSongClick(song: com.cycling.domain.model.Song) {
@@ -229,7 +236,7 @@ class SearchViewModel @Inject constructor(
     private fun searchOnline(query: String) {
         onlineJob?.cancel()
         onlineJob = viewModelScope.launch {
-            _uiState.update { it.copy(onlineSearching = true, onlinePage = 1) }
+            _uiState.update { it.copy(onlineSearching = true, onlinePage = 1, selectedOnlineSource = null) }
             // 不能用 runCatching：它会把取消也吞掉，于是「刚被新关键词取消的旧请求」
             // 反而用空结果覆盖掉新请求的状态。
             val outcome = try {

@@ -230,3 +230,50 @@ val MIGRATION_8_9 = object : Migration(8, 9) {
         db.execSQL("ALTER TABLE `songs` ADD COLUMN `onlineSongId` TEXT")
     }
 }
+
+/**
+ * v9 → v10: 离线下载任务与取链缓存。
+ *
+ * 两张新表，纯增量。都不挂外键：任务与缓存描述的是「在线歌 → 地址/文件」的过程，
+ * 曲库重扫（`songs` 整表重建）时不应该把正在下载的任务一起删掉。
+ */
+val MIGRATION_9_10 = object : Migration(9, 10) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `download_task` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `songId` INTEGER NOT NULL,
+                `title` TEXT NOT NULL,
+                `artist` TEXT NOT NULL,
+                `album` TEXT NOT NULL,
+                `albumArt` TEXT,
+                `onlineSourceKey` TEXT,
+                `onlineSongId` TEXT,
+                `quality` TEXT NOT NULL,
+                `state` TEXT NOT NULL,
+                `bytesDownloaded` INTEGER NOT NULL,
+                `totalBytes` INTEGER NOT NULL,
+                `filePath` TEXT,
+                `errorMessage` TEXT,
+                `createdAt` INTEGER NOT NULL,
+                `updatedAt` INTEGER NOT NULL
+            )
+            """.trimIndent()
+        )
+
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `play_url_cache` (
+                `songId` INTEGER NOT NULL,
+                `quality` TEXT NOT NULL,
+                `url` TEXT NOT NULL,
+                `headersJson` TEXT,
+                `createdAt` INTEGER NOT NULL,
+                `expiresAt` INTEGER NOT NULL,
+                PRIMARY KEY(`songId`, `quality`)
+            )
+            """.trimIndent()
+        )
+    }
+}

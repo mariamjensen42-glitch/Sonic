@@ -7,12 +7,18 @@ import com.cycling.data.repository.AudioMetadataRepositoryImpl
 import com.cycling.data.repository.AutoEqRepositoryImpl
 import com.cycling.data.repository.CacheRepositoryImpl
 import com.cycling.data.repository.CoverRepositoryImpl
+import com.cycling.data.repository.DownloadRepositoryImpl
+import com.cycling.data.repository.PlayUrlCacheRepositoryImpl
+import com.cycling.data.repository.QQMusicAccountRepositoryImpl
 import com.cycling.data.repository.ExcludedFolderRepositoryImpl
 import com.cycling.data.repository.LibraryTransferRepositoryImpl
 import com.cycling.data.repository.ListeningStatsRepositoryImpl
 import com.cycling.data.repository.LyricsRepositoryImpl
+import com.cycling.data.repository.MetadataScraperRepositoryImpl
 import com.cycling.data.repository.MusicScannerRepositoryImpl
+import com.cycling.data.repository.OnlinePlaylistRepositoryImpl
 import com.cycling.data.repository.PlaylistRepositoryImpl
+import com.cycling.data.repository.RecordingFilterRepositoryImpl
 import com.cycling.data.repository.SearchHistoryRepositoryImpl
 import com.cycling.data.repository.SettingsRepositoryImpl
 import com.cycling.data.repository.SongRepositoryImpl
@@ -24,12 +30,18 @@ import com.cycling.domain.repository.AudioMetadataRepository
 import com.cycling.domain.repository.AutoEqRepository
 import com.cycling.domain.repository.CacheRepository
 import com.cycling.domain.repository.CoverRepository
+import com.cycling.domain.repository.DownloadRepository
+import com.cycling.domain.repository.PlayUrlCacheRepository
+import com.cycling.domain.repository.QQMusicAccountRepository
 import com.cycling.domain.repository.ExcludedFolderRepository
 import com.cycling.domain.repository.LibraryTransferRepository
 import com.cycling.domain.repository.ListeningStatsRepository
 import com.cycling.domain.repository.LyricsRepository
+import com.cycling.domain.repository.MetadataScraperRepository
 import com.cycling.domain.repository.MusicScannerRepository
+import com.cycling.domain.online.OnlinePlaylistRepository
 import com.cycling.domain.repository.PlaylistRepository
+import com.cycling.domain.repository.RecordingFilterRepository
 import com.cycling.domain.repository.SearchHistoryRepository
 import com.cycling.domain.repository.SettingsRepository
 import com.cycling.domain.repository.SongRepository
@@ -74,6 +86,12 @@ abstract class RepositoryModule {
 
     @Binds
     @Singleton
+    abstract fun bindOnlinePlaylistRepository(
+        onlinePlaylistRepositoryImpl: OnlinePlaylistRepositoryImpl
+    ): OnlinePlaylistRepository
+
+    @Binds
+    @Singleton
     abstract fun bindMusicScannerRepository(
         musicScannerRepositoryImpl: MusicScannerRepositoryImpl
     ): MusicScannerRepository
@@ -83,6 +101,12 @@ abstract class RepositoryModule {
     abstract fun bindExcludedFolderRepository(
         excludedFolderRepositoryImpl: ExcludedFolderRepositoryImpl
     ): ExcludedFolderRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindRecordingFilterRepository(
+        recordingFilterRepositoryImpl: RecordingFilterRepositoryImpl
+    ): RecordingFilterRepository
 
     @Binds
     @Singleton
@@ -161,4 +185,28 @@ abstract class RepositoryModule {
     abstract fun bindCacheRepository(
         cacheRepositoryImpl: CacheRepositoryImpl
     ): CacheRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindDownloadRepository(
+        downloadRepositoryImpl: DownloadRepositoryImpl
+    ): DownloadRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindPlayUrlCacheRepository(
+        playUrlCacheRepositoryImpl: PlayUrlCacheRepositoryImpl
+    ): PlayUrlCacheRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindMetadataScraperRepository(
+        metadataScraperRepositoryImpl: MetadataScraperRepositoryImpl
+    ): MetadataScraperRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindQQMusicAccountRepository(
+        qqMusicAccountRepositoryImpl: QQMusicAccountRepositoryImpl
+    ): QQMusicAccountRepository
 }

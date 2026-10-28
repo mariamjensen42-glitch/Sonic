@@ -4,10 +4,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cycling.domain.model.Playlist
 import com.cycling.domain.model.Song
+import com.cycling.domain.online.OnlinePlaylistRepository
 import com.cycling.domain.repository.AiRepository
 import com.cycling.domain.repository.PlaylistRepository
 import com.cycling.domain.repository.PlayerRepository
 import com.cycling.domain.repository.SongRepository
+import com.cycling.domain.usecase.ImportOnlinePlaylistOutcome
+import com.cycling.domain.usecase.ImportOnlinePlaylistUseCase
 import com.cycling.domain.usecase.SongQueryUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -36,7 +39,9 @@ class MyMusicViewModel @Inject constructor(
     private val songRepository: SongRepository,
     private val playerRepository: PlayerRepository,
     private val playlistRepository: PlaylistRepository,
-    private val aiRepository: AiRepository
+    private val aiRepository: AiRepository,
+    private val onlinePlaylistRepository: OnlinePlaylistRepository,
+    private val importOnlinePlaylistUseCase: ImportOnlinePlaylistUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MyMusicUiState())
@@ -75,6 +80,12 @@ class MyMusicViewModel @Inject constructor(
             is MyMusicIntent.SetThemeInput -> handleSetThemeInput(intent.theme)
             is MyMusicIntent.GenerateAiPlaylist -> handleGenerateAiPlaylist()
             is MyMusicIntent.ConfirmAiPlaylist -> handleConfirmAiPlaylist()
+            is MyMusicIntent.SetImportInput -> {
+                _uiState.update { it.copy(importInput = intent.text, importError = null) }
+            }
+            is MyMusicIntent.ImportOnlinePlaylist -> handleImportOnlinePlaylist()
+            is MyMusicIntent.LoadMyPlaylists -> loadMyPlaylists()
+            is MyMusicIntent.ImportMyPlaylist -> handleImportMyPlaylist(intent.playlistId)
         }
     }
 
@@ -265,6 +276,112 @@ class MyMusicViewModel @Inject constructor(
         viewModelScope.launch {
             playlistRepository.createPlaylist(name)
             _uiEffect.emit(MyMusicEffect.ShowToast(R.string.mymusic_vm_playlist_created))
+        }
+    }
+
+    /**
+     * 从分享链接导入在线歌单。
+     *
+     * 抓取与写入都在用例里，这里只管三件事：把进度推到状态上、成功就跳详情页、失败给一条
+     * 能看懂的原因（链接不对 / 歌单读不到 / 网络挂了 —— 三者对用户来说下一步动作完全不同）。
+     */
+    private fun handleImportOnlinePlaylist() {
+        val input = _uiState.value.importInput.trim()
+        if (input.isEmpty() || _uiState.value.isImporting) return
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(isImporting = true, importError = null, importDone = 0, importTotal = 0)
+            }
+            val outcome = try {
+                importOnlinePlaylistUseCase(input) { done, total ->
+                    _uiState.update { it.copy(importDone = done, importTotal = total) }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Timber.w(e, "handleImportOnlinePlaylist: failed")
+                _uiState.update {
+                    it.copy(isImporting = false, importError = R.string.mymusic_import_error_network)
+                }
+                return@launch
+            }
+            applyImportOutcome(outcome)
+        }
+    }
+
+    /**
+     * 拉「我的歌单」。
+     *
+     * 只拉一次：列表变化不频繁，而每开一次对话框就打一次接口既慢又没必要。失败也标记成
+     * 「已加载」—— 空列表和读失败在界面上是同一种表现（不显示这一块），重试没有意义。
+     */
+    private fun loadMyPlaylists() {
+        val state = _uiState.value
+        if (state.myPlaylistsLoaded || state.isLoadingMyPlaylists) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingMyPlaylists = true) }
+            val playlists = try {
+                onlinePlaylistRepository.fetchMyPlaylists()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Timber.w(e, "loadMyPlaylists: failed")
+                emptyList()
+            }
+            _uiState.update {
+                it.copy(
+                    myPlaylists = playlists,
+                    myPlaylistsLoaded = true,
+                    isLoadingMyPlaylists = false
+                )
+            }
+        }
+    }
+
+    /** 导入列表里点中的那一张：取数走 id，落库与链接导入完全一致。 */
+    private fun handleImportMyPlaylist(playlistId: String) {
+        if (playlistId.isBlank() || _uiState.value.isImporting) return
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(isImporting = true, importError = null, importDone = 0, importTotal = 0)
+            }
+            val outcome = try {
+                importOnlinePlaylistUseCase.importById(playlistId) { done, total ->
+                    _uiState.update { it.copy(importDone = done, importTotal = total) }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Timber.w(e, "handleImportMyPlaylist: failed")
+                _uiState.update {
+                    it.copy(isImporting = false, importError = R.string.mymusic_import_error_network)
+                }
+                return@launch
+            }
+            applyImportOutcome(outcome)
+        }
+    }
+
+    /** 两种导入入口（链接 / 我的歌单）共用的收尾：进度、跳转、失败原因都在这里定。 */
+    private suspend fun applyImportOutcome(outcome: ImportOnlinePlaylistOutcome) {
+        when (outcome) {
+            is ImportOnlinePlaylistOutcome.Imported -> {
+                Timber.d("import: ${outcome.playlistName} / ${outcome.imported}")
+                _uiState.update { it.copy(isImporting = false, importInput = "") }
+                _uiEffect.emit(MyMusicEffect.NavigateToPlaylistDetail(outcome.playlistId))
+            }
+
+            ImportOnlinePlaylistOutcome.InvalidLink -> _uiState.update {
+                it.copy(isImporting = false, importError = R.string.mymusic_import_error_link)
+            }
+
+            ImportOnlinePlaylistOutcome.NotAccessible -> _uiState.update {
+                it.copy(isImporting = false, importError = R.string.mymusic_import_error_unavailable)
+            }
+
+            is ImportOnlinePlaylistOutcome.Failed -> _uiState.update {
+                it.copy(isImporting = false, importError = R.string.mymusic_import_error_network)
+            }
         }
     }
 

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Flamingo 1.0.0（2608310056）的 flamingo_appwidget_icon，图标含义：小部件图标。
+     pathData 原样搬运；viewport 收到图形包围盒（源文件里的留白已裁掉），
+     所以同一 dp 下各图标的墨迹大小一致。颜色一律 #FF000000，由 Icon 的 tint 决定。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="192"
+    android:viewportHeight="192">
+    <group android:translateX="-0" android:translateY="-0">
+        <path
+            android:fillColor="#FF000000"
+            android:pathData="M149,56.5V34.5V32L84,46.5L82.5,116.5L43,125.5V159.38L104,146L105.5,66L149,56.5Z" />
+    </group>
+</vector>

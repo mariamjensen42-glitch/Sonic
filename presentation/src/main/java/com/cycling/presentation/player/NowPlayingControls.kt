@@ -1,5 +1,7 @@
 package com.cycling.presentation.player
 
+import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -31,11 +33,12 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
-import com.cycling.core.ui.components.SonGlyph
-import com.cycling.core.ui.components.SonGlyphIcon
+import androidx.compose.ui.unit.dp
+import com.cycling.core.ui.components.FlamingoIcon
 import com.cycling.core.ui.apple.AppleType
 import com.cycling.core.ui.theme.LocalSonExtendedColors
 import com.cycling.core.ui.theme.SonSpacing
+import com.cycling.domain.model.Song
 import com.cycling.presentation.R
 import com.cycling.presentation.components.formatDuration
 
@@ -76,7 +79,8 @@ internal fun PlayerControls(
         Spacer(modifier = Modifier.height(PlayerSceneSpec.timeRowMargin))
         TimeRow(
             position = uiState.playbackPosition,
-            duration = uiState.duration
+            duration = uiState.duration,
+            quality = uiState.currentSong.losslessTier()
         )
         Spacer(modifier = Modifier.height(SonSpacing.mediumSmall))
         TransportRow(
@@ -193,38 +197,97 @@ private fun PlayerSeekBar(
     }
 }
 
-/** 时间行：左侧已播、右侧剩余（带负号），Apple Music 的读法。 */
+/** 时间行：左侧已播、右侧剩余（带负号）、中间是音质徽标 —— Apple Music 的读法。 */
 @Composable
 private fun TimeRow(
     position: Long,
-    duration: Long
+    duration: Long,
+    quality: LosslessTier?
 ) {
     val extended = LocalSonExtendedColors.current
-    Row(
+    val tint = extended.onArtwork.copy(alpha = 0.6f)
+    // 三格定位：左边已播、右边剩余、中间是品质徽标。用 Box 的三处 align 而不是
+    // Row(SpaceBetween)：两边时间长度不一样时，Row 会把中间那颗挤偏，徽标就不在正中间了。
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(PlayerSceneSpec.timeRowHeight),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+            .height(PlayerSceneSpec.timeRowHeight)
     ) {
         Text(
             text = formatDuration(position),
+            modifier = Modifier.align(Alignment.CenterStart),
             style = AppleType.caption1Emphasized,
-            color = extended.onArtwork.copy(alpha = 0.6f)
+            color = tint
         )
+        if (quality != null) {
+            Row(
+                modifier = Modifier.align(Alignment.Center),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                FlamingoIcon(
+                    res = R.drawable.ic_flamingo_lossless,
+                    // 文字已经说明是「无损」，图标只是同一句话的图形版本，不进无障碍树。
+                    contentDescription = null,
+                    tint = tint,
+                    size = 18.dp
+                )
+                Text(
+                    text = stringResource(quality.labelRes),
+                    style = AppleType.caption1Emphasized,
+                    color = tint
+                )
+            }
+        }
         Text(
             text = "-${formatDuration((duration - position).coerceAtLeast(0))}",
+            modifier = Modifier.align(Alignment.CenterEnd),
             style = AppleType.caption1Emphasized,
-            color = extended.onArtwork.copy(alpha = 0.6f)
+            color = tint
         )
     }
+}
+
+/**
+ * 进度条下方那枚品质徽标的档位。
+ *
+ * 只区分无损的两档 —— Apple Music 那个位置也只在这两种情况下出现徽标，
+ * 有损曲目留白比硬塞一个「MP3 320k」干净。判定与设置页统计（HR / SQ）同一套阈值：
+ * 先看容器是不是无损（mime / 后缀），再看码率是否高过 CD（1411 kbps）。
+ */
+private enum class LosslessTier(@param:StringRes val labelRes: Int) {
+    HI_RES(R.string.player_quality_hi_res),
+    LOSSLESS(R.string.player_quality_lossless)
+}
+
+/** 无损容器：flac / wav / aiff / ape / wavpack / tta / DSD。m4a 不放进来 —— AAC 也用它。 */
+private val LosslessMimeTypes = setOf(
+    "audio/flac", "audio/x-flac",
+    "audio/wav", "audio/x-wav", "audio/wave",
+    "audio/aiff", "audio/x-aiff",
+    "audio/x-ape", "audio/x-wv", "audio/x-tta",
+    "audio/x-dsf", "audio/x-dff", "audio/dsd"
+)
+
+private val LosslessExtensions = setOf(
+    "flac", "wav", "wave", "aiff", "aif", "aifc", "ape", "wv", "tta", "dsf", "dff"
+)
+
+private fun Song?.losslessTier(): LosslessTier? {
+    if (this == null) return null
+    val lossless = mimeType.lowercase() in LosslessMimeTypes ||
+        path.substringAfterLast('.', "").lowercase() in LosslessExtensions
+    if (!lossless) return null
+    return if (bitrate > 1411) LosslessTier.HI_RES else LosslessTier.LOSSLESS
 }
 
 /**
  * 运输键。
  *
  * 用 Material 的 [IconButton]：涟漪与 Expressive 的形状变形由组件内部完成，页面只给尺寸
- * 与语义，不再手写指示或缩放。
+ * 与语义，不再手写指示或缩放。上一首 / 下一首用 Flamingo 的**双三角**（`Rewind` /
+ * `FastForward`），不是 Apple 的「竖条+三角」—— 换了图形语言就要连读法一起换，两种混着
+ * 拼会得到一只四不像。
  */
 @Composable
 private fun TransportRow(
@@ -239,7 +302,7 @@ private fun TransportRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         TransportButton(
-            glyph = SonGlyph.SkipBack,
+            icon = R.drawable.ic_flamingo_rewind,
             description = stringResource(R.string.player_previous_desc),
             iconSize = PlayerSceneSpec.transportIcon,
             tint = extended.onArtwork,
@@ -250,7 +313,7 @@ private fun TransportRow(
         )
         Spacer(modifier = Modifier.width(PlayerSceneSpec.transportGap))
         TransportButton(
-            glyph = if (isPlaying) SonGlyph.Pause else SonGlyph.Play,
+            icon = if (isPlaying) R.drawable.ic_flamingo_pause else R.drawable.ic_flamingo_play,
             description = if (isPlaying) {
                 stringResource(R.string.player_pause_desc)
             } else {
@@ -265,7 +328,7 @@ private fun TransportRow(
         )
         Spacer(modifier = Modifier.width(PlayerSceneSpec.transportGap))
         TransportButton(
-            glyph = SonGlyph.SkipForward,
+            icon = R.drawable.ic_flamingo_fast_forward,
             description = stringResource(R.string.player_next_desc),
             iconSize = PlayerSceneSpec.transportIcon,
             tint = extended.onArtwork,
@@ -279,7 +342,7 @@ private fun TransportRow(
 
 @Composable
 private fun TransportButton(
-    glyph: SonGlyph,
+    @DrawableRes icon: Int,
     description: String,
     iconSize: Dp,
     tint: Color,
@@ -289,8 +352,8 @@ private fun TransportButton(
         onClick = onClick,
         modifier = Modifier.size(PlayerSceneSpec.transportSize)
     ) {
-        SonGlyphIcon(
-            glyph = glyph,
+        FlamingoIcon(
+            res = icon,
             contentDescription = description,
             tint = tint,
             size = iconSize
@@ -298,7 +361,12 @@ private fun TransportButton(
     }
 }
 
-/** 页脚三颗：歌词 / 随机 / 队列。选中项满亮，其余压到 45%。 */
+/**
+ * 页脚三颗：歌词 / 随机 / 队列。选中项满亮，其余压到 45%。
+ *
+ * 歌词与队列有「开启态」的第二张图（Flamingo 的 `LyricsOn` / `QueueOn`），选中时换图而不是
+ * 只提亮 —— 这两个图标本身就是靠「多一道笔画」表达打开，只改透明度看不出开关。
+ */
 @Composable
 private fun PageSelectorRow(
     viewMode: PlayerViewMode,
@@ -315,7 +383,8 @@ private fun PageSelectorRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         SelectorButton(
-            glyph = SonGlyph.Lyrics,
+            icon = R.drawable.ic_flamingo_lyrics,
+            activeIcon = R.drawable.ic_flamingo_lyrics_on,
             active = viewMode == PlayerViewMode.LYRICS,
             description = stringResource(R.string.player_toggle_lyrics),
             tint = extended.onArtwork,
@@ -331,7 +400,7 @@ private fun PageSelectorRow(
             }
         )
         SelectorButton(
-            glyph = SonGlyph.Shuffle,
+            icon = R.drawable.ic_flamingo_shuffle,
             active = shuffleEnabled,
             description = stringResource(R.string.player_shuffle_desc),
             tint = extended.onArtwork,
@@ -341,7 +410,8 @@ private fun PageSelectorRow(
             }
         )
         SelectorButton(
-            glyph = SonGlyph.Queue,
+            icon = R.drawable.ic_flamingo_queue,
+            activeIcon = R.drawable.ic_flamingo_queue_on,
             active = viewMode == PlayerViewMode.QUEUE,
             description = stringResource(R.string.player_queue_title),
             tint = extended.onArtwork,
@@ -361,19 +431,19 @@ private fun PageSelectorRow(
 
 @Composable
 private fun SelectorButton(
-    glyph: SonGlyph,
+    @DrawableRes icon: Int,
     active: Boolean,
     description: String,
     tint: Color,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    @DrawableRes activeIcon: Int = icon
 ) {
     IconButton(
         onClick = onClick,
         modifier = Modifier.size(PlayerSceneSpec.selectorHeight)
     ) {
-        SonGlyphIcon(
-            glyph = glyph,
-            filled = active,
+        FlamingoIcon(
+            res = if (active) activeIcon else icon,
             contentDescription = description,
             tint = tint.copy(alpha = if (active) 1f else 0.45f),
             size = PlayerSceneSpec.selectorIcon

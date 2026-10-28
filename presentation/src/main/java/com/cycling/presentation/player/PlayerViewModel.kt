@@ -3,6 +3,7 @@ package com.cycling.presentation.player
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cycling.domain.model.LyricsCandidate
+import com.cycling.domain.model.LyricsProvider
 import com.cycling.domain.model.LyricsSource
 import com.cycling.domain.model.PlayerEvent
 import com.cycling.domain.model.RepeatMode
@@ -12,6 +13,7 @@ import com.cycling.domain.repository.SettingsRepository
 import com.cycling.domain.repository.SongRepository
 import com.cycling.domain.usecase.GetLyricsUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -19,6 +21,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -62,6 +65,25 @@ class PlayerViewModel @Inject constructor(
      * 上一次查到的候选版本。带上内容，所以不放进 UI state —— 界面只需要版本描述，选中时用 id 回查。
      */
     private var lyricsCandidates: List<LyricsCandidate> = emptyList()
+
+    /**
+     * 按来源分桶的候选版本。
+     *
+     * 面板是逐家上报的，到达顺序等于各家的响应速度；界面要的是稳定的顺序（来源固定、版本按
+     * 提供方给的优先级），所以这里按来源存起来，每次重建成一条扁平列表。
+     */
+    private val candidatesByProvider = LinkedHashMap<LyricsProvider, List<LyricsCandidate>>()
+
+    /** 正在跑的那一轮候选查询；面板关掉或换歌时要停掉，别让六个站点的请求继续跑完。 */
+    private var candidatesJob: Job? = null
+
+    /**
+     * 当前是第几轮查询。
+     *
+     * `cancel()` 是协作式的：上一轮的 `finally` 可能晚于下一轮启动才跑，那时它会把新一轮刚设好的
+     * 「正在查询」清掉。带上轮次号，过期的收尾就不许再改状态。
+     */
+    private var candidatesRound = 0
 
     init {
         observePlayerState()
@@ -115,6 +137,18 @@ class PlayerViewModel @Inject constructor(
                 _uiState.update { it.copy(playerSpectrumEnabled = enabled) }
             }
         }
+        // 队列页那排模式按钮的后两档：「智能续播」与「淡入淡出」。
+        // 真正的执行都在 PlayerManager 里，这里只是把当前档位读回来显示。
+        viewModelScope.launch {
+            settingsRepository.autoContinueEnabled.collect { enabled ->
+                _uiState.update { it.copy(autoContinueEnabled = enabled) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.audioFadeDurationMs.collect { durationMs ->
+                _uiState.update { it.copy(audioFadeEnabled = durationMs > 0L) }
+            }
+        }
         viewModelScope.launch {
             settingsRepository.hiResBadge.collect { badge ->
                 _uiState.update { it.copy(hiResBadge = badge) }
@@ -145,6 +179,11 @@ class PlayerViewModel @Inject constructor(
                 _uiState.update { it.copy(lyricsBlurEnabled = enabled) }
             }
         }
+        viewModelScope.launch {
+            settingsRepository.lyricsTranslationEnabled.collect { enabled ->
+                _uiState.update { it.copy(lyricsTranslationEnabled = enabled) }
+            }
+        }
     }
 
     private fun observePlayerState() {
@@ -160,6 +199,8 @@ class PlayerViewModel @Inject constructor(
                         showPlaybackSettings = prev.showPlaybackSettings,
                         playbackSpeed = prev.playbackSpeed,
                         playerSpectrumEnabled = prev.playerSpectrumEnabled,
+                        autoContinueEnabled = prev.autoContinueEnabled,
+                        audioFadeEnabled = prev.audioFadeEnabled,
                         sleepTimerRemainingMs = prev.sleepTimerRemainingMs,
                         sleepTimerMinutes = prev.sleepTimerMinutes,
                         hiResBadge = prev.hiResBadge,
@@ -168,6 +209,7 @@ class PlayerViewModel @Inject constructor(
                         lyricsAlignCenter = prev.lyricsAlignCenter,
                         lyricsGlowEnabled = prev.lyricsGlowEnabled,
                         lyricsBlurEnabled = prev.lyricsBlurEnabled,
+                        lyricsTranslationEnabled = prev.lyricsTranslationEnabled,
                         lyrics = if (songChanged) null else prev.lyrics,
                         isLoadingLyrics = if (songChanged) false else prev.isLoadingLyrics,
                         hasLyrics = if (songChanged) false else prev.hasLyrics,
@@ -176,6 +218,8 @@ class PlayerViewModel @Inject constructor(
                         lyricsCandidates = if (songChanged) emptyList() else prev.lyricsCandidates,
                         showLyricsCandidates = if (songChanged) false else prev.showLyricsCandidates,
                         isLoadingLyricsCandidates = if (songChanged) false else prev.isLoadingLyricsCandidates,
+                        lyricsCandidatesPending = if (songChanged) emptySet() else prev.lyricsCandidatesPending,
+                        lyricsCandidatesFailed = if (songChanged) emptySet() else prev.lyricsCandidatesFailed,
                         // 换歌时先归零：上一首的偏移在这首歌上会显示成歌词跑偏，直到读完新值
                         lyricsOffsetMs = if (songChanged) 0L else prev.lyricsOffsetMs,
                         isFavorite = if (currentSong?.id != null && currentSong.id == prev.currentSong?.id) prev.isFavorite else currentSong?.isFavorite ?: false
@@ -186,6 +230,14 @@ class PlayerViewModel @Inject constructor(
                     lastLyricsSongPath = currentSong.path
                     loadLyrics(currentSong)
                     loadLyricsOffset(currentSong.id)
+                }
+
+                if (songChanged) {
+                    // 私有的那份分桶缓存也一起清掉：它不参与渲染，但选中时是按 id 回查的，
+                    // 留着上一首的版本会让「选中的 id」在下一首上仍然命中。
+                    candidatesJob?.cancel()
+                    candidatesByProvider.clear()
+                    lyricsCandidates = emptyList()
                 }
             }
         }
@@ -234,29 +286,90 @@ class PlayerViewModel @Inject constructor(
      * 拉一份版本列表给「选择歌词」用。
      *
      * 每次都重新查而不是复用上一份：用户点这个按钮，多半就是因为自动挑的那份不对，那么刚才那次
-     * 自动挑选的结果正是他想绕开的东西。查的过程中面板立刻打开并显示加载中，不让点击看起来没反应。
+     * 自动挑选的结果正是他想绕开的东西。查的过程中面板立刻打开，并且**每查到一家就画一家** ——
+     * 六家站点里只要有一家慢，攒齐再画就意味着几秒钟的空面板。
      */
     private fun openLyricsCandidates() {
         val song = _uiState.value.currentSong ?: return
 
-        viewModelScope.launch {
-            _uiState.update { it.copy(showLyricsCandidates = true, isLoadingLyricsCandidates = true) }
-
-            val found = getLyricsUseCase.candidates(song)
-            lyricsCandidates = found
-
-            _uiState.update {
-                it.copy(lyricsCandidates = found, isLoadingLyricsCandidates = false)
+        candidatesJob?.cancel()
+        val round = ++candidatesRound
+        candidatesJob = viewModelScope.launch {
+            // 「一个都没搜到」和「在线取词被你关了」要分开说：后者去设置里一开就好，
+            // 前者才是真的没有。开关关着时连面板都不必开。
+            if (!settingsRepository.onlineLyricsEnabled.first()) {
+                _uiEffect.emit(PlayerEffect.ShowToast(R.string.song_detail_lyrics_online_disabled))
+                return@launch
             }
 
-            if (found.isEmpty()) {
+            val asked = settingsRepository.lyricsProviderOrder.first()
+            candidatesByProvider.clear()
+            lyricsCandidates = emptyList()
+
+            _uiState.update {
+                it.copy(
+                    showLyricsCandidates = true,
+                    isLoadingLyricsCandidates = true,
+                    lyricsCandidates = emptyList(),
+                    lyricsCandidatesPending = asked.toSet(),
+                    lyricsCandidatesFailed = emptySet()
+                )
+            }
+
+            try {
+                getLyricsUseCase.candidates(song).collect { batch ->
+                    candidatesByProvider[batch.provider] = batch.candidates
+                    val merged = mergeCandidates()
+                    lyricsCandidates = merged
+
+                    _uiState.update {
+                        it.copy(
+                            lyricsCandidates = merged,
+                            isLoadingLyricsCandidates = false,
+                            lyricsCandidatesPending = it.lyricsCandidatesPending - batch.provider,
+                            lyricsCandidatesFailed = if (batch.failed) {
+                                it.lyricsCandidatesFailed + batch.provider
+                            } else {
+                                it.lyricsCandidatesFailed
+                            }
+                        )
+                    }
+                }
+            } finally {
+                // 取消（换歌、退出播放页）也要收掉「还在查」的状态，否则面板下次打开还挂着上一轮。
+                // 只收自己这一轮：下一轮已经开始的话，这些状态归它管。
+                if (round == candidatesRound) {
+                    _uiState.update {
+                        it.copy(isLoadingLyricsCandidates = false, lyricsCandidatesPending = emptySet())
+                    }
+                }
+            }
+
+            if (lyricsCandidates.isEmpty()) {
                 _uiEffect.emit(PlayerEffect.ShowToast(R.string.lyrics_candidates_empty))
             }
         }
     }
 
+    /**
+     * 把分桶的候选版本摊平成一条列表。
+     *
+     * 顺序固定为 [LyricsProvider.entries]（AMLL → 网易云 → QQ → 酷狗 → LRCLIB → 音源脚本），
+     * 而不是到达顺序：并发查询下到达顺序每次都不一样，面板里的平台分组就会跳来跳去。
+     */
+    private fun mergeCandidates(): List<LyricsCandidate> =
+        LyricsProvider.entries.flatMap { candidatesByProvider[it].orEmpty() }
+
     private fun dismissLyricsCandidates() {
-        _uiState.update { it.copy(showLyricsCandidates = false) }
+        // 关掉面板就把还在跑的几家停掉：结果已经没人看了，再让它们跑完只是白费流量。
+        candidatesJob?.cancel()
+        _uiState.update {
+            it.copy(
+                showLyricsCandidates = false,
+                isLoadingLyricsCandidates = false,
+                lyricsCandidatesPending = emptySet()
+            )
+        }
     }
 
     private fun selectLyricsCandidate(candidateId: String) {
@@ -274,9 +387,16 @@ class PlayerViewModel @Inject constructor(
                     hasLyrics = hasLyrics,
                     lyricsSource = result.source,
                     showLyricsCandidates = false,
-                    lyricsCandidates = emptyList()
+                    lyricsCandidates = emptyList(),
+                    lyricsCandidatesPending = emptySet(),
+                    lyricsCandidatesFailed = emptySet()
                 )
             }
+
+            // 选完这一轮就结束了，下一次打开是重新查的一轮。
+            candidatesJob?.cancel()
+            candidatesByProvider.clear()
+            lyricsCandidates = emptyList()
 
             _uiEffect.emit(PlayerEffect.ShowToast(R.string.lyrics_candidate_selected))
         }
@@ -340,6 +460,26 @@ class PlayerViewModel @Inject constructor(
             is PlayerIntent.ToggleShuffleMode -> {
                 Timber.d("handleIntent: ToggleShuffleMode")
                 toggleShuffleMode()
+            }
+            is PlayerIntent.ToggleAutoContinue -> {
+                Timber.d("handleIntent: ToggleAutoContinue")
+                // 写设置而不是直接改播放器：「智能续播」是跨会话的偏好，
+                // 只改内存里的开关，重启后又变回设置页那个值。
+                viewModelScope.launch {
+                    settingsRepository.setAutoContinueEnabled(!_uiState.value.autoContinueEnabled)
+                }
+            }
+            is PlayerIntent.ToggleAudioFade -> {
+                Timber.d("handleIntent: ToggleAudioFade")
+                viewModelScope.launch {
+                    // 关掉存 0；打开回到默认的那一档（倍速面板里也是这个值）。
+                    val next = if (_uiState.value.audioFadeEnabled) {
+                        0L
+                    } else {
+                        SettingsRepository.DEFAULT_AUDIO_FADE_DURATION_MS
+                    }
+                    settingsRepository.setAudioFadeDurationMs(next)
+                }
             }
             is PlayerIntent.AddToQueue -> {
                 Timber.d("handleIntent: AddToQueue - ${intent.song.title}")
@@ -433,6 +573,11 @@ class PlayerViewModel @Inject constructor(
             }
             is PlayerIntent.SetLyricsBlurEnabled -> {
                 viewModelScope.launch { settingsRepository.setLyricsBlurEnabled(intent.enabled) }
+            }
+            is PlayerIntent.SetLyricsTranslationEnabled -> {
+                viewModelScope.launch {
+                    settingsRepository.setLyricsTranslationEnabled(intent.enabled)
+                }
             }
         }
     }

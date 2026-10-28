@@ -22,9 +22,9 @@ import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
-import com.cycling.core.ui.theme.LocalSonExtendedColors
 import com.cycling.core.ui.theme.SonSpacing
 import com.cycling.domain.lyrics.model.karaoke.KaraokeAlignment
+import com.cycling.presentation.lyrics.LocalLyricsPalette
 import kotlin.math.PI
 import kotlin.math.cos
 
@@ -36,7 +36,7 @@ data class KaraokeBreathingDotsDefaults(
     val preExitStillDuration: Int = 200,
     val preExitDipAndRiseDuration: Int = 3000,
     val exitDurationMs: Int = 200,
-    /** 留空表示跟随主题的"非当前行"色。 */
+    /** 留空表示跟随当前歌词页的调色板（正文色压到「非当前行」的亮度）。 */
     val breathingDotsColor: Color = Color.Unspecified
 )
 
@@ -51,10 +51,15 @@ fun KaraokeBreathingDots(
     /** 歌词行居中时，间奏点也跟着居中，否则会单独黏在左边。 */
     center: Boolean = false,
 ) {
-    val extended = LocalSonExtendedColors.current
+    val palette = LocalLyricsPalette.current
+    // 与歌词文字同源：正文色压到非当前行的亮度。别取主题里的「非当前行色」——
+    // 浅色主题下它是深灰，压在深色色面上几乎看不见。
     val dotColor =
-        if (defaults.breathingDotsColor == Color.Unspecified) extended.lyricsInactive
-        else defaults.breathingDotsColor
+        if (defaults.breathingDotsColor == Color.Unspecified) {
+            palette.textColor.copy(alpha = palette.inactiveLineAlpha)
+        } else {
+            defaults.breathingDotsColor
+        }
 
     // 撑满宽度，居中对齐才有参照；非居中时 Canvas 仍贴起始侧，观感不变。
     Box(modifier.fillMaxWidth()) {

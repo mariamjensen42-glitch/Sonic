@@ -1,12 +1,16 @@
 package com.cycling.data.mapper
 
+import com.cycling.data.local.entity.DownloadTaskEntity
 import com.cycling.data.local.entity.PlaylistEntity
 import com.cycling.data.local.entity.SongEntity
 import com.cycling.data.local.entity.SongMetadataEntity
 import com.cycling.domain.model.Artist
+import com.cycling.domain.model.DownloadState
+import com.cycling.domain.model.DownloadTask
 import com.cycling.domain.model.Playlist
 import com.cycling.domain.model.Song
 import com.cycling.domain.model.TagUpdate
+import com.cycling.domain.online.model.MusicQuality
 
 fun SongEntity.toDomain(): Song {
     return Song(
@@ -138,6 +142,25 @@ fun TagUpdate.toSongMetadataEntity(
         publisher = publisher,
         copyright = copyright,
         comment = comment,
+        updatedAt = updatedAt
+    )
+}
+
+fun DownloadTaskEntity.toDomain(): DownloadTask {
+    return DownloadTask(
+        id = id,
+        songId = songId,
+        title = title,
+        artist = artist,
+        album = album,
+        albumArt = albumArt,
+        quality = runCatching { MusicQuality.valueOf(quality) }.getOrDefault(MusicQuality.EXHIGH),
+        state = runCatching { DownloadState.valueOf(state) }.getOrDefault(DownloadState.QUEUED),
+        bytesDownloaded = bytesDownloaded,
+        totalBytes = totalBytes,
+        filePath = filePath,
+        errorMessage = errorMessage,
+        createdAt = createdAt,
         updatedAt = updatedAt
     )
 }

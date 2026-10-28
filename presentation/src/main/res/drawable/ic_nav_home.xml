@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 首页 tab：SF `house` 的轮廓（Apple Music 首页那颗）。
+     约定同 ic_flamingo_*：只描边、2.0 圆头、viewport 收到图形包围盒（含描边），
+     颜色写 #FF000000 当占位，实际由 Icon 的 tint 决定。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="18.8dp"
+    android:height="19.1dp"
+    android:viewportWidth="18.8"
+    android:viewportHeight="19.1">
+    <group android:translateX="-2.6" android:translateY="-2.9">
+        <path
+            android:pathData="M3.6 10.9 12 3.9 20.4 10.9"
+            android:strokeColor="#FF000000"
+            android:strokeWidth="2"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+        <path
+            android:pathData="M5.4 9.7V19.3A1.7 1.7 0 0 0 7.1 21H16.9A1.7 1.7 0 0 0 18.6 19.3V9.7"
+            android:strokeColor="#FF000000"
+            android:strokeWidth="2"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+        <path
+            android:pathData="M9.9 21V15.4A2.1 2.1 0 0 1 14.1 15.4V21"
+            android:strokeColor="#FF000000"
+            android:strokeWidth="2"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+    </group>
+</vector>

@@ -7,6 +7,7 @@ import com.cycling.domain.model.CacheUsage
 import com.cycling.domain.model.HiResBadge
 import com.cycling.domain.model.LibraryStats
 import com.cycling.domain.model.LyricsProvider
+import com.cycling.domain.model.QQMusicAccount
 import com.cycling.domain.model.ScanResult
 import com.cycling.domain.model.ScanStep
 import com.cycling.domain.repository.AiRepository
@@ -14,6 +15,8 @@ import com.cycling.domain.repository.CacheRepository
 import com.cycling.domain.repository.ExcludedFolderRepository
 import com.cycling.domain.repository.LibraryTransferRepository
 import com.cycling.domain.repository.PlayerRepository
+import com.cycling.domain.repository.QQMusicAccountRepository
+import com.cycling.domain.repository.RecordingFilterRepository
 import com.cycling.domain.repository.SettingsRepository
 import com.cycling.domain.repository.SettingsRepository.Companion.DEFAULT_CACHE_LIMIT_BYTES
 import com.cycling.domain.repository.SettingsRepository.Companion.DEFAULT_LYRICS_PROVIDER_ORDER
@@ -37,7 +40,14 @@ import timber.log.Timber
 import javax.inject.Inject
 
 enum class SettingsDestination {
-    MAIN, SCAN, EXCLUDE_FOLDERS, API_KEY_CONFIG, LIBRARY_STATS, EQUALIZER, ONLINE_SOURCES
+    MAIN,
+    SCAN,
+    EXCLUDE_FOLDERS,
+    API_KEY_CONFIG,
+    LIBRARY_STATS,
+    EQUALIZER,
+    ONLINE_SOURCES,
+    QQ_MUSIC_ACCOUNT
 }
 
 data class SettingsUiState(
@@ -64,6 +74,8 @@ data class SettingsUiState(
     val lyricsProviderOrder: List<LyricsProvider> = DEFAULT_LYRICS_PROVIDER_ORDER,
     val playbackSpeed: Float = DEFAULT_PLAYBACK_SPEED,
     val skipSilence: Boolean = false,
+    /** 扫描时是否把录音 / 通话录音踢出曲库。 */
+    val excludeRecordings: Boolean = true,
     val replayGainEnabled: Boolean = false,
     val audioFadeDurationMs: Long = SettingsRepository.DEFAULT_AUDIO_FADE_DURATION_MS,
     val rememberPlaybackPosition: Boolean = true,
@@ -82,6 +94,8 @@ data class SettingsUiState(
     val hiResBadge: HiResBadge = HiResBadge.OFF,
     /** 自定义小金标图片；与 [hiResBadge] 一起决定要不要真的去加载。 */
     val hiResBadgeCustomUri: String? = null,
+    /** 已登录的 QQ 音乐账号；未登录为 null。设置页那一行用它显示当前身份。 */
+    val qqMusicAccount: QQMusicAccount? = null,
 )
 
 sealed interface SettingsScanStep {
@@ -128,6 +142,7 @@ sealed interface SettingsIntent {
     data class SetAutoCleanCache(val enabled: Boolean) : SettingsIntent
     data class SetHiResBadge(val badge: HiResBadge) : SettingsIntent
     data class SetHiResBadgeCustomUri(val uri: String?) : SettingsIntent
+    data class SetExcludeRecordings(val enabled: Boolean) : SettingsIntent
 }
 
 sealed interface SettingsEffect {
@@ -141,11 +156,13 @@ class SettingsViewModel @Inject constructor(
     private val aiRepository: AiRepository,
     private val scanMusicUseCase: ScanMusicUseCase,
     private val excludedFolderRepository: ExcludedFolderRepository,
+    private val recordingFilterRepository: RecordingFilterRepository,
     private val getLibraryStatsUseCase: GetLibraryStatsUseCase,
     private val settingsRepository: SettingsRepository,
     private val libraryTransferRepository: LibraryTransferRepository,
     private val playerRepository: PlayerRepository,
-    private val cacheRepository: CacheRepository
+    private val cacheRepository: CacheRepository,
+    private val qqMusicAccountRepository: QQMusicAccountRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -172,6 +189,7 @@ class SettingsViewModel @Inject constructor(
         observeAppearanceSettings()
         observeSleepTimer()
         observeCacheSettings()
+        observeQqMusicAccount()
         loadCacheUsage()
     }
 
@@ -194,6 +212,7 @@ class SettingsViewModel @Inject constructor(
             is SettingsIntent.MoveLyricsProvider -> moveLyricsProvider(intent.provider, intent.offset)
             is SettingsIntent.SetPlaybackSpeed -> setPlaybackSpeed(intent.speed)
             is SettingsIntent.SetSkipSilence -> setSkipSilence(intent.enabled)
+            is SettingsIntent.SetExcludeRecordings -> setExcludeRecordings(intent.enabled)
             is SettingsIntent.SetReplayGainEnabled -> setReplayGainEnabled(intent.enabled)
             is SettingsIntent.SetAudioFadeDuration -> setAudioFadeDuration(intent.durationMs)
             is SettingsIntent.SetRememberPlaybackPosition -> setRememberPlaybackPosition(intent.enabled)
@@ -237,6 +256,13 @@ class SettingsViewModel @Inject constructor(
             .launchIn(viewModelScope)
         settingsRepository.autoCleanCacheEnabled
             .onEach { enabled -> _uiState.update { it.copy(autoCleanCacheEnabled = enabled) } }
+            .launchIn(viewModelScope)
+    }
+
+    /** QQ 音乐账号：设置页那一行直接显示当前身份，登录/退出立刻反映出来。 */
+    private fun observeQqMusicAccount() {
+        qqMusicAccountRepository.account
+            .onEach { account -> _uiState.update { it.copy(qqMusicAccount = account) } }
             .launchIn(viewModelScope)
     }
 
@@ -307,6 +333,21 @@ class SettingsViewModel @Inject constructor(
         settingsRepository.autoContinueEnabled
             .onEach { enabled -> _uiState.update { it.copy(autoContinueEnabled = enabled) } }
             .launchIn(viewModelScope)
+        // 开关只是偏好，真正的过滤发生在扫描里：这里读回来是为了让开关显示的是仓库里的值。
+        recordingFilterRepository.excludeRecordings
+            .onEach { enabled -> _uiState.update { it.copy(excludeRecordings = enabled) } }
+            .launchIn(viewModelScope)
+    }
+
+    /**
+     * 切换「排除录音」后立刻重扫一遍：只写偏好不动曲库的话，已经进库的录音要等到下次
+     * 扫描才消失，看起来就像开关没生效。没有存储权限时只存偏好，重扫交给用户自己在扫描页触发。
+     */
+    private fun setExcludeRecordings(enabled: Boolean) {
+        viewModelScope.launch {
+            recordingFilterRepository.setExcludeRecordings(enabled)
+            if (_uiState.value.hasStoragePermission) startScan()
+        }
     }
 
     private fun setPlaybackSpeed(speed: Float) {

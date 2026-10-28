@@ -2,7 +2,9 @@ package com.cycling.domain.repository
 
 import com.cycling.domain.model.Lyrics
 import com.cycling.domain.model.LyricsCandidate
+import com.cycling.domain.model.LyricsCandidatesBatch
 import com.cycling.domain.model.Song
+import kotlinx.coroutines.flow.Flow
 
 interface LyricsRepository {
 
@@ -26,21 +28,27 @@ interface LyricsRepository {
     suspend fun refreshLyrics(song: Song): Lyrics
 
     /**
-     * Every version of [song]'s lyrics the online sources can offer, best first.
+     * Every version of [song]'s lyrics the online sources can offer, one batch per source as each
+     * one answers.
      *
-     * Empty when the user has online lyrics switched off, or when nothing was found. Versions that
-     * parse to the same lyrics are collapsed into one, since choosing between them would change
-     * nothing. Local sources are not included — see [LyricsCandidate].
+     * Empty — no batches at all — when the user has online lyrics switched off. Versions a single
+     * source repeats are collapsed into one, since choosing between them would change nothing; the
+     * same document offered by two catalogues is kept under each of them, because the picker groups
+     * by platform and hiding one would make "use that platform's copy" impossible. Local sources are
+     * not included — see [LyricsCandidate].
      *
-     * Costs a network round trip per source, so this is only for the picker, never for playback.
+     * The flow completes when every source has answered, so a collector that only wants the final
+     * answer can `toList()`. It costs a network round trip per source, so this is only for the
+     * picker, never for playback.
      */
-    suspend fun findLyricsCandidates(song: Song): List<LyricsCandidate>
+    fun findLyricsCandidates(song: Song): Flow<LyricsCandidatesBatch>
 
     /**
      * Uses [candidate] for [song] from now on, replacing whatever was cached for it.
      *
-     * The choice is remembered only as the cached copy, which is what the next lookup reads back —
-     * so a sidecar file or an embedded tag still wins, exactly as it does for any downloaded copy.
+     * The choice outranks a sidecar file and an embedded tag: it is the user saying "not that one",
+     * and a downloaded copy that the lookup then ignores would make the picker a lie. Only lyrics
+     * the user wrote themselves (see [saveLyrics]) still win, because those are not a guess either.
      * Returns [candidate]'s lyrics, or a source-less result when they turn out not to be parseable.
      */
     suspend fun selectLyricsCandidate(song: Song, candidate: LyricsCandidate): Lyrics

@@ -6,7 +6,6 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -32,13 +31,10 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
-import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -68,6 +64,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -81,6 +78,7 @@ import com.cycling.core.ui.components.M3SymbolIcon
 import com.cycling.core.ui.components.SymbolIconName
 import com.cycling.core.ui.apple.appleBottomBarClearance
 import com.cycling.core.ui.apple.AppleDims
+import com.cycling.core.ui.apple.AppleGlassCircleButton
 import com.cycling.core.ui.apple.AppleTheme
 import com.cycling.core.ui.apple.AppleType
 import com.cycling.core.ui.apple.applePress
@@ -120,9 +118,6 @@ private const val HeroTitleZoneStart = 0.72f
 /** 标题区起始浓度，之后一路加深到 [SonExtendedColors.artworkScrim]。 */
 private const val HeroScrimTitleAlpha = 0.42f
 
-/** 视差速率：封面以滚动量的这个比例跟随，越小纵深越强，但过小会脱节。 */
-private const val HeroParallaxRate = 0.5f
-
 /** hero 标题在折叠前 45% 淡出；顶栏标题从同一进度接手。 */
 private const val TitleFadeEnd = 0.45f
 
@@ -144,6 +139,20 @@ private const val HeroSubTextAlpha = 0.88f
 
 /** 多选操作栏的高度，用来给列表补底部留白。 */
 private val SelectionBarHeight = 72.dp
+
+/**
+ * 头部版式。
+ *
+ * - [FullBleed]：封面满铺成方形、标题压在其底部（专辑 / 歌手详情沿用）。
+ * - [CenteredCover]：整屏封面模糊背景 + MeloX 英雄区（歌单详情，见 [MeloXPlaylistHero]）。
+ *
+ * 两种版式的折叠进度都按头部真实高度归一，所以外壳其余部分（顶栏 crossfade、
+ * 顶栏底色 band）不需要区分版本。
+ */
+enum class CollectionHeroStyle {
+    FullBleed,
+    CenteredCover
+}
 
 /** 顶栏标题的显现曲线：折叠过半起步，四分之一程内走完。 */
 private fun State<Float>.headerAlpha(): Float =
@@ -170,6 +179,17 @@ fun CollectionDetailScreen(
     onIntent: (SongCollectionIntent) -> Unit,
     modifier: Modifier = Modifier,
     bottomPadding: Dp = 0.dp,
+    /** 头部版式，见 [CollectionHeroStyle]。 */
+    heroStyle: CollectionHeroStyle = CollectionHeroStyle.FullBleed,
+    /** [CollectionHeroStyle.CenteredCover] 的元数据行短语，按顺序用圆点连接。 */
+    headerMeta: List<String> = emptyList(),
+    /**
+     * 顶栏是否随滚动收起（标题 + 封面缩略图 + 底色）。歌单页传 false：
+     * 顶栏换成 MeloX 的 58dp 工具条，不收起、也不显示大标题。
+     */
+    topBarCollapse: Boolean = true,
+    /** 曲目行是否显示序号。歌单页传 false，行首改显封面（MeloX 排版）。 */
+    showTrackNumbers: Boolean = true,
     onRemoveSelected: (() -> Unit)? = null,
     removeLabel: String? = null,
     songSubtitle: (Song) -> String? = { null },
@@ -221,18 +241,138 @@ fun CollectionDetailScreen(
         val statusBarInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
         // 折叠进度 0→1。头部整体离开视口后固定为 1，避免首项索引变化导致回弹。
-        val collapse = remember(heroSide, density) {
+        // 归一基准取头部**实测高度**：满铺 hero 恰好等于边长，居中封面版式则要高得多，
+        // 若仍按边长算，后者滚过三分之一就已经「折叠完成」，顶栏标题会提前抢跑。
+        var headerHeightPx by remember { mutableIntStateOf(0) }
+
+        val collapse = remember(heroSide, density, headerHeightPx) {
             derivedStateOf {
-                val sidePx = with(density) { heroSide.toPx() }
-                if (sidePx <= 0f) {
+                val span = headerHeightPx.takeIf { it > 0 }
+                    ?: with(density) { heroSide.toPx() }.toInt()
+                if (span <= 0) {
                     0f
                 } else {
                     val offsetPx = if (listState.firstVisibleItemIndex == 0) {
                         listState.firstVisibleItemScrollOffset
                     } else {
-                        sidePx.toInt()
+                        span
                     }
-                    (offsetPx.toFloat() / sidePx).coerceIn(0f, 1f)
+                    (offsetPx.toFloat() / span).coerceIn(0f, 1f)
+                }
+            }
+        }
+
+        // 顶栏的收起进度。歌单页（topBarCollapse = false）恒为 0：不显标题与缩略图、
+        // 也不铺底色 band，顶栏一直是「返回 + 动作按钮」的初始形态。
+        val barCollapse: State<Float> = if (topBarCollapse) {
+            collapse
+        } else {
+            remember { mutableStateOf(0f) }
+        }
+
+        // ── 顶栏的颜色与动作：浮层顶栏与 MeloX 工具条共用同一份，
+        // 两处各写一遍必然走样。
+        val extended = LocalSonExtendedColors.current
+        val navigationIconColor = lerp(
+            extended.onArtwork,
+            MaterialTheme.colorScheme.onSurface,
+            barCollapse.value
+        )
+        // 动作图标用品牌红（MeloX 歌单详情顶栏的做法），折叠后过渡回 onSurfaceVariant。
+        val actionIconColor = lerp(
+            AppleTheme.colors.systemRed,
+            MaterialTheme.colorScheme.onSurfaceVariant,
+            barCollapse.value
+        )
+        // 托底是「跟着图标明暗走的玻璃」而不是 60% 黑 scrim（见 AppleGlassCircleButton）：
+        // 白图标落在任意封面上都有对比度，又不会压出一块死色。它必须先于 surface band
+        // 退干净（band 在 62.5% 折叠时不透明，这里按 2 倍速率在 50% 归零）。
+        val glassFade = (1f - barCollapse.value * 2f).coerceIn(0f, 1f)
+        // 浮层顶栏随折叠淡出托底；歌单页（MeloX 工具条）一直是玻璃圆钮。
+        val barGlassAlpha: Float = if (topBarCollapse) glassFade else 1f
+        val barNavigationColor = if (topBarCollapse) navigationIconColor else AppleTheme.colors.label
+        val barIconColor = if (topBarCollapse) actionIconColor else AppleTheme.colors.systemRed
+
+        val barBackIcon = if (reorderMode || uiState.selectionMode) {
+            SymbolIconName.Close
+        } else {
+            SymbolIconName.ArrowBack
+        }
+        val barBackDescription = when {
+            reorderMode -> stringResource(R.string.collection_detail_exit_reorder_desc)
+            uiState.selectionMode -> stringResource(R.string.collection_detail_exit_selection_desc)
+            else -> backContentDescription
+        }
+        val onBarBack: () -> Unit = {
+            when {
+                reorderMode -> reorderMode = false
+                uiState.selectionMode -> onIntent(SongCollectionIntent.ExitSelectionMode)
+                else -> onNavigateBack()
+            }
+        }
+        val barActions: @Composable () -> Unit = {
+            val allSelected = songs.isNotEmpty() && uiState.selectedSongIds.size == songs.size
+            when {
+                uiState.selectionMode -> CollectionBarAction(
+                    icon = SymbolIconName.SelectAll,
+                    contentDescription = stringResource(
+                        if (allSelected) {
+                            R.string.songs_clear_selection_desc
+                        } else {
+                            R.string.songs_select_all_desc
+                        }
+                    ),
+                    onClick = {
+                        onIntent(
+                            if (allSelected) {
+                                SongCollectionIntent.ClearSelection
+                            } else {
+                                SongCollectionIntent.SelectAll
+                            }
+                        )
+                    },
+                    contentColor = barIconColor,
+                    glassAlpha = barGlassAlpha
+                )
+
+                reorderMode -> CollectionBarAction(
+                    icon = SymbolIconName.Check,
+                    contentDescription = stringResource(
+                        R.string.collection_detail_reorder_done_desc
+                    ),
+                    onClick = { reorderMode = false },
+                    contentColor = barIconColor,
+                    glassAlpha = barGlassAlpha
+                )
+
+                songs.isNotEmpty() -> {
+                    if (onExport != null) {
+                        CollectionBarAction(
+                            icon = SymbolIconName.IosShare,
+                            contentDescription = stringResource(R.string.playlist_detail_export_m3u),
+                            onClick = onExport,
+                            contentColor = barIconColor,
+                            glassAlpha = barGlassAlpha
+                        )
+                    }
+                    CollectionBarAction(
+                        icon = SymbolIconName.Checklist,
+                        contentDescription = stringResource(R.string.songs_select_desc),
+                        onClick = { onIntent(SongCollectionIntent.EnterSelectionMode) },
+                        contentColor = barIconColor,
+                        glassAlpha = barGlassAlpha
+                    )
+                    if (canReorder) {
+                        CollectionBarAction(
+                            icon = SymbolIconName.SwapVert,
+                            contentDescription = stringResource(
+                                R.string.collection_detail_reorder_desc
+                            ),
+                            onClick = { reorderMode = true },
+                            contentColor = barIconColor,
+                            glassAlpha = barGlassAlpha
+                        )
+                    }
                 }
             }
         }
@@ -244,172 +384,95 @@ fun CollectionDetailScreen(
             // 封面底部就会露出等高的空白带。
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             topBar = {
-                // 顶栏保持透明；底色由内容层顶部的 surface band 提供。
-                // 折叠中的 cover 在列表内滚动，不改变顶栏的形状与对齐。
-                val extended = LocalSonExtendedColors.current
-                val navigationIconColor = lerp(
-                    extended.onArtwork,
-                    MaterialTheme.colorScheme.onSurface,
-                    collapse.value
-                )
-                val actionIconColor = lerp(
-                    extended.onArtwork,
-                    MaterialTheme.colorScheme.onSurfaceVariant,
-                    collapse.value
-                )
-                // 图标压在任何封面上都要能看清：每个动作下面垫一层圆形 scrim。
-                // 0.60 是对着「纯白封面」与「纯黑封面」两端都能留住 4.5:1 的浓度；
-                // 它必须先于 surface band 退干净（band 在 62.5% 折叠时不透明，
-                // 这里按 2 倍速率在 50% 归零），否则会留下一个落在实底顶栏上的深色圆点。
-                val iconScrimAlpha = 0.60f * (1f - collapse.value * 2f).coerceIn(0f, 1f)
-                val iconContainerColor = extended.artworkScrim.copy(alpha = iconScrimAlpha)
-                CenterAlignedTopAppBar(
-                    title = {
-                        val headerAlpha = collapse.headerAlpha()
-                        if (headerAlpha > 0f) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                M3Artwork(
-                                    artwork = artwork,
-                                    placeholderIcon = placeholderIcon,
-                                    shape = MaterialTheme.shapes.small,
-                                    modifier = Modifier
-                                        .size(SonSizes.appBarArtwork)
-                                        .graphicsLayer { alpha = headerAlpha }
-                                )
-                                Spacer(modifier = Modifier.width(SonSpacing.small))
-                                Text(
-                                    text = title,
-                                    style = AppleType.subheadEmphasized,
-                                    color = AppleTheme.colors.label,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-                    },
-                    navigationIcon = {
-                        // 顶栏透明：图标颜色随折叠进度从 onArtwork 过渡到 onSurface。
-                        DetailTopBarAction(
-                            onClick = {
-                                when {
-                                    reorderMode -> reorderMode = false
-                                    uiState.selectionMode -> onIntent(
-                                        SongCollectionIntent.ExitSelectionMode
+                if (topBarCollapse) {
+                    // 透明浮层顶栏（专辑 / 歌手页）：标题与缩略图随折叠淡入。
+                    CenterAlignedTopAppBar(
+                        title = {
+                            val headerAlpha = barCollapse.headerAlpha()
+                            if (headerAlpha > 0f) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    M3Artwork(
+                                        artwork = artwork,
+                                        placeholderIcon = placeholderIcon,
+                                        shape = MaterialTheme.shapes.small,
+                                        modifier = Modifier
+                                            .size(SonSizes.appBarArtwork)
+                                            .graphicsLayer { alpha = headerAlpha }
                                     )
-                                    else -> onNavigateBack()
+                                    Spacer(modifier = Modifier.width(SonSpacing.small))
+                                    Text(
+                                        text = title,
+                                        style = AppleType.subheadEmphasized,
+                                        color = AppleTheme.colors.label,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
                                 }
-                            },
-                            icon = if (reorderMode || uiState.selectionMode) {
-                                SymbolIconName.Close
-                            } else {
-                                SymbolIconName.ArrowBack
-                            },
-                            contentDescription = when {
-                                reorderMode -> stringResource(
-                                    R.string.collection_detail_exit_reorder_desc
-                                )
-                                uiState.selectionMode -> stringResource(
-                                    R.string.collection_detail_exit_selection_desc
-                                )
-                                else -> backContentDescription
-                            },
-                            contentColor = navigationIconColor,
-                            containerColor = iconContainerColor
+                            }
+                        },
+                        navigationIcon = {
+                            CollectionBarAction(
+                                icon = barBackIcon,
+                                contentDescription = barBackDescription,
+                                onClick = onBarBack,
+                                contentColor = barNavigationColor,
+                                glassAlpha = barGlassAlpha
+                            )
+                        },
+                        // CenterAlignedTopAppBar 的 actions 是 RowScope 作用域，
+                        // 共用那份是无作用域的 @Composable () -> Unit，这里包一层。
+                        actions = { barActions() },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = Color.Transparent,
+                            scrolledContainerColor = Color.Transparent,
+                            navigationIconContentColor = barNavigationColor,
+                            titleContentColor = barNavigationColor,
+                            actionIconContentColor = barIconColor
                         )
-                    },
-                    actions = {
-                        when {
-                            uiState.selectionMode -> {
-                                val allSelected = songs.isNotEmpty() &&
-                                    uiState.selectedSongIds.size == songs.size
-                                DetailTopBarAction(
-                                    onClick = {
-                                        onIntent(
-                                            if (allSelected) {
-                                                SongCollectionIntent.ClearSelection
-                                            } else {
-                                                SongCollectionIntent.SelectAll
-                                            }
-                                        )
-                                    },
-                                    icon = SymbolIconName.SelectAll,
-                                    contentDescription = stringResource(
-                                        if (allSelected) {
-                                            R.string.songs_clear_selection_desc
-                                        } else {
-                                            R.string.songs_select_all_desc
-                                        }
-                                    ),
-                                    contentColor = actionIconColor,
-                                    containerColor = iconContainerColor
-                                )
-                            }
-                            reorderMode -> {
-                                DetailTopBarAction(
-                                    onClick = { reorderMode = false },
-                                    icon = SymbolIconName.Check,
-                                    contentDescription = stringResource(
-                                        R.string.collection_detail_reorder_done_desc
-                                    ),
-                                    contentColor = actionIconColor,
-                                    containerColor = iconContainerColor
-                                )
-                            }
-                            songs.isNotEmpty() -> {
-                                if (onExport != null) {
-                                    DetailTopBarAction(
-                                        onClick = onExport,
-                                        icon = SymbolIconName.IosShare,
-                                        contentDescription = stringResource(
-                                            R.string.playlist_detail_export_m3u
-                                        ),
-                                        contentColor = actionIconColor,
-                                        containerColor = iconContainerColor
-                                    )
-                                }
-                                DetailTopBarAction(
-                                    onClick = {
-                                        onIntent(SongCollectionIntent.EnterSelectionMode)
-                                    },
-                                    icon = SymbolIconName.Checklist,
-                                    contentDescription = stringResource(R.string.songs_select_desc),
-                                    contentColor = actionIconColor,
-                                    containerColor = iconContainerColor
-                                )
-                                if (canReorder) {
-                                    DetailTopBarAction(
-                                        onClick = { reorderMode = true },
-                                        icon = SymbolIconName.SwapVert,
-                                        contentDescription = stringResource(
-                                            R.string.collection_detail_reorder_desc
-                                        ),
-                                        contentColor = actionIconColor,
-                                        containerColor = iconContainerColor
-                                    )
-                                }
-                            }
-                        }
-                    },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                        containerColor = Color.Transparent,
-                        scrolledContainerColor = Color.Transparent,
-                        navigationIconContentColor = navigationIconColor,
-                        titleContentColor = navigationIconColor,
-                        actionIconContentColor = actionIconColor
                     )
-                )
+                } else {
+                    // 歌单页工具条（MeloX `MeloXPlaylistToolbar`）：58dp 一行，
+                    // 返回玻璃圆钮在左、动作玻璃圆钮在右，背景透明。
+                    MeloXPlaylistToolbar(
+                        onBack = onBarBack,
+                        backContentDescription = barBackDescription,
+                        backIcon = barBackIcon,
+                        contentColor = barNavigationColor,
+                        actions = barActions
+                    )
+                }
             }
-        ) { _ ->
+        ) { innerPadding ->
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    // 安静面：旧的四段色面已删除，正文从 surface 开始。
-                    .background(MaterialTheme.colorScheme.surface)
+                    // 歌单页：整屏封面模糊背景（透明底，让模糊层透上来）；
+                    // 其它页：安静面，正文从 surface 开始。
+                    .background(
+                        if (topBarCollapse) {
+                            MaterialTheme.colorScheme.surface
+                        } else {
+                            Color.Transparent
+                        }
+                    )
             ) {
+                if (!topBarCollapse) {
+                    // MeloX 的整页背景：封面模糊 + 明暗可读性层。列表浮在上面。
+                    MeloXPlaylistBackdrop(
+                        artwork = artwork,
+                        placeholderIcon = placeholderIcon
+                    )
+                }
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
+                        // 实底顶栏占位：内容从栏下方开始，不从栏底下穿过。
+                        top = if (topBarCollapse) {
+                            0.dp
+                        } else {
+                            innerPadding.calculateTopPadding()
+                        },
                         bottom = appleBottomBarClearance() + bottomPadding +
                             if (uiState.selectionMode) SelectionBarHeight else 0.dp
                     )
@@ -432,47 +495,86 @@ fun CollectionDetailScreen(
                     } else {
                         // hero 自己就是 list item：色面、cover、scrim、标题都在 item 内，
                         // 随滚动离开；fold 只改变 cover 的尺寸/圆角/位置。
-                        item {
-                            CollectionHeroFold(
-                                name = title,
-                                subtitle = subtitle,
-                                artwork = artwork,
-                                placeholderIcon = placeholderIcon,
-                                side = heroSide,
-                                collapse = collapse
-                            )
-                        }
-
-                        if (firstSong != null) {
+                        if (heroStyle == CollectionHeroStyle.CenteredCover) {
+                            // 歌单版式（照 MeloX `MeloXStandardPlaylistHero`）：封面按屏宽比例、
+                            // 标题回到封面下方，动作区是「圆钮 + 胶囊 + 圆钮」。
                             item {
-                                // 12dp 下沿 fade 只属于 CollectionDetail；共享的
-                                // CollectionActions 保持中性，不把色面带到 MyMusic。
-                                Box(modifier = Modifier.sonColorFieldDetailFade()) {
-                                    CollectionActions(
-                                        onPlayAll = {
-                                            onIntent(
-                                                SongCollectionIntent.SongClick(firstSong)
-                                            )
-                                        },
-                                        onShuffle = {
-                                            onIntent(SongCollectionIntent.ShufflePlay)
-                                        },
-                                        onAddToPlaylist = {
-                                            onIntent(SongCollectionIntent.AddSongsToPlaylist)
-                                        },
-                                        containerColor = MaterialTheme.colorScheme
-                                            .secondaryContainer,
-                                        contentColor = MaterialTheme.colorScheme
-                                            .onSecondaryContainer
+                                MeloXPlaylistHero(
+                                    title = title,
+                                    subtitle = subtitle,
+                                    meta = headerMeta.joinToString(" · "),
+                                    artwork = artwork,
+                                    placeholderIcon = placeholderIcon,
+                                    onPlay = {
+                                        firstSong?.let {
+                                            onIntent(SongCollectionIntent.SongClick(it))
+                                        }
+                                    },
+                                    onShuffle = {
+                                        onIntent(SongCollectionIntent.ShufflePlay)
+                                    },
+                                    hasSongs = firstSong != null,
+                                    showSaveAction = firstSong != null,
+                                    saveIcon = SymbolIconName.PlaylistAdd,
+                                    saveContentDescription = stringResource(
+                                        R.string.collection_detail_add_desc
+                                    ),
+                                    onSave = {
+                                        onIntent(SongCollectionIntent.AddSongsToPlaylist)
+                                    },
+                                    onHeightChanged = { headerHeightPx = it },
+                                    footer = headerExtra
+                                )
+                            }
+                        } else {
+                            item {
+                                Box(
+                                    modifier = Modifier.onSizeChanged {
+                                        headerHeightPx = it.height
+                                    }
+                                ) {
+                                    CollectionHeroFold(
+                                        name = title,
+                                        subtitle = subtitle,
+                                        artwork = artwork,
+                                        placeholderIcon = placeholderIcon,
+                                        side = heroSide,
+                                        collapse = collapse
                                     )
                                 }
                             }
-                        }
 
-                        headerExtra?.let { extra ->
-                            item {
-                                Column(modifier = Modifier.fillMaxWidth()) {
-                                    extra()
+                            if (firstSong != null) {
+                                item {
+                                    // 12dp 下沿 fade 只属于 CollectionDetail；共享的
+                                    // CollectionActions 保持中性，不把色面带到 MyMusic。
+                                    Box(modifier = Modifier.sonColorFieldDetailFade()) {
+                                        CollectionActions(
+                                            onPlayAll = {
+                                                onIntent(
+                                                    SongCollectionIntent.SongClick(firstSong)
+                                                )
+                                            },
+                                            onShuffle = {
+                                                onIntent(SongCollectionIntent.ShufflePlay)
+                                            },
+                                            onAddToPlaylist = {
+                                                onIntent(SongCollectionIntent.AddSongsToPlaylist)
+                                            },
+                                            containerColor = MaterialTheme.colorScheme
+                                                .secondaryContainer,
+                                            contentColor = MaterialTheme.colorScheme
+                                                .onSecondaryContainer
+                                        )
+                                    }
+                                }
+                            }
+
+                            headerExtra?.let { extra ->
+                                item {
+                                    Column(modifier = Modifier.fillMaxWidth()) {
+                                        extra()
+                                    }
                                 }
                             }
                         }
@@ -530,7 +632,9 @@ fun CollectionDetailScreen(
                                         selectionMode = uiState.selectionMode,
                                         selected = song.id in uiState.selectedSongIds,
                                         subtitle = songSubtitle(song),
-                                        trackNumber = index + 1,
+                                        // 歌单页按 MeloX 的排版显示封面（不显序号），
+                                        // 专辑 / 歌手页仍是序号 + 音柱。
+                                        trackNumber = if (showTrackNumbers) index + 1 else null,
                                         onClick = {
                                             onIntent(SongCollectionIntent.SongClick(song))
                                         },
@@ -597,7 +701,7 @@ fun CollectionDetailScreen(
                         .height(statusBarInset + SonSizes.shortNavigationBarHeight)
                         // 在 layer 内读 collapse：滚动时只更新这一层的 alpha，
                         // 不让整段 content（含 LazyColumn）重组。
-                        .graphicsLayer { alpha = collapse.containerAlpha() }
+                        .graphicsLayer { alpha = barCollapse.containerAlpha() }
                         .background(MaterialTheme.colorScheme.surface)
                 ) { }
 
@@ -661,11 +765,11 @@ fun CollectCollectionDetailEffects(
 }
 
 /**
- * 顶栏动作按钮：顶栏容器保持透明，图标与托底颜色由调用方按折叠进度传入。
+ * 顶栏动作按钮：44dp 玻璃圆钮（`AppleGlassCircleButton`），无涟漪。
  *
- * 压在封面上时图标是 `onArtwork`（白），**必须**配一层圆形 scrim 托底 —— 封面亮度不可控，
- * 白图标落在亮封面上就看不见了（顶部那点渐变 scrim 不够）。滚到 surface 之后托底 alpha
- * 归零、图标过渡到 onSurface / onSurfaceVariant，剩下的只是一个普通 IconButton。
+ * 压在封面上时图标是 `onArtwork`（白）或品牌红，**必须**配一层玻璃托底 —— 封面亮度不可控，
+ * 白图标落在亮封面上就看不见了（顶部那点渐变 scrim 不够）。玻璃的明暗跟着图标色走，
+ * 所以两种图标色都成立；滚到 surface 之后 [glassAlpha] 归零，剩下的只是一枚图标。
  */
 @Composable
 fun DetailTopBarAction(
@@ -673,17 +777,15 @@ fun DetailTopBarAction(
     icon: SymbolIconName,
     contentDescription: String?,
     contentColor: Color,
-    containerColor: Color = Color.Transparent
+    glassAlpha: Float = 1f
 ) {
-    IconButton(
+    AppleGlassCircleButton(
+        icon = icon,
+        contentDescription = contentDescription,
         onClick = onClick,
-        colors = IconButtonDefaults.iconButtonColors(
-            containerColor = containerColor,
-            contentColor = contentColor
-        )
-    ) {
-        M3SymbolIcon(name = icon, filled = true, contentDescription = contentDescription)
-    }
+        tint = contentColor,
+        glassAlpha = glassAlpha
+    )
 }
 
 /**
@@ -788,142 +890,8 @@ fun CollectionActions(
 }
 
 /**
- * 集合介绍，默认折叠为若干行，溢出时才出现「更多」。
- *
- * 折叠高度用「行数」而非固定 dp：介绍有自然段，行高随排版缩放变化，
- * 写死 dp 会在大字号下截断在半行上。内容为空且不在生成中时整块不占位，
- * 避免留一段空白。歌单详情页与我的音乐页（收藏曲目介绍）共用。
- */
-@Composable
-fun PlaylistDescription(
-    description: String,
-    expanded: Boolean,
-    isGenerating: Boolean,
-    onToggle: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    // 折叠态的行数。够放下开头，又不至于把首屏曲目挤下去。
-    val collapsedLines = 3
-    var hasOverflow by remember(description) { mutableStateOf(false) }
-
-    if (description.isBlank() && !isGenerating) return
-
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = SonLayout.screenMargin, vertical = SonSpacing.small)
-    ) {
-        if (isGenerating) {
-            Text(
-                text = stringResource(R.string.playlist_detail_desc_loading),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            return@Column
-        }
-
-        Text(
-            text = description,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = if (expanded) Int.MAX_VALUE else collapsedLines,
-            overflow = TextOverflow.Ellipsis,
-            onTextLayout = { result ->
-                // 只在折叠态需要判断溢出；展开后恒为 false。
-                if (!expanded) {
-                    hasOverflow = result.hasVisualOverflow || result.lineCount > collapsedLines
-                }
-            }
-        )
-
-        if (hasOverflow || expanded) {
-            Spacer(modifier = Modifier.height(SonSpacing.extraSmall))
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.clickable(onClick = onToggle)
-            ) {
-                Text(
-                    text = stringResource(
-                        if (expanded) R.string.playlist_detail_collapse else R.string.playlist_detail_more
-                    ),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary
-                )
-
-                Spacer(modifier = Modifier.width(SonSpacing.extraSmall))
-
-                M3SymbolIcon(
-                    name = if (expanded) SymbolIconName.ExpandLess else SymbolIconName.ExpandMore,
-                    filled = true,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(SonSizes.iconSmall)
-                )
-            }
-        }
-    }
-}
-
-/**
- * 沉浸式头部：方形封面满铺（不裁圆角），从屏幕顶端一路铺开，标题与副标题压在封面底部。
- *
- * 几何：封面自身就是 side × side，正好填满外层方框；滚动时以 [HeroParallaxRate] 的
- * 速率跟随并同时放大（scaleX/Y），使放大的部分始终盖住上移露出的区域 —— 只平移不放大
- * 会在顶部露出空白。`clipToBounds` 裁掉溢出到下方的部分。
- *
- * 遮罩与标题留在外层、不参与平移 —— 否则与封面基准不一致，标题会脱离封面底部。
- *
- * 我的音乐页的收藏 hero 仍用这个视差版本；CollectionDetail 的连续折叠见 [CollectionHeroFold]。
- */
-@Composable
-fun CollectionHero(
-    name: String,
-    subtitle: String,
-    artwork: String?,
-    placeholderIcon: SymbolIconName,
-    side: Dp,
-    collapse: State<Float>
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .aspectRatio(1f)
-            .clipToBounds()
-    ) {
-        M3Artwork(
-            artwork = artwork,
-            placeholderIcon = placeholderIcon,
-            shape = RectangleShape,
-            modifier = Modifier
-                .fillMaxSize()
-                // 在 graphics layer 内读折叠进度：滚动时只重绘，不重组整页。
-                .graphicsLayer {
-                    val t = collapse.value * HeroParallaxRate
-                    // 放大量要略大于上移量，保证任何时刻顶部都不露白。
-                    val grow = 1f + t * 2f
-                    scaleX = grow
-                    scaleY = grow
-                    translationY = -side.toPx() * t
-                }
-        )
-
-        HeroScrim()
-
-        HeroCopy(
-            name = name,
-            subtitle = subtitle,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .padding(horizontal = SonLayout.screenMargin, vertical = SonSpacing.extraLarge)
-        )
-    }
-}
-
-/**
- * hero 标题与副标题：海报级标题 + label 级副标题。旧 hero 与 CollectionHeroFold
- * 共用，保证字体、颜色、层级只有一份。
+ * hero 标题与副标题：海报级标题 + label 级副标题。CollectionHeroFold 用它，
+ * 保证字体、颜色、层级只有一份。
  */
 @Composable
 private fun HeroCopy(
@@ -1125,7 +1093,8 @@ private fun CollectionSongRow(
     selectionMode: Boolean,
     selected: Boolean,
     subtitle: String?,
-    trackNumber: Int,
+    /** 传 null 时行首改显封面（歌单页的 MeloX 排版）。 */
+    trackNumber: Int?,
     onClick: () -> Unit,
     onToggleSelection: () -> Unit,
     trailingContent: @Composable () -> Unit,
@@ -1213,4 +1182,24 @@ private fun ReorderHandle(
             )
         }
     }
+}
+
+/**
+ * 顶栏动作：两种栏都是玻璃圆钮（浮层栏随折叠淡出托底，MeloX 工具条始终满托底）。
+ */
+@Composable
+private fun CollectionBarAction(
+    icon: SymbolIconName,
+    contentDescription: String?,
+    onClick: () -> Unit,
+    contentColor: Color,
+    glassAlpha: Float
+) {
+    DetailTopBarAction(
+        onClick = onClick,
+        icon = icon,
+        contentDescription = contentDescription,
+        contentColor = contentColor,
+        glassAlpha = glassAlpha
+    )
 }

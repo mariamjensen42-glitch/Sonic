@@ -119,7 +119,10 @@ fun OnlineSourcesContent(
                     )
                 },
                 onPasteScript = { showTextDialog = true },
-                onImportUrl = { showUrlDialog = true }
+                onImportUrl = { showUrlDialog = true },
+                onRestoreBuiltin = {
+                    viewModel.handleIntent(OnlineSourcesIntent.RestoreBuiltin)
+                }
             )
         }
         item {
@@ -255,7 +258,8 @@ private fun ImportSection(
     importing: Boolean,
     onPickFile: () -> Unit,
     onPasteScript: () -> Unit,
-    onImportUrl: () -> Unit
+    onImportUrl: () -> Unit,
+    onRestoreBuiltin: () -> Unit
 ) {
     AppleSectionHeader(title = stringResource(R.string.settings_online_sources_menu))
     LazyRow(
@@ -284,6 +288,15 @@ private fun ImportSection(
                 onClick = onImportUrl,
                 filled = false,
                 enabled = !importing
+            )
+        }
+        item {
+            AppleActionButton(
+                label = stringResource(R.string.online_sources_restore_builtin),
+                onClick = onRestoreBuiltin,
+                filled = false,
+                enabled = !importing,
+                icon = SymbolIconName.Refresh
             )
         }
     }
@@ -348,8 +361,14 @@ private fun PluginRow(
                 } else {
                     ""
                 }
+                val builtinTag = if (plugin.isBuiltin) {
+                    stringResource(R.string.online_sources_builtin_tag)
+                } else {
+                    ""
+                }
                 Text(
                     text = buildString {
+                        if (builtinTag.isNotBlank()) append(builtinTag).append(" · ")
                         if (plugin.version.isNotBlank()) append("v").append(plugin.version)
                         if (platformText.isNotBlank()) {
                             if (isNotEmpty()) append(" · ")
@@ -400,6 +419,16 @@ private fun PluginRow(
                 text = stringResource(
                     R.string.online_sources_manual_blocked,
                     plugin.blockedPlatforms.joinToString(" / ") { it.displayName }
+                ),
+                style = AppleType.footnote,
+                color = colors.systemRed
+            )
+        }
+        if (plugin.consecutiveFailures > 0) {
+            Text(
+                text = stringResource(
+                    R.string.online_sources_unhealthy,
+                    plugin.consecutiveFailures
                 ),
                 style = AppleType.footnote,
                 color = colors.systemRed

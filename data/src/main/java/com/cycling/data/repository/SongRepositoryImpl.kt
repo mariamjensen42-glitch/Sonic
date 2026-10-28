@@ -16,6 +16,7 @@ import com.cycling.domain.model.LibraryStats
 import com.cycling.domain.model.LyricsMatch
 import com.cycling.domain.model.Song
 import com.cycling.domain.repository.ExcludedFolderRepository
+import com.cycling.domain.repository.RecordingFilterRepository
 import com.cycling.domain.repository.SongRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -34,6 +35,7 @@ class SongRepositoryImpl @Inject constructor(
     private val mediaStoreHelper: MediaStoreHelper,
     private val songLibraryWriter: SongLibraryWriter,
     private val excludedFolderRepository: ExcludedFolderRepository,
+    private val recordingFilterRepository: RecordingFilterRepository,
     private val safFolderBrowser: SafFolderBrowser
 ) : SongRepository {
 
@@ -93,7 +95,8 @@ class SongRepositoryImpl @Inject constructor(
         // favourites, play counts and (via the playlist_songs cascade) every playlist.
         // Previously this also ignored excluded folders, unlike a real scan.
         val excludedPaths = excludedFolderRepository.getExcludedPaths()
-        val songs = mediaStoreHelper.queryAllSongs(excludedPaths)
+        val excludeRecordings = recordingFilterRepository.isExcludeRecordingsEnabled()
+        val songs = mediaStoreHelper.queryAllSongs(excludedPaths, excludeRecordings)
         val written = songLibraryWriter.write(songs.map { it.toEntity() })
         Timber.d("refreshSongs: completed, $written songs")
     }

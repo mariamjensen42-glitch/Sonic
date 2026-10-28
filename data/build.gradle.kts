@@ -41,9 +41,7 @@ ksp {
 
 dependencies {
     implementation(project(":domain"))
-    // 多格式标签读写（MP3/FLAC/OGG/MP4），替代原先只支持 MP3 的 mp3agic 写入路径。
-    implementation(project(":taglib"))
-    
+
     implementation(libs.androidx.core.ktx)
 
     implementation(libs.androidx.room.runtime)
@@ -68,7 +66,9 @@ dependencies {
     // 项目 Kotlin 的那一步在根 build.gradle.kts 的 resolutionStrategy 里。
     implementation(libs.quickjs.android)
 
-    implementation(libs.mp3agic)
+    // 多格式标签读写（MP3/FLAC/OGG/MP4/WAV/AIFF/WMA/DSF）。字段名走 FieldKey，
+    // 不再为每个容器各写一套 reader / writer。
+    implementation(libs.jaudiotagger)
 
     implementation(libs.timber)
 

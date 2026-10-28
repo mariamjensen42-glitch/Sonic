@@ -48,7 +48,9 @@ class LrclibLyricsProvider @Inject constructor(
      * there is never more than one version to offer.
      */
     override suspend fun fetchCandidates(query: LyricsQuery): List<OnlineLyrics> {
-        if (query.title.isBlank() || query.artist.isBlank()) return emptyList()
+        // 缺歌手标签时仍走 /search 的曲名检索：本地标签不全是常态，能不能认由匹配器决定，
+        // 不是这里一刀切掉。
+        if (query.title.isBlank()) return emptyList()
 
         return withContext(Dispatchers.IO) {
             listOfNotNull(exactMatch(query) ?: search(query))
@@ -76,11 +78,18 @@ class LrclibLyricsProvider @Inject constructor(
         return selectLrclibLyrics(listOf(track), query)
     }
 
-    /** The free-text fallback; returns many near-misses, so the length match does the real work. */
+    /**
+     * The free-text fallback; returns many near-misses, so [selectLrclibLyrics] does the real work.
+     *
+     * 用去噪后的曲名与主歌手：本地标签里的 `(Live)`、`- Remastered`、`feat. X` 在 LRCLIB 的
+     * 曲名索引里通常不存在，带上它们只会搜不到。
+     */
     private fun search(query: LyricsQuery): OnlineLyrics? {
         val url = baseUrl("search")
-            .addQueryParameter("track_name", query.title)
-            .addQueryParameter("artist_name", query.artist)
+            .addQueryParameter("track_name", query.searchTitle)
+            .apply {
+                if (query.searchArtist.isNotBlank()) addQueryParameter("artist_name", query.searchArtist)
+            }
             .build()
 
         val body = get(url) ?: return null

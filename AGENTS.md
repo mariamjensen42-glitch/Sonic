@@ -91,7 +91,8 @@ benchmark ⇢ app（com.android.test，targetProjectPath，不在产品依赖链
   - `local/` — `database/`(`AppDatabase`)、`dao/`、`entity/`、`mediastore/`、`scanner/`、`lyrics/`、`metadata/`
     （`metadata/AudioMetadataHelper.kt` 是标签读写入口，统一走 jaudiotagger：MP3/FLAC/OGG/MP4/WAV/AIFF/WMA/DSF
     读写、DFF 只读；Opus 与裸 AAC 退到 `MediaMetadataRetriever` 拿基础字段）
-  - `api/` — 远程 API：DeepSeek（`DeepSeekApiService` 类 + `dto/`）、在线歌词（`api/lyrics/`，`OnlineLyricsProvider` 的 AMLL / 网易云 / QQ 音乐 / 酷狗 / LRCLIB / 音源脚本（`LxLyricsProvider`）实现 + `dto/`）、在线封面与元数据（`api/cover/`）、在线目录搜索（`api/search/`，网易云 / QQ / 酷狗 / 酷我 / 咪咕 → 带平台 id 的 `MusicInfo`）
+  - `api/` — 远程 API：DeepSeek（`DeepSeekApiService` 类 + `dto/`）、在线歌词（`api/lyrics/`，`OnlineLyricsProvider` 的 AMLL / 网易云 / QQ 音乐 / 酷狗 / LRCLIB / 音源脚本（`LxLyricsProvider`）实现 + `dto/`）、在线封面与元数据（`api/cover/`）、在线目录搜索（`api/search/`，网易云 / QQ / 酷狗 / 酷我 / 咪咕 → 带平台 id 的 `MusicInfo`）、
+    QQ 音乐账号（`api/qqmusic/`：`QQMusicQrLoginClient` 原生扫码登录，QQ / 微信双通道，无 WebView；`QQMusicAccountApi` 取账号资料并校验凭据；`QQMusicLoginParsing` 是纯解析层；`QQMusicSessionProvider` 给 QQ 接口提供当前登录态，读不到按游客处理 —— 登录是增强项，缺了它接口照常匿名可用）
   - `online/` — LX 音源脚本（洛雪协议）：`lx/` 是 QuickJS 运行时（`LxJsRuntime`）、脚本生命周期（`LxScriptRunner`）、宿主桥（`LxHttpBridge`、`LxJsUtils`）、插件管理（`LxPluginManager`：导入/排序/屏蔽/取链/取词/取封面）、QRC 解码器（`QrcCodec`）；`PlayUrlProbe` 负责取链后的可播性探测；`store/OnlineStore` 持久化插件清单与脚本正文
   - `player/` — `PlayerManager`、`PlayerService`（Media3 MediaSessionService）
   - `download/` — 离线下载：`DownloadTransfer`（OkHttp 流式 + Range 断点续传）、`DownloadService`
@@ -103,13 +104,15 @@ benchmark ⇢ app（com.android.test，targetProjectPath，不在产品依赖链
     取链统一走 `online/CachedPlaySourceResolver`（先查 `play_url_cache` 再跑脚本）
   - `repository/` — `XxxRepositoryImpl`（`@Singleton`，`@Inject constructor`）
   - `mapper/` — Entity ↔ Domain Model 映射（`Mappers.kt`）
-  - `store/` — DataStore 封装（`ApiKeyStore`、`AiInfoCacheStore`）
+  - `store/` — DataStore 封装（`ApiKeyStore`、`AiInfoCacheStore`、`QQMusicSessionStore`）
   - `cache/` — 缓存上限的检查与淘汰（`CacheJanitor`：超上限按占用从大到小**整目录**清空，由 `SonicApplication` 启动时跑一次、之后每小时一次）
   - `di/` — Hilt 模块（`RepositoryModule` 用 `@Binds`，`DatabaseModule`/`PlayerModule`/`AiModule` 用 `@Provides`）
 - **presentation** (`com.cycling.presentation` + `com.cycling.core.ui`)：依赖 `:domain`，含 Compose UI。
   - `presentation/<feature>/` — 每个功能一个包，内含 `XxxContract.kt`（UiState/Intent/Effect）、`XxxViewModel.kt`、`XxxScreen.kt`
   - `presentation/scrape/` — 元数据刮削页（`ScrapeScreen`）：列出元数据不全的本地歌，
     「全部刮削」只应用可信匹配，点某行展开候选手动挑
+  - `presentation/account/` — QQ 音乐账号页（设置 → 在线音乐 → QQ 音乐账号）：扫码登录（QQ / 微信）、
+    登录态展示与退出。轮询在 ViewModel 里跑，Composable 只消费状态
   - `presentation/download/` — 下载管理页（`DownloadScreen`）+ 全局下载入口 `DownloadRequestProvider`
     （`LocalDownloadRequester`，歌曲菜单读它；音质弹层挂在导航壳根部，不随页面销毁）
   - `presentation/navigation/` — `Screen`/`LibraryDestination`/`SettingsDestination`（`sealed interface : NavKey`）、`AppNavGraph`、`Navigator`

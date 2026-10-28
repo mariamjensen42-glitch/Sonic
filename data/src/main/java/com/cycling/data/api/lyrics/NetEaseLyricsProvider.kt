@@ -111,10 +111,10 @@ class NetEaseLyricsProvider @Inject constructor(
     }
 
     /**
-     * The provider's entries for the track, closest in length first, capped at [limit].
+     * The provider's entries for the track, the most plausible first, capped at [limit].
      *
-     * With no local length to compare against there is nothing to rank by either, so every entry is
-     * as much of a guess as the next and only the single best-ranked one is used.
+     * 排序不再只看时长：曲名对不上的（翻唱、同名歌、伴奏）在这里就被剔掉，见 [rankCandidates]。
+     * 本地没有时长时也能排 —— 曲名与歌手已经足够判断是不是同一首。
      */
     private fun candidatesFor(query: LyricsQuery, limit: Int): List<NetEaseSongDto> {
         val body = search(query) ?: return emptyList()
@@ -125,9 +125,15 @@ class NetEaseLyricsProvider @Inject constructor(
             ?.songs
             .orEmpty()
 
-        val ranked = candidatesByDurationDistance(songs, query, NetEaseSongDto::durationMs)
+        return rankCandidates(
+            songs,
+            query,
+            NetEaseSongDto::name,
+            NetEaseSongDto::artistNames,
+            NetEaseSongDto::durationMs
+        )
             .filter { it.id > 0 }
-        return if (query.durationMs > 0) ranked.take(limit) else ranked.take(1)
+            .take(limit)
     }
 
     /** What tells this upload apart from the others of the same recording, when the provider said. */
@@ -160,9 +166,10 @@ class NetEaseLyricsProvider @Inject constructor(
 
     private fun search(query: LyricsQuery): String? {
         // NetEase ranks "artist title" better than the reverse, which matters when the title is a
-        // common word and the artist is what disambiguates it.
+        // common word and the artist is what disambiguates it. 关键词用的是去噪后的曲名与主歌手
+        // （见 [searchKeywords]），标签里的 "(Live)"、"- Remastered" 只会把结果筛掉。
         val form = FormBody.Builder()
-            .add("s", "${query.artist} ${query.title}".trim())
+            .add("s", query.searchKeywords())
             .add("type", "1")
             .add("offset", "0")
             .add("limit", SEARCH_LIMIT.toString())

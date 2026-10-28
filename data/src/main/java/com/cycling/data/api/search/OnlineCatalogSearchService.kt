@@ -1,9 +1,9 @@
 package com.cycling.data.api.search
 
 import com.cycling.data.api.cover.dto.KugouSearchResponse
-import com.cycling.data.api.cover.dto.QqSearchResponse
 import com.cycling.data.api.cover.jsonObjectOrNull
 import com.cycling.data.api.cover.textOf
+import com.cycling.data.api.qqmusic.QQMusicSearchClient
 import com.cycling.data.api.search.dto.KuwoSearchResponse
 import com.cycling.data.api.search.dto.MiguSearchResponse
 import com.cycling.data.api.search.dto.NetEaseCloudSearchResponse
@@ -33,7 +33,8 @@ import timber.log.Timber
  */
 @Singleton
 class OnlineCatalogSearchService @Inject constructor(
-    sharedClient: OkHttpClient
+    sharedClient: OkHttpClient,
+    private val qqSearchClient: QQMusicSearchClient
 ) {
 
     private val client = sharedClient.newBuilder()
@@ -103,34 +104,25 @@ class OnlineCatalogSearchService @Inject constructor(
         }
     }
 
-    private fun searchQq(keyword: String, page: Int, limit: Int): List<MusicInfo> {
-        val url = "$QQ_BASE/soso/fcgi-bin/client_search_cp".toHttpUrl().newBuilder()
-            .addQueryParameter("w", keyword)
-            .addQueryParameter("format", "json")
-            .addQueryParameter("n", limit.toString())
-            .addQueryParameter("p", page.toString())
-            .addQueryParameter("cr", "1")
-            .build()
-        val request = Request.Builder()
-            .url(url)
-            .header("Referer", "$QQ_BASE/")
-            .build()
-
-        val payload = client.textOf(request)?.jsonObjectOrNull() ?: return emptyList()
-        val response = runCatching { json.decodeFromString<QqSearchResponse>(payload) }
-            .onFailure { Timber.w(it, "OnlineCatalogSearch: unreadable QQ search") }
-            .getOrNull() ?: return emptyList()
-
-        return response.data?.song?.list.orEmpty().mapNotNull { dto ->
-            val songmid = dto.songmid.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+    /**
+     * QQ 音乐搜索。
+     *
+     * 走 [QQMusicSearchClient]：`musicu.fcg` 的统一搜索。老的 `client_search_cp` 已经下线
+     * （实测 HTTP 500），而这一处是本项目里唯一能把「关键词」变成 QQ `songmid` 的地方 ——
+     * 它一坏，在线目录里的 QQ 曲目就全都取不到链。
+     */
+    private suspend fun searchQq(keyword: String, page: Int, limit: Int): List<MusicInfo> {
+        val songs = qqSearchClient.search(listOf(keyword), limit, page)
+        return songs.mapNotNull { dto ->
+            val songmid = dto.songMid.takeIf { it.isNotBlank() } ?: return@mapNotNull null
             MusicInfo(
                 source = OnlineSource.QQ,
                 id = songmid,
-                title = dto.songname,
-                artist = dto.singer.joinToString(", ") { it.name },
-                album = dto.albumname,
-                durationSeconds = dto.interval.toLong(),
-                coverUrl = dto.albummid.takeIf { it.isNotBlank() }?.let { "$QQ_COVER$it.jpg" },
+                title = dto.title,
+                artist = dto.artist,
+                album = dto.album,
+                durationSeconds = dto.durationMs / 1000L,
+                coverUrl = dto.albumMid.takeIf { it.isNotBlank() }?.let { "$QQ_COVER$it.jpg" },
                 extras = mapOf("mid" to songmid)
             )
         }
@@ -275,7 +267,6 @@ class OnlineCatalogSearchService @Inject constructor(
 
     private companion object {
         const val NETEASE_BASE = "https://music.163.com"
-        const val QQ_BASE = "https://c.y.qq.com"
         const val QQ_COVER = "https://y.gtimg.cn/music/photo_new/T002R300x300M000"
 
         const val KUGOU_BASE = "https://songsearch.kugou.com"

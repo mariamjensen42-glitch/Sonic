@@ -17,13 +17,24 @@ import com.cycling.domain.model.Song
  * - 取链返回的请求头（Referer 等）目前没有进播放队列：需要带头的源要后续给
  *   `QueueItem` 加 headers，或先在解析侧把 URL 换成可直接访问的形式。
  */
-fun MusicInfo.toSong(playSource: PlaySource): Song = Song(
+fun MusicInfo.toSong(playSource: PlaySource): Song = toSongWithPath(playSource.url)
+
+/**
+ * 只带**身份指针**的 [Song]，给「下载入队」用。
+ *
+ * 下载不需要先取链：`DownloadRepositoryImpl` 把任务写进库之后，执行时由
+ * `CachedPlaySourceResolver` 按 [Song.onlineSourceKey] + [Song.onlineSongId] 重新解析
+ * （地址会过期，提前解析等于白解析）。所以这里 `path` 留空，其余字段与 [toSong] 完全一致。
+ */
+fun MusicInfo.toDownloadSong(): Song = toSongWithPath(path = "")
+
+private fun MusicInfo.toSongWithPath(path: String): Song = Song(
     id = syntheticSongId(),
     title = title,
     artist = artist,
     album = album,
     duration = durationSeconds * 1000,
-    path = playSource.url,
+    path = path,
     albumId = -1L,
     artistId = -1L,
     dateAdded = 0L,

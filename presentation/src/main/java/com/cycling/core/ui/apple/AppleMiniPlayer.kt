@@ -1,5 +1,6 @@
 package com.cycling.core.ui.apple
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
@@ -21,8 +22,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.cycling.core.ui.components.M3Artwork
-import com.cycling.core.ui.components.M3SymbolIcon
-import com.cycling.core.ui.components.SymbolIconName
+import com.cycling.core.ui.components.FlamingoIcon
 import com.cycling.presentation.R
 
 /**
@@ -44,7 +44,11 @@ fun AppleMiniPlayer(
     onPlayPause: () -> Unit,
     onSkipNext: () -> Unit,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** 封面节点的额外修饰：播放页打开时要用它上报位置、并把封面让给飞行中的那一张。 */
+    artworkModifier: Modifier = Modifier,
+    /** 胶囊本体（不含左右外边距）的额外修饰：播放页收起时外壳要缩到这条胶囊上。 */
+    barModifier: Modifier = Modifier
 ) {
     val colors = AppleTheme.colors
     val shape = RoundedCornerShape(AppleDims.cornerPill)
@@ -54,6 +58,7 @@ fun AppleMiniPlayer(
             .fillMaxWidth()
             .padding(horizontal = AppleDims.miniPlayerMargin)
             .height(AppleDims.miniPlayerHeight)
+            .then(barModifier)
             .clip(shape)
             // 玻璃胶囊：iOS 迷你播放器是半透明材质，内容从下方透出。
             .background(colors.glass)
@@ -65,7 +70,9 @@ fun AppleMiniPlayer(
         M3Artwork(
             artwork = artwork,
             shape = RoundedCornerShape(AppleDims.cornerS),
-            modifier = Modifier.size(AppleDims.miniPlayerThumbnail)
+            modifier = Modifier
+                .size(AppleDims.miniPlayerThumbnail)
+                .then(artworkModifier)
         )
 
         Spacer(modifier = Modifier.width(8.dp))
@@ -88,14 +95,16 @@ fun AppleMiniPlayer(
         }
 
         MiniPlayerButton(
-            icon = if (isPlaying) SymbolIconName.Pause else SymbolIconName.PlayArrow,
+            // Flamingo 的 mini_* 就是为这条 48dp 胶囊画的：三角与竖条的比例比大播放键粗一档，
+            // 缩到 24dp 才不显细。
+            icon = if (isPlaying) R.drawable.ic_flamingo_mini_pause else R.drawable.ic_flamingo_mini_play,
             contentDescription = stringResource(
                 if (isPlaying) R.string.player_pause_desc else R.string.player_play_desc
             ),
             onClick = onPlayPause
         )
         MiniPlayerButton(
-            icon = SymbolIconName.SkipNext,
+            icon = R.drawable.ic_flamingo_mini_fast_forward,
             contentDescription = stringResource(R.string.player_next_desc),
             onClick = onSkipNext
         )
@@ -105,7 +114,7 @@ fun AppleMiniPlayer(
 /** 32dp 控件，图标 24dp，与 mini_player_button_size 一致。 */
 @Composable
 private fun MiniPlayerButton(
-    icon: SymbolIconName,
+    @DrawableRes icon: Int,
     contentDescription: String?,
     onClick: () -> Unit
 ) {
@@ -116,10 +125,9 @@ private fun MiniPlayerButton(
             .applePress(onClick),
         contentAlignment = Alignment.Center
     ) {
-        M3SymbolIcon(
-            name = icon,
+        FlamingoIcon(
+            res = icon,
             contentDescription = contentDescription,
-            filled = true,
             tint = AppleTheme.colors.label,
             size = 24.dp
         )

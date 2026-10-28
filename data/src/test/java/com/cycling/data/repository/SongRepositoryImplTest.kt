@@ -9,6 +9,7 @@ import com.cycling.data.local.mediastore.MediaStoreHelper
 import com.cycling.data.local.saf.SafFolderBrowser
 import com.cycling.data.local.scanner.SongLibraryWriter
 import com.cycling.domain.repository.ExcludedFolderRepository
+import com.cycling.domain.repository.RecordingFilterRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -31,6 +32,7 @@ class SongRepositoryImplTest {
     private lateinit var mediaStoreHelper: MediaStoreHelper
     private lateinit var songLibraryWriter: SongLibraryWriter
     private lateinit var excludedFolderRepository: ExcludedFolderRepository
+    private lateinit var recordingFilterRepository: RecordingFilterRepository
     private lateinit var safFolderBrowser: SafFolderBrowser
     private lateinit var songRepository: SongRepositoryImpl
 
@@ -42,6 +44,8 @@ class SongRepositoryImplTest {
         mediaStoreHelper = mockk()
         songLibraryWriter = mockk()
         excludedFolderRepository = mockk()
+        recordingFilterRepository = mockk()
+        coEvery { recordingFilterRepository.isExcludeRecordingsEnabled() } returns false
         safFolderBrowser = mockk()
         songRepository = SongRepositoryImpl(
             songDao,
@@ -50,6 +54,7 @@ class SongRepositoryImplTest {
             mediaStoreHelper,
             songLibraryWriter,
             excludedFolderRepository,
+            recordingFilterRepository,
             safFolderBrowser
         )
     }
@@ -306,7 +311,7 @@ class SongRepositoryImplTest {
     fun `refreshSongs delegates to the writer and never wipes the table`() = runTest {
         val excluded = listOf("/storage/emulated/0/Podcasts")
         coEvery { excludedFolderRepository.getExcludedPaths() } returns excluded
-        every { mediaStoreHelper.queryAllSongs(excluded) } returns listOf(createSong())
+        every { mediaStoreHelper.queryAllSongs(excluded, false) } returns listOf(createSong())
         coEvery { songLibraryWriter.write(any(), any()) } returns 1
 
         songRepository.refreshSongs()
@@ -320,12 +325,26 @@ class SongRepositoryImplTest {
     fun `refreshSongs respects excluded folders`() = runTest {
         val excluded = listOf("/storage/emulated/0/Podcasts")
         coEvery { excludedFolderRepository.getExcludedPaths() } returns excluded
-        every { mediaStoreHelper.queryAllSongs(excluded) } returns emptyList()
+        every { mediaStoreHelper.queryAllSongs(excluded, false) } returns emptyList()
         coEvery { songLibraryWriter.write(any(), any()) } returns 0
 
         songRepository.refreshSongs()
 
-        coVerify(exactly = 1) { mediaStoreHelper.queryAllSongs(excluded) }
+        coVerify(exactly = 1) { mediaStoreHelper.queryAllSongs(excluded, false) }
+    }
+
+    /** 「排除录音」开关必须一路传到 MediaStore 查询里，否则开关只是存了个偏好。 */
+    @Test
+    fun `refreshSongs forwards the exclude recordings flag`() = runTest {
+        val excluded = listOf("/storage/emulated/0/Podcasts")
+        coEvery { excludedFolderRepository.getExcludedPaths() } returns excluded
+        coEvery { recordingFilterRepository.isExcludeRecordingsEnabled() } returns true
+        every { mediaStoreHelper.queryAllSongs(excluded, true) } returns emptyList()
+        coEvery { songLibraryWriter.write(any(), any()) } returns 0
+
+        songRepository.refreshSongs()
+
+        coVerify(exactly = 1) { mediaStoreHelper.queryAllSongs(excluded, true) }
     }
 
     /**

@@ -41,6 +41,7 @@ enum class SymbolIconName(val codepoint: Int) {
     Speed(0xE9E4),
     GraphicEq(0xE1B8),
     Waves(0xE176),
+    Mic(0xE029),
 
     // ── 导航与外壳 ──────────────────────────────────────────────
     Home(0xE9B2),

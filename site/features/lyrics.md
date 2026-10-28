@@ -29,7 +29,7 @@ Sonic 在 `domain/lyrics/parser/` 里实现了一套 `ILyricsParser` 接口，�
 
 | 来源 | 说明 |
 | --- | --- |
-| AMLL | 官方 TTML HTTP API，逐词歌词质量最好 |
+| AMLL | 官方 TTML HTTP API，逐词歌词质量最好。按曲名变体多轮检索（先去掉 `(Live)` 之类噪音，再退回标签原文），多份候选依次下载，缺歌手标签时用平台 id / 同专辑 / 曲名唯一性作旁证 |
 | 网易云音乐 | 逐词歌词 |
 | QQ 音乐 | 逐词歌词，含非标准 **QRC** 格式（由 `QrcCodec` 解码） |
 | 酷狗音乐 | 歌词 + 翻译 |

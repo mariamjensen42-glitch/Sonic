@@ -3,6 +3,7 @@ package com.cycling.domain.online.repository
 import com.cycling.domain.online.model.AutoBlockResult
 import com.cycling.domain.online.model.MusicInfo
 import com.cycling.domain.online.model.MusicQuality
+import com.cycling.domain.online.model.OnlineLyric
 import com.cycling.domain.online.model.OnlinePlugin
 import com.cycling.domain.online.model.OnlineSource
 import com.cycling.domain.online.model.PlaySourceResolution
@@ -59,6 +60,13 @@ interface OnlinePluginRepository {
     suspend fun removePlugin(pluginId: String)
 
     /**
+     * 把随 App 打包的内置音源装回来（用户删过的话）。
+     *
+     * 返回本次实际新增的插件数；启动时已经自动装上的那些不算。
+     */
+    suspend fun restoreBundledPlugins(): Int
+
+    /**
      * 把一轮「各平台是否可用」的探测结果落到插件的自动屏蔽列表。
      *
      * 探测失败且在 LX 平台键集合内、又没有被用户手动屏蔽的平台，会被自动屏蔽；
@@ -85,6 +93,22 @@ interface OnlinePluginRepository {
         candidates: List<MusicInfo>,
         quality: MusicQuality
     ): PlaySourceResolution
+
+    /**
+     * 用脚本取歌词（LX `action = 'lyric'`）。
+     *
+     * 与取链不同，歌词只有「有没有」两种结果，没有可播性探测，也没有跨平台换源：
+     * 只按插件排序问一遍所有声明了该 action、且没屏蔽这个平台的插件，第一个答出来的赢。
+     * 全部失败或无插件支持时返回 null。
+     */
+    suspend fun fetchLyric(track: MusicInfo): OnlineLyric?
+
+    /**
+     * 用脚本取封面地址（LX `action = 'pic'`）。
+     *
+     * 返回可直接加载的 http(s) 地址；没有插件能给出时返回 null。
+     */
+    suspend fun fetchCover(track: MusicInfo): String?
 
     /** 当前至少有一个已启用插件声明支持的平台。 */
     suspend fun availableSources(): List<OnlineSource>

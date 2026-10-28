@@ -1,5 +1,6 @@
 package com.cycling.data.online.lx
 
+import com.cycling.domain.online.model.OnlineLyric
 import com.cycling.domain.online.model.PlaySource
 import org.json.JSONArray
 import org.json.JSONObject
@@ -66,5 +67,41 @@ object LxJson {
             }
         }
         return PlaySource(url, headers)
+    }
+
+    /**
+     * 歌词结果的容错解析（LX `action = 'lyric'`）。
+     *
+     * 逐字文档（`lxlyric`）优先当主文档：它是信息量最大的一份，普通 `lyric` 往往只是它的
+     * 行级裁剪。只有翻译时退化成拿翻译当主文档，此时不再重复带一份翻译。
+     */
+    fun extractLyric(value: Any?): OnlineLyric? {
+        if (value is String) {
+            return value.takeIf { it.isNotBlank() }?.let { OnlineLyric(it) }
+        }
+        val map = value as? Map<*, *> ?: return null
+
+        fun pick(vararg keys: String): String? = keys.firstNotNullOfOrNull { key ->
+            map[key]?.toString()?.takeIf { it.isNotBlank() }
+        }
+
+        val main = pick("lxlyric", "lyric") ?: pick("tlyric") ?: return null
+        return OnlineLyric(
+            lyric = main,
+            translation = pick("tlyric")?.takeIf { it != main },
+            romanization = pick("rlyric")?.takeIf { it != main }
+        )
+    }
+
+    /** 封面结果的容错解析：字符串 URL 或 `{ url, pic, img }`。 */
+    fun extractPicUrl(value: Any?): String? = when (value) {
+        null -> null
+        is String -> value.trim().takeIf { it.startsWith("http") }
+        is Map<*, *> -> (value["url"] ?: value["pic"] ?: value["img"])
+            ?.toString()
+            ?.trim()
+            ?.takeIf { it.startsWith("http") }
+
+        else -> value.toString().trim().takeIf { it.startsWith("http") }
     }
 }

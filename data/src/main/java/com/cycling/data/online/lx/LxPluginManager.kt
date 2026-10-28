@@ -9,6 +9,7 @@ import com.cycling.data.online.store.toStored
 import com.cycling.domain.online.model.AutoBlockResult
 import com.cycling.domain.online.model.MusicInfo
 import com.cycling.domain.online.model.MusicQuality
+import com.cycling.domain.online.model.OnlineLyric
 import com.cycling.domain.online.model.OnlinePlugin
 import com.cycling.domain.online.model.OnlinePluginSource
 import com.cycling.domain.online.model.OnlineSource
@@ -31,6 +32,7 @@ import timber.log.Timber
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * 洛雪（LX）音源插件管理器：装、排序、屏蔽、执行、取链。
@@ -42,7 +44,10 @@ import javax.inject.Singleton
  * - **排序**：手动 / 平台数 / 速度 / 可用性四种；
  * - **自动屏蔽**：探测失败的平台自动加入 `autoBlockedPlatforms`，恢复后自动移除；
  * - **取链**：按排序依次尝试插件 → 档位降级 → 失败换下一个插件/下一个候选平台；
- *   `lxkey` 额度/到期/停用/无效类错误立即终止（换平台也没用）。
+ *   `lxkey` 额度/到期/停用/无效类错误立即终止（换平台也没用）；
+ * - **取词 / 取封面**：同一个排序，只问声明了 `lyric` / `pic` 的插件，第一个答出来的赢；
+ * - **健康度**：每次取链/取词/取封面记一次成败，连续失败 [OnlinePlugin.HEALTH_DEMOTE_THRESHOLD]
+ *   次后降到队尾（仍会被尝试，成功一次即恢复）。
  */
 @Singleton
 class LxPluginManager @Inject constructor(
@@ -70,21 +75,31 @@ class LxPluginManager @Inject constructor(
     /** 插件 id -> 运行中的脚本运行时。 */
     private val runners = ConcurrentHashMap<String, LxScriptRunner>()
 
+    /** 用户删掉的内置音源 id，用来阻止下次启动又装回来。 */
+    private var removedBuiltins: Set<String> = emptySet()
+
     @Volatile
     private var initialized = false
 
     override suspend fun initialize() {
         mutex.withLock {
             if (initialized) return
-            initialized = true
-            val snapshot = store.readSnapshot()
-            _sortMode.value = PluginSortMode.fromStorage(snapshot.sortMode)
-            _priority.value = PluginPriority.fromStorage(snapshot.priority)
-            _plugins.value = snapshot.plugins
-                .map { it.toDomain() }
-                .sortedBy { it.manualOrder }
-            Timber.d("LxPluginManager: 已加载 %d 个插件", _plugins.value.size)
+            loadLocked()
         }
+    }
+
+    /** 已持有 [mutex] 时用这个。 */
+    private suspend fun loadLocked() {
+        initialized = true
+        val snapshot = store.readSnapshot()
+        _sortMode.value = PluginSortMode.fromStorage(snapshot.sortMode)
+        _priority.value = PluginPriority.fromStorage(snapshot.priority)
+        removedBuiltins = snapshot.removedBuiltins
+        _plugins.value = snapshot.plugins
+            .map { it.toDomain() }
+            .sortedBy { it.manualOrder }
+        seedBundledLocked(removedBuiltins)
+        Timber.d("LxPluginManager: 已加载 %d 个插件", _plugins.value.size)
     }
 
     // region 导入
@@ -125,16 +140,24 @@ class LxPluginManager @Inject constructor(
             autoBlockInvalid = existing?.autoBlockInvalid ?: true,
             autoBlockedPlatforms = existing?.autoBlockedPlatforms.orEmpty(),
             opaque = scriptMeta.gateForImport(content) == LxScriptMeta.Gate.NO_LX_MARKER,
-            status = "installing"
+            status = "installing",
+            // 同一个脚本重装时保留健康度：失败过的插件不该因为重装一次就假装自己是健康的。
+            consecutiveFailures = existing?.consecutiveFailures ?: 0,
+            lastFailureAt = existing?.lastFailureAt ?: 0L,
+            lastSuccessAt = existing?.lastSuccessAt ?: 0L
         )
         replacePlugin(plugin)
         persist()
 
         val probe = probePlugin(plugin)
+        val probeOk = probe.error == null
         val installed = plugin.copy(
             sources = probe.sources.ifEmpty { plugin.sources },
-            status = if (probe.error == null) "ok" else "error",
-            error = probe.error
+            status = if (probeOk) "ok" else "error",
+            error = probe.error,
+            // 刚装完就能启动，等于一次成功的健康度采样；探测失败则保留原来的失败计数。
+            consecutiveFailures = if (probeOk) 0 else plugin.consecutiveFailures,
+            lastSuccessAt = if (probeOk) System.currentTimeMillis() else plugin.lastSuccessAt
         )
         replacePlugin(installed)
         persist()
@@ -220,7 +243,23 @@ class LxPluginManager @Inject constructor(
         disposeRunner(pluginId)
         store.deleteScript(plugin.scriptFileName)
         _plugins.value = _plugins.value.filterNot { it.id == pluginId }
+        // 内置脚本记一笔「用户不想要」，否则下次启动又回来了。
+        if (plugin.isBuiltin) {
+            removedBuiltins = removedBuiltins + pluginId
+            store.saveRemovedBuiltins(removedBuiltins)
+        }
         persist()
+    }
+
+    override suspend fun restoreBundledPlugins(): Int = mutex.withLock {
+        if (!initialized) loadLocked()
+        if (removedBuiltins.isNotEmpty()) {
+            removedBuiltins = emptySet()
+            store.saveRemovedBuiltins(emptySet())
+        }
+        val before = _plugins.value.size
+        seedBundledLocked(emptySet())
+        _plugins.value.size - before
     }
 
     override suspend fun applyAutoBlockDetection(
@@ -260,7 +299,10 @@ class LxPluginManager @Inject constructor(
         val plugin = _plugins.value.firstOrNull { it.id == pluginId }
             ?: return@withLock PluginTestReport(status = "error", error = "插件不存在")
         disposeRunner(pluginId)
-        probePlugin(plugin)
+        val report = probePlugin(plugin)
+        // 手动测试也算一次健康度采样：测通了就把降权摘掉，免得用户点了「测试」却还排在队尾。
+        applyResultLocked(pluginId, ok = report.isOk)
+        report
     }
 
     // endregion
@@ -281,23 +323,23 @@ class LxPluginManager @Inject constructor(
         var failure: PlaySourceResolution.Failure? = null
 
         for (candidate in ordered) {
-            val eligible = orderedPlugins().filter { plugin ->
-                plugin.enabled &&
-                    !plugin.isPlatformBlocked(candidate.source) &&
-                    plugin.supports(candidate.source, OnlinePlugin.ACTION_MUSIC_URL)
-            }
-            for (plugin in eligible) {
+            for (plugin in eligiblePlugins(candidate.source, OnlinePlugin.ACTION_MUSIC_URL)) {
                 when (val result = tryLocal(plugin, candidate, quality)) {
                     is PlaySourceResolution.Success -> {
                         // 脚本只负责拼 URL，不会去访问它：后端挂了它照样「成功」。
                         // 这里探一下，不可播就当作这个插件失败，继续试下一个。
-                        if (playUrlProbe.isPlayable(result.source.url)) return result
+                        if (playUrlProbe.isPlayable(result.source.url)) {
+                            noteResult(plugin.id, ok = true)
+                            return result
+                        }
+                        noteResult(plugin.id, ok = false)
                         failure = PlaySourceResolution.Failure(
                             "「${plugin.name}」返回的地址不可播放（${result.source.url.take(96)}）"
                         )
                     }
 
                     is PlaySourceResolution.Failure -> {
+                        noteResult(plugin.id, ok = false)
                         failure = result
                         if (LxKeyIssues.isFatal(result.keyIssue)) return result
                     }
@@ -316,6 +358,108 @@ class LxPluginManager @Inject constructor(
         .filter { it.enabled }
         .flatMap { plugin -> plugin.sources.map { it.key } }
         .distinct()
+
+    // endregion
+
+    // region 歌词与封面
+
+    override suspend fun fetchLyric(track: MusicInfo): OnlineLyric? {
+        initialize()
+        for (plugin in eligiblePlugins(track.source, OnlinePlugin.ACTION_LYRIC)) {
+            val runner = ensureRunner(plugin)
+            if (runner == null) {
+                noteResult(plugin.id, ok = false)
+                continue
+            }
+            try {
+                val lyric = runner.lyric(track.source, track)
+                noteResult(plugin.id, ok = true)
+                return lyric
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: LxPluginQuarantinedException) {
+                noteResult(plugin.id, ok = false)
+            } catch (e: Exception) {
+                noteResult(plugin.id, ok = false)
+                Timber.d(
+                    "LxPluginManager: %s 取词失败(%s): %s",
+                    plugin.name,
+                    track.source.lxKey,
+                    e.message
+                )
+            }
+        }
+        return null
+    }
+
+    override suspend fun fetchCover(track: MusicInfo): String? {
+        initialize()
+        for (plugin in eligiblePlugins(track.source, OnlinePlugin.ACTION_PIC)) {
+            val runner = ensureRunner(plugin)
+            if (runner == null) {
+                noteResult(plugin.id, ok = false)
+                continue
+            }
+            try {
+                val url = runner.pic(track.source, track)
+                noteResult(plugin.id, ok = true)
+                return url
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: LxPluginQuarantinedException) {
+                noteResult(plugin.id, ok = false)
+            } catch (e: Exception) {
+                noteResult(plugin.id, ok = false)
+                Timber.d(
+                    "LxPluginManager: %s 取封面失败(%s): %s",
+                    plugin.name,
+                    track.source.lxKey,
+                    e.message
+                )
+            }
+        }
+        return null
+    }
+
+    // endregion
+
+    // region 取链与取词共用
+
+    /** 按当前排序，挑出能处理 [source] 的 [action] 的插件。 */
+    private fun eligiblePlugins(source: OnlineSource, action: String): List<OnlinePlugin> =
+        orderedPlugins().filter { plugin ->
+            plugin.enabled &&
+                !plugin.isPlatformBlocked(source) &&
+                plugin.supports(source, action)
+        }
+
+    /**
+     * 记一次取链 / 取词 / 取封面的结果。
+     *
+     * 成功且本来就没有失败计数时直接返回：否则每播一首歌都要写一遍 DataStore。
+     */
+    private suspend fun noteResult(pluginId: String, ok: Boolean) {
+        val current = _plugins.value.firstOrNull { it.id == pluginId } ?: return
+        if (ok && current.consecutiveFailures == 0) return
+        mutex.withLock { applyResultLocked(pluginId, ok) }
+    }
+
+    /** 已经持有 [mutex] 时用这个（`Mutex` 不可重入，套用会死锁）。 */
+    private suspend fun applyResultLocked(pluginId: String, ok: Boolean) {
+        val plugin = _plugins.value.firstOrNull { it.id == pluginId } ?: return
+        val now = System.currentTimeMillis()
+        val updated = if (ok) {
+            plugin.copy(consecutiveFailures = 0, lastSuccessAt = now)
+        } else {
+            plugin.copy(
+                consecutiveFailures = plugin.consecutiveFailures + 1,
+                lastFailureAt = now
+            )
+        }
+        if (updated == plugin) return
+        replacePlugin(updated)
+        persist()
+    }
 
     private suspend fun tryLocal(
         plugin: OnlinePlugin,
@@ -339,6 +483,8 @@ class LxPluginManager @Inject constructor(
                     pluginName = plugin.name,
                     quality = candidate
                 )
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: LxPluginQuarantinedException) {
                 return PlaySourceResolution.Failure(e.message ?: "插件已隔离", null)
             } catch (e: Exception) {
@@ -453,9 +599,15 @@ class LxPluginManager @Inject constructor(
 
     // region helpers
 
+    /**
+     * 当前排序 + 健康度降权。
+     *
+     * 降权是**稳定排序的第二趟**：连续失败够多的插件挪到队尾，其余保持用户选的那种排序。
+     * 不能把它们直接剔掉 —— 后端恢复后只有靠再被尝试一次才能把计数清零。
+     */
     private fun orderedPlugins(): List<OnlinePlugin> {
         val list = _plugins.value
-        return when (_sortMode.value) {
+        val sorted = when (_sortMode.value) {
             PluginSortMode.MANUAL -> list.sortedBy { it.manualOrder }
             PluginSortMode.PLATFORM_COUNT -> list.sortedWith(
                 compareByDescending<OnlinePlugin> { it.musicPlatformCount }
@@ -473,10 +625,47 @@ class LxPluginManager @Inject constructor(
                     .thenBy { it.manualOrder }
             )
         }
+        return sorted.sortedBy { if (it.isDemoted) 1 else 0 }
     }
 
     private fun nextManualOrder(): Int =
         (_plugins.value.maxOfOrNull { it.manualOrder } ?: -1) + 1
+
+    /**
+     * 把还没装过的内置脚本写进脚本目录并登记成插件。
+     *
+     * [skip] 是用户手动删掉的 id。内置插件不探测：启动时跑三个 QuickJS 运行时太贵，
+     * 平台声明直接用 [LxBundledSources] 里的静态值，首次取链时再校正。
+     */
+    private suspend fun seedBundledLocked(skip: Set<String>) {
+        var order = nextManualOrder()
+        val added = ArrayList<OnlinePlugin>(LxBundledSources.ALL.size)
+        for (bundled in LxBundledSources.ALL) {
+            if (bundled.pluginId in skip) continue
+            if (_plugins.value.any { it.id == bundled.pluginId }) continue
+            val content = LxBundledSources.read(context, bundled) ?: continue
+            val meta = scriptMeta.parseMeta(content)
+            store.writeScript(bundled.scriptFileName, content)
+            added += OnlinePlugin(
+                id = bundled.pluginId,
+                name = meta.name.ifBlank { bundled.fallbackName },
+                version = meta.version,
+                author = meta.author,
+                description = meta.description,
+                homepage = meta.homepage,
+                scriptFileName = bundled.scriptFileName,
+                origin = OnlinePlugin.ORIGIN_BUILTIN,
+                sources = bundled.sources,
+                manualOrder = order++,
+                addedAt = System.currentTimeMillis(),
+                status = "ok"
+            )
+        }
+        if (added.isEmpty()) return
+        _plugins.value = (_plugins.value + added).sortedBy { it.manualOrder }
+        persist()
+        Timber.i("LxPluginManager: 装入 %d 个内置音源", added.size)
+    }
 
     private fun replacePlugin(plugin: OnlinePlugin) {
         val current = _plugins.value.toMutableList()

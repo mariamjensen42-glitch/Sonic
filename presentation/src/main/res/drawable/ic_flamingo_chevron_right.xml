@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Flamingo 1.0.0（2608310056）的 ic_chevron_bold_asset，图标含义：右箭头。
+     pathData 原样搬运；viewport 收到图形包围盒（源文件里的留白已裁掉），
+     所以同一 dp 下各图标的墨迹大小一致。颜色一律 #FF000000，由 Icon 的 tint 决定。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="14.28dp"
+    android:height="24dp"
+    android:viewportWidth="9.314"
+    android:viewportHeight="15.651">
+    <group android:translateX="-0.5" android:translateY="-0.17">
+        <path
+            android:fillColor="#FF000000"
+            android:pathData="M1.961,15.821C2.348,15.821 2.681,15.682 2.96,15.413L9.287,9.172C9.652,8.807 9.814,8.441 9.814,7.99C9.814,7.539 9.652,7.174 9.287,6.809L2.96,0.578C2.681,0.299 2.358,0.17 1.961,0.17C1.155,0.17 0.5,0.814 0.5,1.61C0.5,2.007 0.661,2.372 0.962,2.673L6.408,7.98L0.962,13.308C0.672,13.608 0.5,13.974 0.5,14.371C0.5,15.166 1.155,15.821 1.961,15.821Z" />
+    </group>
+</vector>

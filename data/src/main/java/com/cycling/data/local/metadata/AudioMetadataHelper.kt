@@ -1,38 +1,34 @@
 package com.cycling.data.local.metadata
 
+import android.media.MediaMetadataRetriever
 import com.cycling.domain.model.AudioMetadata
 import com.cycling.domain.model.TagUpdate
-import com.cycling.salt.audiotag.AudioTag
-import com.cycling.salt.audiotag.UnstableAudioTagApi
-import com.cycling.salt.audiotag.rw.ReadStrategy
-import com.cycling.salt.audiotag.rw.WriteOperation
-import com.cycling.salt.audiotag.rw.data.AudioTagData
-import com.cycling.salt.audiotag.rw.data.Metadata
-import com.mpatric.mp3agic.ID3v2
-import com.mpatric.mp3agic.ID3v24Tag
-import com.mpatric.mp3agic.Mp3File
 import java.io.File
+import java.util.logging.Level
+import java.util.logging.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.io.buffered
-import kotlinx.io.files.Path
-import kotlinx.io.files.SystemFileSystem
-import kotlinx.io.files.SystemTemporaryDirectory
+import org.jaudiotagger.audio.AudioFileIO
+import org.jaudiotagger.tag.FieldKey
+import org.jaudiotagger.tag.Tag
+import org.jaudiotagger.tag.images.ArtworkFactory
 import timber.log.Timber
 
 /**
- * Reads and writes the tags of local audio files.
+ * 读写本地音频文件的标签，全部交给 jaudiotagger（`net.jthink:jaudiotagger`，LGPL-2.1）。
  *
- * MP3 stays on mp3agic (ID3v2, plus the USLT lyrics and ReplayGain readers). Everything else goes
- * through the vendored SaltAudioTag library in `:taglib`: FLAC (VorbisComment), OGG-Vorbis,
- * MP4/M4A (ilst) are read **and** written, Opus is read-only. That closes the old "edit tags on
- * MP3 only" gap without one hand-written parser per container.
+ * 之前这里是一套自己维护的多格式解析器（`:taglib`，MP3/FLAC/OGG/MP4 各写一遍 reader + writer），
+ * 加上只认 MP3 的 mp3agic。现在统一成一个库：它覆盖 MP3 / FLAC / OGG-Vorbis / MP4-M4A / WAV /
+ * AIFF / WMA / DSF（DFF 只读），读和写走同一套 `Tag` 抽象，字段名用 `FieldKey` 而不是各容器
+ * 各自的键名。
  *
- * Writes remain best-effort on purpose: the app only holds a read grant on the media library, so a
- * tag write can fail on a modern device. That must never be the only place an edit lives — the
- * detail page also stores user edits in `song_metadata`, and reports when the file was not written.
+ * 例外是 Opus 与裸 AAC：jaudiotagger 不认识这两个容器，退到 `MediaMetadataRetriever` 拿基础字段
+ * （码率、采样率、标题、艺术家、专辑、年份、曲号），拿不到的值留空 —— 总比详情页整片空白好。
+ *
+ * 写入仍是尽力而为：应用只拿到媒体库的读授权，写标签在现代设备上可能失败。这不能是编辑的唯一
+ * 去处 —— 详情页同时把改动存进 `song_metadata`，并在写文件失败时如实提示。
  */
 @Singleton
 class AudioMetadataHelper @Inject constructor() {
@@ -41,12 +37,11 @@ class AudioMetadataHelper @Inject constructor() {
         return@withContext try {
             val file = File(filePath)
             if (!file.exists()) return@withContext null
-
             val extension = file.extension.lowercase()
 
             when {
-                extension == "mp3" -> extractMp3Metadata(filePath)
-                extension in MULTI_FORMAT_EXTENSIONS -> extractMultiFormatMetadata(file, extension)
+                extension in TAG_READABLE_EXTENSIONS -> readWithJaudiotagger(file, extension)
+                extension in RETRIEVER_EXTENSIONS -> readWithRetriever(file, extension)
                 else -> null
             }
         } catch (e: Exception) {
@@ -55,37 +50,70 @@ class AudioMetadataHelper @Inject constructor() {
         }
     }
 
-    /**
-     * Reads FLAC / OGG / MP4 tags through SaltAudioTag.
-     *
-     * Pictures are skipped: the detail page edits text fields, and loading a multi-megabyte cover
-     * into memory for every page open would be wasteful. The write path re-reads with pictures so
-     * they survive a tag edit.
-     */
-    @OptIn(UnstableAudioTagApi::class)
-    private fun extractMultiFormatMetadata(file: File, extension: String): AudioMetadata? {
-        val data = AudioTag.read(
-            Path(file.path),
-            tagLibExtensionFor(extension),
-            ReadStrategy.IgnorePicture
+    /** jaudiotagger 的读路径：技术参数来自 header，文字字段来自 `Tag`。 */
+    private fun readWithJaudiotagger(file: File, extension: String): AudioMetadata? {
+        val audioFile = AudioFileIO.read(file)
+        val header = audioFile.audioHeader
+        val tag = audioFile.tag
+
+        // 有些容器的 header 不给码率（或给 0），用文件大小和时长估一个 —— 详情页只是展示。
+        val bitrate = header.bitRateAsNumber.toInt().takeIf { it > 0 }
+            ?: estimatedBitrateKbps(file.length(), header.preciseTrackLength)
+
+        return audioMetadataFrom(
+            extension = extension,
+            bitrate = bitrate,
+            sampleRate = header.sampleRateAsNumber.coerceAtLeast(0),
+            channels = channelCountOf(header.channels),
+            variableBitrate = header.isVariableBitRate,
+            first = { key -> tag.firstValueOrNull(key) }
         )
-            .onFailure { Timber.w(it, "extractMetadata: %s is not readable by SaltAudioTag", file.path) }
-            .getOrNull()
-            ?: return null
-        return audioMetadataFromTagData(data, extension, file.length())
+    }
+
+    /** Opus / 裸 AAC 的兜底：`MediaMetadataRetriever` 只给基础字段。 */
+    private fun readWithRetriever(file: File, extension: String): AudioMetadata? {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            // 用路径而不是 content Uri：Sonic 手上永远是 MediaStore 给的 `_data` 真路径，
+            // 这样不必为了一个兜底解析器再注入一个 Context。
+            retriever.setDataSource(file.path)
+
+            fun value(key: Int): String? =
+                retriever.extractMetadata(key)?.trim()?.takeIf { it.isNotEmpty() }
+
+            AudioMetadata(
+                // METADATA_KEY_BITRATE 是 bit/s，模型里是 kbps。
+                bitrate = value(MediaMetadataRetriever.METADATA_KEY_BITRATE)
+                    ?.toLongOrNull()?.div(1000)?.toInt() ?: 0,
+                sampleRate = value(MediaMetadataRetriever.METADATA_KEY_SAMPLERATE)
+                    ?.toIntOrNull() ?: 0,
+                channels = 0,
+                encodingType = encodingTypeFor(extension, variableBitrate = false),
+                year = yearFromTagDate(value(MediaMetadataRetriever.METADATA_KEY_YEAR)),
+                genre = value(MediaMetadataRetriever.METADATA_KEY_GENRE),
+                composer = value(MediaMetadataRetriever.METADATA_KEY_COMPOSER),
+                albumArtist = value(MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST),
+                trackNumber = value(MediaMetadataRetriever.METADATA_KEY_CD_TRACK_NUMBER),
+                discNumber = null,
+                publisher = null,
+                comment = null,
+                copyright = null
+            )
+        } finally {
+            runCatching { retriever.release() }
+        }
     }
 
     /**
      * 读取 ReplayGain 的曲目增益。
      *
-     * 不去做完整的标签解析，而是在文件头部若干字节里找 `replaygain_track_gain` 这个键，再取它
-     * 后面第一个带 `dB` 的数字。理由：ReplayGain 在 MP3 里是 ID3v2 的 TXXX 帧、在 FLAC/OGG 里
-     * 是 Vorbis comment、在 M4A 里是 iTunes 的自定义 atom —— 三种格式三套解析器，而播放器每换
-     * 一首歌就要问一次。这个键在三种格式里都是明文的 ASCII，落在文件头部，扫一遍就够了。
+     * 不走完整解析，而是在文件头部若干字节里找 `replaygain_track_gain` 这个键，再取它后面第一个
+     * 带 `dB` 的数字。理由：ReplayGain 在 MP3 里是 ID3v2 的 TXXX 帧、在 FLAC/OGG 里是
+     * Vorbis comment、在 M4A 里是 iTunes 的自定义 atom —— 播放器每换一首歌都要问一次，这个键在
+     * 三种格式里都是明文的 ASCII，落在文件头部，扫一遍就够了。
      *
-     * 扫描范围固定为 [REPLAY_GAIN_SCAN_BYTES]：ID3v2 头、Vorbis comment 块、以及
-     * faststart 过的 M4A 的 `moov` 都在这个范围内；`moov` 在文件尾部的 M4A 读不到，返回 null，
-     * 播放时按不启用处理，不会出错。
+     * 扫描范围固定为 [REPLAY_GAIN_SCAN_BYTES]：ID3v2 头、Vorbis comment 块、以及 faststart 过的
+     * M4A 的 `moov` 都在这个范围内；`moov` 在文件尾部的 M4A 读不到，返回 null，播放时按不启用处理。
      */
     suspend fun extractReplayGainDb(filePath: String): Float? = withContext(Dispatchers.IO) {
         return@withContext try {
@@ -124,50 +152,15 @@ class AudioMetadataHelper @Inject constructor() {
         }
     }
 
-    private fun extractMp3Metadata(filePath: String): AudioMetadata {
-        val mp3File = Mp3File(filePath)
-
-        val id3v2Tag: ID3v2? = if (mp3File.hasId3v2Tag()) {
-            mp3File.id3v2Tag
-        } else {
-            null
-        }
-
-        val encodingType = buildString {
-            append("MP3")
-            if (mp3File.isVbr) {
-                append(" (VBR)")
-            } else {
-                append(" (CBR)")
-            }
-        }
-
-        return AudioMetadata(
-            bitrate = mp3File.bitrate,
-            sampleRate = mp3File.sampleRate,
-            channels = 2,
-            encodingType = encodingType,
-            year = id3v2Tag?.year,
-            genre = id3v2Tag?.genreDescription,
-            composer = id3v2Tag?.composer,
-            albumArtist = id3v2Tag?.albumArtist,
-            trackNumber = id3v2Tag?.track,
-            discNumber = id3v2Tag?.partOfSet,
-            publisher = id3v2Tag?.publisher,
-            comment = id3v2Tag?.comment,
-            copyright = id3v2Tag?.copyright
-        )
-    }
-
     /**
-     * Writes [tagUpdate] into the file's tags.
+     * 把 [tagUpdate] 写进文件的标签。
      *
-     * MP3 goes through mp3agic's ID3v2 writer; FLAC/OGG/MP4 go through SaltAudioTag. Formats not
-     * in either path return `false`.
+     * 只写用户真正改过的字段：`null` 表示"不动"，空串与空白同样跳过（清空字段要靠先读后删，
+     * 不在这个接口的语义里）。jaudiotagger 直接在原文件上重写标签块，不需要像旧实现那样先写临时
+     * 文件再覆盖。
      *
-     * @return `false` when the file is missing, the container is unsupported, or the write failed
-     *   — for example because the app only has a read grant on it. Callers must surface that
-     *   rather than pretend the edit was applied.
+     * @return `false` 当文件不存在、容器没有 writer、或写入失败（例如只有读授权）时。
+     *   调用方必须如实提示，而不是假装写成功了。
      */
     suspend fun updateTags(filePath: String, tagUpdate: TagUpdate): Boolean = withContext(Dispatchers.IO) {
         val file = File(filePath)
@@ -175,144 +168,85 @@ class AudioMetadataHelper @Inject constructor() {
             Timber.w("updateTags: file does not exist: $filePath")
             return@withContext false
         }
+        if (!isTagWriteSupported(filePath)) {
+            Timber.w("updateTags: no tag writer for %s", filePath)
+            return@withContext false
+        }
 
-        when (val extension = file.extension.lowercase()) {
-            "mp3" -> updateMp3Tags(filePath, tagUpdate)
-            in MULTI_FORMAT_WRITE_EXTENSIONS -> updateMultiFormatTags(file, extension, tagUpdate)
-            else -> {
-                Timber.w("updateTags: unsupported tag container '%s' for %s", extension, filePath)
-                false
+        try {
+            val audioFile = AudioFileIO.read(file)
+            // 没有标签的文件（裸 MP3 常见）先建一份默认标签，否则 setField 无处可写。
+            val tag = audioFile.tag ?: audioFile.createDefaultTag().also { audioFile.tag = it }
+
+            for ((key, value) in tagFieldWrites(tagUpdate, ordinalStyleFor(file.extension))) {
+                // 单个字段写不进去（该容器没有对应的键，例如 MP4 没有发行方原子）只跳过这一个，
+                // 不能让它带走整次保存。
+                runCatching { tag.setField(key, value) }
+                    .onFailure { Timber.w(it, "updateTags: %s does not support %s", file.extension, key) }
             }
+
+            AudioFileIO.write(audioFile)
+            Timber.i("updateTags: wrote tags for %s", file.path)
+            true
+        } catch (e: Exception) {
+            Timber.e(e, "updateTags: failed to write tags for %s", file.path)
+            false
         }
     }
+
+    /**
+     * 把封面写进音频文件，替换原有的封面字段。
+     *
+     * 下载完成时必须做这一步：曲库里的封面来自 MediaStore 的专辑封面缓存，而那个缓存是
+     * **扫描时从文件内嵌图片里生成的**。文件里没有图，缩略图就是空的 —— 与音源给的封面无关。
+     *
+     * @param imageBytes 原始图片字节（JPEG / PNG / WebP / GIF）。
+     * @return `false` 当文件不存在、容器不支持、或图片格式/写入失败时。
+     */
+    suspend fun writeCoverArtwork(filePath: String, imageBytes: ByteArray): Boolean =
+        withContext(Dispatchers.IO) {
+            val file = File(filePath)
+            if (!file.exists() || imageBytes.isEmpty()) return@withContext false
+            if (!isTagWriteSupported(filePath)) {
+                Timber.w("writeCoverArtwork: no tag writer for %s", filePath)
+                return@withContext false
+            }
+            val extension = sniffImageExtension(imageBytes) ?: run {
+                Timber.w("writeCoverArtwork: %s 不是可识别的图片", filePath)
+                return@withContext false
+            }
+
+            // ArtworkFactory 只吃 File（它要读宽高写进图片信息块），所以先落一个临时图。
+            // 放在同目录：跨分区临时目录可能写不进去，也没必要。
+            var temp: File? = null
+            try {
+                val audioFile = AudioFileIO.read(file)
+                val tag = audioFile.tag ?: audioFile.createDefaultTag().also { audioFile.tag = it }
+                temp = File.createTempFile("cover-", ".$extension", file.parentFile)
+                temp.writeBytes(imageBytes)
+                val artwork = ArtworkFactory.createArtworkFromFile(temp)
+                // 先清旧封面：有的容器（MP4）允许多张图，直接 set 会累加成相册。
+                runCatching { tag.deleteArtworkField() }
+                tag.setField(artwork)
+                AudioFileIO.write(audioFile)
+                Timber.i("writeCoverArtwork: wrote %d bytes cover for %s", imageBytes.size, file.name)
+                true
+            } catch (e: Exception) {
+                Timber.w(e, "writeCoverArtwork: failed for %s", filePath)
+                false
+            } finally {
+                temp?.delete()
+            }
+        }
 
     /**
      * True when [filePath]'s container has a writer wired up here.
      *
-     * The detail page uses this to decide whether "saved to the database only" is a warning or the
-     * expected outcome. It is intentionally synchronous: it is a pure extension check.
+     * 详情页据此决定"只存进数据库"是警告还是该格式的正常结果。纯扩展名判断，可以同步调。
      */
     fun isTagWriteSupported(filePath: String): Boolean {
         val extension = filePath.substringAfterLast('.', "").lowercase()
-        return extension == "mp3" || extension in MULTI_FORMAT_WRITE_EXTENSIONS
-    }
-
-    /**
-     * Writes [tagUpdate] into a FLAC / OGG / MP4 file through SaltAudioTag.
-     *
-     * SaltAudioTag's write API replaces the whole metadata set, so the existing one is read first
-     * and only the fields in [tagUpdate] are swapped out; unknown entries (ReplayGain, lyrics,
-     * cover-art comments) and pictures are handed back untouched. The result is written to a
-     * cache temp file and then copied over the original, because replacing the file in place is
-     * the only way the change becomes visible to MediaStore and to other players.
-     */
-    @OptIn(UnstableAudioTagApi::class)
-    private fun updateMultiFormatTags(file: File, extension: String, tagUpdate: TagUpdate): Boolean {
-        val style = tagStyleFor(extension) ?: return false
-        if (tagWriterBuffersWholeFile(extension) && file.length() > MAX_BUFFERED_TAG_WRITE_BYTES) {
-            Timber.w(
-                "updateTags: %s is too large for the whole-file writer (%d bytes), keeping DB tags only",
-                file.path,
-                file.length()
-            )
-            return false
-        }
-        val tagLibExtension = tagLibExtensionFor(extension)
-        return try {
-            val sourcePath = Path(file.path)
-            val existing = AudioTag.read(sourcePath, tagLibExtension, ReadStrategy.All)
-                .getOrElse { throw it }
-
-            val merged = mergeTagUpdate(existing.metadatas.orEmpty(), tagUpdate, style)
-            val tempPath = Path(
-                SystemTemporaryDirectory,
-                "sonic-tag-${System.nanoTime()}.$tagLibExtension"
-            )
-
-            try {
-                AudioTag.write(
-                    sourcePath,
-                    tempPath,
-                    tagLibExtension,
-                    WriteOperation.AllMetadata.create(
-                        metadatas = merged,
-                        pictures = existing.pictures.orEmpty()
-                    )
-                ).getOrElse { throw it }
-
-                copyFile(tempPath, sourcePath)
-            } finally {
-                runCatching {
-                    if (SystemFileSystem.exists(tempPath)) SystemFileSystem.delete(tempPath)
-                }
-            }
-
-            Timber.i("updateTags: wrote %s tags for %s", extension, file.path)
-            true
-        } catch (e: Exception) {
-            Timber.e(e, "updateTags: failed to write %s tags for %s", extension, file.path)
-            false
-        }
-    }
-
-    /** Streams [sourcePath] over [targetPath]; the audio file is never held in memory whole. */
-    private fun copyFile(sourcePath: Path, targetPath: Path) {
-        SystemFileSystem.source(sourcePath).buffered().use { source ->
-            SystemFileSystem.sink(targetPath).buffered().use { sink ->
-                sink.transferFrom(source)
-            }
-        }
-    }
-
-    /**
-     * Writes [tagUpdate] into the file's ID3v2 tag, creating the tag when the file has none.
-     *
-     * @return `false` when the file is missing, is not an MP3, or could not be written — for
-     *   example because the app only has a read grant on it. Callers must surface that rather
-     *   than pretend the edit was applied.
-     */
-    private fun updateMp3Tags(filePath: String, tagUpdate: TagUpdate): Boolean {
-        return try {
-            Timber.d("Updating MP3 tags for: $filePath")
-
-            val mp3File = Mp3File(filePath)
-
-            val id3v2Tag: ID3v2 = if (mp3File.hasId3v2Tag()) {
-                mp3File.id3v2Tag
-            } else {
-                Timber.d("Creating new ID3v2 tag")
-                ID3v24Tag().also { mp3File.id3v2Tag = it }
-            }
-
-            tagUpdate.title?.let { id3v2Tag.title = it }
-            tagUpdate.artist?.let { id3v2Tag.artist = it }
-            tagUpdate.album?.let { id3v2Tag.album = it }
-            tagUpdate.albumArtist?.let { id3v2Tag.albumArtist = it }
-            tagUpdate.year?.let { id3v2Tag.year = it }
-            tagUpdate.composer?.let { id3v2Tag.composer = it }
-            tagUpdate.publisher?.let { id3v2Tag.publisher = it }
-            tagUpdate.copyright?.let { id3v2Tag.copyright = it }
-            tagUpdate.comment?.let { id3v2Tag.comment = it }
-            // TRCK / TPOS are strings in ID3 on purpose: `3/12` is as valid as `3`.
-            tagUpdate.trackNumber?.let { id3v2Tag.track = it }
-            tagUpdate.discNumber?.let { id3v2Tag.partOfSet = it }
-            tagUpdate.genre?.let { genre ->
-                // mp3agic only understands a fixed genre list; a custom genre name would throw
-                // and take every other tag edit down with it, so it is skipped instead.
-                try {
-                    id3v2Tag.setGenreDescription(genre)
-                } catch (e: IllegalArgumentException) {
-                    Timber.w("updateMp3Tags: unknown genre '%s', leaving the tag untouched", genre)
-                }
-            }
-
-            mp3File.save(filePath)
-            Timber.i("Successfully saved MP3 tags for: $filePath")
-            true
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to update MP3 tags for: $filePath")
-            false
-        }
+        return extension in TAG_WRITABLE_EXTENSIONS
     }
 
     private companion object {
@@ -326,203 +260,147 @@ class AudioMetadataHelper @Inject constructor() {
 
         /** 只认带 `dB` 单位的数字，避免把后面的 `replaygain_track_peak` 之类的值当成增益。 */
         val REPLAY_GAIN_VALUE_REGEX = Regex("""(-?\d+(?:\.\d+)?)\s*dB""", RegexOption.IGNORE_CASE)
-    }
-}
 
-// ---------------------------------------------------------------------------
-// 多格式标签的读写规则（纯函数，便于 JVM 单测）
-// ---------------------------------------------------------------------------
-
-/** 容器格式 -> 写标签时的键名习惯。MP3 走 mp3agic，不经过这里。 */
-internal enum class TagStyle {
-    /** FLAC 与 OGG 共用 VorbisComment，键名按 Vorbis I 规范（ALBUMARTIST / ORGANIZATION）。 */
-    VORBIS,
-
-    /** MP4/M4A 的 ilst 原子，键名用 SaltAudioTag 的内部键（ALBUM_ARTIST 等）。 */
-    MP4
-}
-
-/** SaltAudioTag 能读的容器。Opus 只能读，不能写。 */
-internal val MULTI_FORMAT_EXTENSIONS: Set<String> =
-    setOf("flac", "ogg", "oga", "opus", "m4a", "m4b", "mp4", "aac")
-
-/** SaltAudioTag 能写的容器。Opus 没有 writer；裸 .aac(ADTS) 也不是 MP4 容器。 */
-internal val MULTI_FORMAT_WRITE_EXTENSIONS: Set<String> =
-    setOf("flac", "ogg", "oga", "m4a", "m4b", "mp4")
-
-/**
- * SaltAudioTag 按扩展名分派 reader/writer，它不认识 `.m4b`。
- *
- * 有声书的 `.m4b` 其实就是 MP4 容器，映射成 `m4a` 交给它处理；对外仍显示 M4B。
- */
-internal fun tagLibExtensionFor(extension: String): String =
-    if (extension.lowercase() == "m4b") "m4a" else extension.lowercase()
-
-internal fun tagStyleFor(extension: String): TagStyle? = when (extension.lowercase()) {
-    "flac", "ogg", "oga" -> TagStyle.VORBIS
-    "m4a", "mp4", "m4b" -> TagStyle.MP4
-    else -> null
-}
-
-/**
- * SaltAudioTag 的 OGG / MP4 writer 会把整份文件读进内存再重组（FLAC 是流式的）。
- *
- * 超过这个尺寸就不写文件标签了：与其 OOM，不如让改动只落在数据库覆盖表里，UI 会提示。
- */
-internal const val MAX_BUFFERED_TAG_WRITE_BYTES = 80L * 1024 * 1024
-
-/** [extension] 的 writer 是否会把整份文件读进内存。 */
-internal fun tagWriterBuffersWholeFile(extension: String): Boolean =
-    extension.lowercase() != "flac"
-
-/** SaltAudioTag 的标签数据 -> 详情页的领域模型。 */
-internal fun audioMetadataFromTagData(
-    data: AudioTagData,
-    extension: String,
-    fileSize: Long
-): AudioMetadata {
-    val values = tagValues(data.metadatas.orEmpty())
-    val streaminfo = data.streaminfo
-
-    val seconds = if (streaminfo != null && streaminfo.sampleRate > 0) {
-        streaminfo.sampleCount.toDouble() / streaminfo.sampleRate
-    } else {
-        0.0
-    }
-    // 这些容器没有现成的平均码率字段，用文件大小和时长估一个即可（详情页只是展示）。
-    val bitrateKbps = if (seconds > 0.0 && fileSize > 0L) {
-        ((fileSize * 8.0 / seconds) / 1000.0).toInt()
-    } else {
-        0
-    }
-
-    return AudioMetadata(
-        bitrate = bitrateKbps,
-        sampleRate = streaminfo?.sampleRate ?: 0,
-        channels = streaminfo?.channelCount ?: 0,
-        encodingType = encodingTypeFor(extension),
-        year = firstTagValue(values, "DATE", "YEAR")?.let(::yearFromTagDate),
-        genre = firstTagValue(values, "GENRE"),
-        composer = firstTagValue(values, "COMPOSER"),
-        albumArtist = firstTagValue(values, "ALBUMARTIST", "ALBUM_ARTIST"),
-        trackNumber = combineOrdinal(
-            firstTagValue(values, "TRACKNUMBER"),
-            firstTagValue(values, "TRACKTOTAL")
-        ),
-        discNumber = combineOrdinal(
-            firstTagValue(values, "DISCNUMBER", "DISCID"),
-            firstTagValue(values, "DISCTOTAL")
-        ),
-        publisher = firstTagValue(values, "PUBLISHER", "ORGANIZATION", "RECORD_LABEL"),
-        comment = firstTagValue(values, "COMMENT", "DESCRIPTION"),
-        copyright = firstTagValue(values, "COPYRIGHT", "LICENSE")
-    )
-}
-
-/**
- * 把 [update] 合并进已读出的 [existing]，只替换本次改动到的键。
- *
- * 保留其余条目是硬要求：ReplayGain、歌词、封面注释和本表不认识的标签都靠 `existing` 原样
- * 带回去；SaltAudioTag 的写接口是「整份元数据替换」，漏传就等于删掉。
- */
-internal fun mergeTagUpdate(
-    existing: List<Metadata>,
-    update: TagUpdate,
-    style: TagStyle
-): List<Metadata> {
-    val replacedKeys = mutableSetOf<String>()
-    val additions = mutableListOf<Metadata>()
-
-    fun apply(value: String?, aliases: Set<String>, vorbisKey: String, mp4Key: String?) {
-        if (value.isNullOrBlank()) return
-        replacedKeys += aliases
-        val key = when (style) {
-            TagStyle.VORBIS -> vorbisKey
-            TagStyle.MP4 -> mp4Key ?: return
+        init {
+            // jaudiotagger 走 java.util.logging，默认会把每个文件的解析过程打到 logcat；
+            // 只留警告，免得整库扫描时淹没自己的 Timber 输出。
+            Logger.getLogger("org.jaudiotagger").level = Level.WARNING
         }
-        additions += Metadata(key, value.trim())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 标签字段映射（纯函数，便于 JVM 单测）
+// ---------------------------------------------------------------------------
+
+/**
+ * 按 magic number 判图片格式。
+ *
+ * 不按 URL 后缀猜：音源的封面地址经常是 `?...&x-oss-process=image/resize` 这类没有后缀的，
+ * 而 jaudiotagger 要靠扩展名/mime 决定写进容器里的是 `image/jpeg` 还是 `image/png`。
+ * 认不出就返回 null —— 宁可没有封面，也不要塞一串不是图片的字节进标签。
+ */
+internal fun sniffImageExtension(bytes: ByteArray): String? {
+    fun at(i: Int): Int = if (i < bytes.size) bytes[i].toInt() and 0xFF else -1
+    return when {
+        at(0) == 0xFF && at(1) == 0xD8 && at(2) == 0xFF -> "jpg"
+        at(0) == 0x89 && at(1) == 0x50 && at(2) == 0x4E && at(3) == 0x47 -> "png"
+        at(0) == 0x47 && at(1) == 0x49 && at(2) == 0x46 -> "gif"
+        at(0) == 0x52 && at(1) == 0x49 && at(2) == 0x46 && at(3) == 0x46 &&
+            at(8) == 0x57 && at(9) == 0x45 && at(10) == 0x42 && at(11) == 0x50 -> "webp"
+        else -> null
+    }
+}
+
+/** jaudiotagger 能读的容器。Opus 与裸 AAC 不在其中，走 `MediaMetadataRetriever` 兜底。 */
+internal val TAG_READABLE_EXTENSIONS: Set<String> = setOf(
+    "mp3", "flac", "ogg", "oga", "mp4", "m4a", "m4b", "m4p",
+    "wav", "aiff", "aif", "wma", "dsf", "dff"
+)
+
+/** jaudiotagger 有 writer 的容器（DFF 只有 reader）。 */
+internal val TAG_WRITABLE_EXTENSIONS: Set<String> = setOf(
+    "mp3", "flac", "ogg", "oga", "m4a", "m4b", "mp4", "m4p",
+    "wav", "aiff", "aif", "wma", "dsf"
+)
+
+/** jaudiotagger 不认识的容器，退回系统解析器。 */
+internal val RETRIEVER_EXTENSIONS: Set<String> = setOf("opus", "aac")
+
+/**
+ * 轨号 / 碟号的写法分两派。
+ *
+ * Vorbis comment 是 `TRACKNUMBER` + `TRACKTOTAL` 两个键，`3/12` 要拆开写；ID3 的 `TRCK` 与 MP4 的
+ * `trkn` 本来就是「序号 + 总数」一体的，写 `3/12` 原样交给库自己拆。
+ */
+internal enum class OrdinalStyle {
+    /** ID3 `TRCK` / `TPOS`、MP4 `trkn` / `disk`：一个键带总数。 */
+    COMBINED,
+
+    /** Vorbis comment：`TRACKNUMBER` / `TRACKTOTAL` 分开。 */
+    SPLIT
+}
+
+internal fun ordinalStyleFor(extension: String): OrdinalStyle =
+    when (extension.lowercase()) {
+        "flac", "ogg", "oga" -> OrdinalStyle.SPLIT
+        else -> OrdinalStyle.COMBINED
     }
 
-    /** Vorbis splits `3/12` into TRACKNUMBER + TRACKTOTAL; MP4 keeps it in the `trkn`/`disk` atom. */
-    fun applyOrdinal(
-        value: String?,
-        aliases: Set<String>,
-        vorbisKey: String,
-        vorbisTotalKey: String,
-        mp4Key: String
-    ) {
-        if (value.isNullOrBlank()) return
-        replacedKeys += aliases
+/** [tagUpdate] 里真正要写入的 (键, 值) 列表；空白值按「没改」处理。 */
+internal fun tagFieldWrites(update: TagUpdate, style: OrdinalStyle): List<Pair<FieldKey, String>> {
+    val writes = mutableListOf<Pair<FieldKey, String>>()
+
+    fun put(key: FieldKey, value: String?) {
+        val trimmed = value?.trim().orEmpty()
+        if (trimmed.isEmpty()) return
+        writes += key to trimmed
+    }
+
+    put(FieldKey.TITLE, update.title)
+    put(FieldKey.ARTIST, update.artist)
+    put(FieldKey.ALBUM, update.album)
+    put(FieldKey.ALBUM_ARTIST, update.albumArtist)
+    put(FieldKey.YEAR, update.year)
+    put(FieldKey.GENRE, update.genre)
+    put(FieldKey.COMPOSER, update.composer)
+    put(FieldKey.RECORD_LABEL, update.publisher)
+    put(FieldKey.COPYRIGHT, update.copyright)
+    put(FieldKey.COMMENT, update.comment)
+
+    fun putOrdinal(value: String?, numberKey: FieldKey, totalKey: FieldKey) {
+        val trimmed = value?.trim().orEmpty()
+        if (trimmed.isEmpty()) return
         when (style) {
-            TagStyle.VORBIS -> {
-                val parts = value.split('/', limit = 2).map { it.trim() }
-                val number = parts[0]
-                val total = parts.getOrNull(1)?.takeIf { it.isNotEmpty() }
-                if (number.isNotEmpty()) additions += Metadata(vorbisKey, number)
-                if (total != null) additions += Metadata(vorbisTotalKey, total)
+            // 容器自己认 `3/12`，原样写回去，读回来才是同一个字符串。
+            OrdinalStyle.COMBINED -> writes += numberKey to trimmed
+            OrdinalStyle.SPLIT -> {
+                val parts = trimmed.split('/', limit = 2).map { it.trim() }
+                parts[0].takeIf { it.isNotEmpty() }?.let { writes += numberKey to it }
+                parts.getOrNull(1)?.takeIf { it.isNotEmpty() }?.let { writes += totalKey to it }
             }
-            TagStyle.MP4 -> additions += Metadata(mp4Key, value.trim())
         }
     }
 
-    apply(update.title, setOf("TITLE"), vorbisKey = "TITLE", mp4Key = "TITLE")
-    apply(update.artist, setOf("ARTIST", "PERFORMER"), vorbisKey = "ARTIST", mp4Key = "ARTIST")
-    apply(update.album, setOf("ALBUM"), vorbisKey = "ALBUM", mp4Key = "ALBUM")
-    apply(
-        update.albumArtist,
-        setOf("ALBUMARTIST", "ALBUM_ARTIST"),
-        vorbisKey = "ALBUMARTIST",
-        mp4Key = "ALBUM_ARTIST"
-    )
-    apply(update.year, setOf("DATE", "YEAR"), vorbisKey = "DATE", mp4Key = "DATE")
-    apply(update.genre, setOf("GENRE"), vorbisKey = "GENRE", mp4Key = "GENRE")
-    applyOrdinal(
-        update.trackNumber,
-        aliases = setOf("TRACKNUMBER", "TRACK", "TRACKTOTAL"),
-        vorbisKey = "TRACKNUMBER",
-        vorbisTotalKey = "TRACKTOTAL",
-        mp4Key = "TRACKNUMBER"
-    )
-    applyOrdinal(
-        update.discNumber,
-        aliases = setOf("DISCNUMBER", "DISC", "DISCID", "DISCTOTAL"),
-        vorbisKey = "DISCNUMBER",
-        vorbisTotalKey = "DISCTOTAL",
-        mp4Key = "DISCNUMBER"
-    )
-    apply(update.composer, setOf("COMPOSER"), vorbisKey = "COMPOSER", mp4Key = "COMPOSER")
-    // MP4 没有发行方原子，写不进去就交给数据库覆盖表，不硬塞成别的字段。
-    apply(
-        update.publisher,
-        setOf("PUBLISHER", "ORGANIZATION", "RECORD_LABEL"),
-        vorbisKey = "ORGANIZATION",
-        mp4Key = null
-    )
-    apply(update.copyright, setOf("COPYRIGHT", "LICENSE"), vorbisKey = "COPYRIGHT", mp4Key = "COPYRIGHT")
-    apply(update.comment, setOf("COMMENT", "DESCRIPTION"), vorbisKey = "COMMENT", mp4Key = "COMMENT")
+    putOrdinal(update.trackNumber, FieldKey.TRACK, FieldKey.TRACK_TOTAL)
+    putOrdinal(update.discNumber, FieldKey.DISC_NO, FieldKey.DISC_TOTAL)
 
-    val kept = existing.filterNot { entry -> entry.key.trim().uppercase() in replacedKeys }
-    return kept + additions
+    return writes
 }
 
-internal fun tagValues(metadatas: List<Metadata>): Map<String, String> {
-    val values = LinkedHashMap<String, String>()
-    for (entry in metadatas) {
-        val key = entry.key.trim().uppercase()
-        val value = entry.value.trim()
-        if (key.isNotEmpty() && value.isNotEmpty()) {
-            values.putIfAbsent(key, value)
-        }
-    }
-    return values
-}
+/** 标签字段 + header 参数 -> 详情页模型。 */
+internal fun audioMetadataFrom(
+    extension: String,
+    bitrate: Int,
+    sampleRate: Int,
+    channels: Int,
+    variableBitrate: Boolean,
+    first: (FieldKey) -> String?
+): AudioMetadata = AudioMetadata(
+    bitrate = bitrate,
+    sampleRate = sampleRate,
+    channels = channels,
+    encodingType = encodingTypeFor(extension, variableBitrate),
+    year = yearFromTagDate(first(FieldKey.YEAR)),
+    genre = first(FieldKey.GENRE),
+    composer = first(FieldKey.COMPOSER),
+    albumArtist = first(FieldKey.ALBUM_ARTIST),
+    trackNumber = combineOrdinal(first(FieldKey.TRACK), first(FieldKey.TRACK_TOTAL)),
+    discNumber = combineOrdinal(first(FieldKey.DISC_NO), first(FieldKey.DISC_TOTAL)),
+    publisher = first(FieldKey.RECORD_LABEL),
+    comment = first(FieldKey.COMMENT),
+    copyright = first(FieldKey.COPYRIGHT)
+)
 
-internal fun firstTagValue(values: Map<String, String>, vararg keys: String): String? =
-    keys.firstNotNullOfOrNull { key -> values[key]?.takeIf { it.isNotBlank() } }
+/** 取一个字段，缺这个键（容器不支持）或取不到时返回 null，不往上抛。 */
+internal fun Tag?.firstValueOrNull(key: FieldKey): String? =
+    this?.let { runCatching { it.getFirst(key) }.getOrNull() }
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
 
 /** `2003` / `2003-07-31` / `2003-07-31T07:00:00Z` -> `2003`；没有年份时返回 null。 */
-internal fun yearFromTagDate(raw: String): String? {
-    val digits = raw.filter { it.isDigit() }
+internal fun yearFromTagDate(raw: String?): String? {
+    val digits = raw.orEmpty().filter { it.isDigit() }
     return if (digits.length >= 4) digits.take(4) else null
 }
 
@@ -534,12 +412,30 @@ internal fun combineOrdinal(number: String?, total: String?): String? {
     return "$primary/$totalValue"
 }
 
-private fun encodingTypeFor(extension: String): String = when (extension.lowercase()) {
-    "flac" -> "FLAC"
-    "ogg", "oga" -> "OGG"
-    "opus" -> "OPUS"
-    "m4a" -> "M4A"
-    "m4b" -> "M4B"
-    "mp4" -> "MP4"
-    else -> extension.uppercase()
+/** jaudiotagger 的声道数是字符串（`"2"`、偶尔带说明文字），只取前导数字。 */
+internal fun channelCountOf(raw: String?): Int =
+    raw.orEmpty().trim().takeWhile { it.isDigit() }.toIntOrNull() ?: 0
+
+/** header 没给码率时（文件大小 / 时长）估一个 kbps。 */
+internal fun estimatedBitrateKbps(fileSizeBytes: Long, seconds: Double): Int {
+    if (seconds <= 0.0 || fileSizeBytes <= 0L) return 0
+    return ((fileSizeBytes * 8.0 / seconds) / 1000.0).toInt()
+}
+
+private fun encodingTypeFor(extension: String, variableBitrate: Boolean): String {
+    val base = when (extension.lowercase()) {
+        "flac" -> "FLAC"
+        "ogg", "oga" -> "OGG"
+        "opus" -> "OPUS"
+        "m4a" -> "M4A"
+        "m4b" -> "M4B"
+        "mp4", "m4p" -> "MP4"
+        "aiff", "aif" -> "AIFF"
+        "dsf" -> "DSF"
+        "dff" -> "DFF"
+        "wma" -> "WMA"
+        else -> extension.uppercase()
+    }
+    // VBR/CBR 只有 MP3 的 header 会明确区分，其它容器的这个标志没有意义。
+    return if (base == "MP3") base + if (variableBitrate) " (VBR)" else " (CBR)" else base
 }

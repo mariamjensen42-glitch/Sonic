@@ -27,7 +27,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -60,6 +59,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -84,6 +84,9 @@ import com.cycling.core.ui.apple.AppleAlert
 import com.cycling.core.ui.apple.AppleGroupedSection
 import com.cycling.core.ui.apple.AppleIconButton
 import com.cycling.core.ui.apple.AppleDims
+import com.cycling.core.ui.apple.AppleSearchField
+import com.cycling.core.ui.apple.AppleSettingsSectionTitle
+import com.cycling.core.ui.apple.AppleSettingsSeparator
 import com.cycling.core.ui.apple.AppleSettingsNavRow as SettingsNavigationRow
 import com.cycling.core.ui.apple.AppleSettingsRow as SettingsRow
 import com.cycling.core.ui.apple.AppleSettingsSwitchRow as SettingsSwitchRow
@@ -95,6 +98,7 @@ import com.cycling.core.ui.apple.applePress
 import com.cycling.core.ui.apple.AppleTheme
 import com.cycling.core.ui.apple.AppleTopBar
 import com.cycling.core.ui.components.M3SymbolIcon
+import com.cycling.core.ui.components.SonGlyph
 import com.cycling.core.ui.components.SymbolIconName
 import com.cycling.core.ui.components.HiResBadgeOverlay
 import com.cycling.core.ui.theme.SonLayout
@@ -110,6 +114,7 @@ import com.cycling.domain.model.ScanResult
 import com.cycling.domain.repository.SettingsRepository.Companion.MAX_AUDIO_FADE_DURATION_MS
 import com.cycling.domain.repository.SettingsRepository.Companion.MAX_PLAYBACK_SPEED
 import com.cycling.domain.repository.SettingsRepository.Companion.MIN_PLAYBACK_SPEED
+import com.cycling.presentation.account.QQMusicAccountContent
 import com.cycling.presentation.components.PieChart
 import com.cycling.presentation.components.PieChartData
 import com.cycling.presentation.components.SonLoadingState
@@ -138,6 +143,8 @@ private val listDividerIndent: Dp =
 fun SettingsScreen(
     onNavigateBack: () -> Unit,
     onShowToast: (String) -> Unit,
+    onNavigateToDownloads: () -> Unit = {},
+    onNavigateToMetadataScrape: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
     bottomPadding: Dp = 0.dp
 ) {
@@ -234,10 +241,12 @@ fun SettingsScreen(
         viewModel.handleIntent(SettingsIntent.NavigateBack)
     }
 
+    val destination = uiState.currentDestination
+
     Scaffold(
         topBar = {
             AppleTopBar(
-                title = when (uiState.currentDestination) {
+                title = when (destination) {
                     SettingsDestination.MAIN -> stringResource(R.string.settings_title)
                     SettingsDestination.SCAN -> stringResource(R.string.settings_scan_menu)
                     SettingsDestination.EXCLUDE_FOLDERS -> stringResource(R.string.settings_exclude_menu)
@@ -245,11 +254,12 @@ fun SettingsScreen(
                     SettingsDestination.LIBRARY_STATS -> stringResource(R.string.settings_library_stats_menu)
                     SettingsDestination.EQUALIZER -> stringResource(R.string.settings_equalizer_menu)
                     SettingsDestination.ONLINE_SOURCES -> stringResource(R.string.settings_online_sources_menu)
+                    SettingsDestination.QQ_MUSIC_ACCOUNT -> stringResource(R.string.settings_qq_account_menu)
                 },
                 onNavigateBack = { viewModel.handleIntent(SettingsIntent.NavigateBack) },
                 backContentDescription = stringResource(R.string.settings_back_desc),
                 actions = {
-                    if (uiState.currentDestination == SettingsDestination.EXCLUDE_FOLDERS) {
+                    if (destination == SettingsDestination.EXCLUDE_FOLDERS) {
                         AppleIconButton(
                             icon = SymbolIconName.Add,
                             contentDescription = stringResource(R.string.settings_add_folder_desc),
@@ -260,9 +270,11 @@ fun SettingsScreen(
             )
         }
     ) { paddingValues ->
-        when (uiState.currentDestination) {
+        when (destination) {
             SettingsDestination.MAIN -> MainSettingsContent(
                 hasApiKey = hasApiKey,
+                qqAccountNickname = uiState.qqMusicAccount?.nickname,
+                excludeRecordings = uiState.excludeRecordings,
                 onlineLyricsEnabled = uiState.onlineLyricsEnabled,
                 lyricsProviderOrder = uiState.lyricsProviderOrder,
                 playbackSpeed = uiState.playbackSpeed,
@@ -275,6 +287,7 @@ fun SettingsScreen(
                 hiResBadge = uiState.hiResBadge,
                 hiResBadgeCustomUri = uiState.hiResBadgeCustomUri,
                 onToggleOnlineLyrics = { viewModel.handleIntent(SettingsIntent.SetOnlineLyricsEnabled(it)) },
+                onSetExcludeRecordings = { viewModel.handleIntent(SettingsIntent.SetExcludeRecordings(it)) },
                 onMoveLyricsProvider = { provider, offset ->
                     viewModel.handleIntent(SettingsIntent.MoveLyricsProvider(provider, offset))
                 },
@@ -310,6 +323,9 @@ fun SettingsScreen(
                 onNavigateToLibraryStats = { viewModel.handleIntent(SettingsIntent.NavigateTo(SettingsDestination.LIBRARY_STATS)) },
                 onNavigateToEqualizer = { viewModel.handleIntent(SettingsIntent.NavigateTo(SettingsDestination.EQUALIZER)) },
                 onNavigateToOnlineSources = { viewModel.handleIntent(SettingsIntent.NavigateTo(SettingsDestination.ONLINE_SOURCES)) },
+                onNavigateToQqAccount = { viewModel.handleIntent(SettingsIntent.NavigateTo(SettingsDestination.QQ_MUSIC_ACCOUNT)) },
+                onNavigateToDownloads = onNavigateToDownloads,
+                onNavigateToMetadataScrape = onNavigateToMetadataScrape,
                 onExportBackup = {
                     backupExportLauncher.launch("sonic-backup-${System.currentTimeMillis()}.json")
                 },
@@ -374,6 +390,11 @@ fun SettingsScreen(
                 bottomPadding = bottomPadding,
                 modifier = Modifier.padding(paddingValues)
             )
+            SettingsDestination.QQ_MUSIC_ACCOUNT -> QQMusicAccountContent(
+                onShowToast = onShowToast,
+                bottomPadding = bottomPadding,
+                modifier = Modifier.padding(paddingValues)
+            )
         }
     }
 }
@@ -382,61 +403,119 @@ fun SettingsScreen(
 // 通用列表组件
 // ════════════════════════════════════════════════════════════════
 
-/** 页面头部：圆形品牌图标 + 应用名 + 副标题。 */
-@Composable
-private fun SettingsHeader(
-    title: String,
-    subtitle: String,
-    onClick: (() -> Unit)? = null
+// 导航型 / 开关型 / 骨架行已上提到 core/ui/apple/AppleSettings.kt，
+// 与设置页的二级页（均衡器、在线源）共用一份实现。
+
+/**
+ * 主设置页的水平页边距。
+ *
+ * 取 16dp 是为了和 `AppleTopBar` 里大标题的左边缘（`AppleDims.padding` = 16dp）对齐 ——
+ * MeloX 那边能用 20dp，是因为它的顶栏自身没有内边距。
+ */
+private val SettingsPageMargin = 16.dp
+
+/** 主设置页的分区标题到卡片的间距。 */
+private val SettingsSectionGap = 20.dp
+
+/**
+ * 主设置页的一行。
+ *
+ * 同一份模型既给渲染用，也给搜索过滤提供匹配文本 —— 行是内联声明的话，
+ * 想让搜索框「找得到但点不进去」几乎不可能，所以这里把行抽成数据。
+ */
+private class SettingsEntry(
+    val title: String,
+    val supporting: String? = null,
+    /** 标题里没有、但用户可能输入的检索词（EQ / API / M3U 之类）。 */
+    val keywords: String = "",
+    val icon: SymbolIconName? = null,
+    val glyph: SonGlyph? = null,
+    val checked: Boolean? = null,
+    val enabled: Boolean = true,
+    val onClick: (() -> Unit)? = null,
+    val onCheckedChange: ((Boolean) -> Unit)? = null,
+    /** 不是标准行时（歌词源排序）整块自定义内容。 */
+    val custom: (@Composable () -> Unit)? = null
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(horizontal = SonLayout.screenMargin, vertical = SonSpacing.large),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(SonSizes.thumbnailLarge)
-                .clip(CircleShape)
-                .background(AppleTheme.colors.fill),
-            contentAlignment = Alignment.Center
-        ) {
-            M3SymbolIcon(
-                name = SymbolIconName.GraphicEq,
-                filled = true,
-                contentDescription = null,
-                tint = AppleTheme.colors.label,
-                modifier = Modifier.size(SonSizes.iconLarge)
+    fun matches(query: String): Boolean =
+        query.isBlank() || "$title ${supporting.orEmpty()} $keywords".contains(query, ignoreCase = true)
+}
+
+private class SettingsSectionSpec(val title: String, val entries: List<SettingsEntry>)
+
+/** 把 [SettingsEntry] 渲染成对应的行组件。 */
+@Composable
+private fun SettingsEntryRow(entry: SettingsEntry) {
+    val custom = entry.custom
+    if (custom != null) {
+        custom()
+        return
+    }
+    val onClick = entry.onClick
+    val checked = entry.checked
+    val onChange = entry.onCheckedChange
+    when {
+        checked != null && onChange != null -> {
+            val icon = entry.icon ?: return
+            SettingsSwitchRow(
+                icon = icon,
+                title = entry.title,
+                supporting = entry.supporting,
+                checked = checked,
+                enabled = entry.enabled,
+                onCheckedChange = onChange
             )
         }
-        Spacer(modifier = Modifier.width(SonSpacing.medium))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = AppleType.settingsTitle,
-                color = AppleTheme.colors.label
+
+        onClick != null -> when {
+            entry.icon != null -> SettingsNavigationRow(
+                icon = entry.icon,
+                title = entry.title,
+                supporting = entry.supporting,
+                onClick = onClick
             )
-            Text(
-                text = subtitle,
-                style = AppleType.settingsSubtitle,
-                color = AppleTheme.colors.secondaryLabel
+
+            entry.glyph != null -> SettingsNavigationRow(
+                glyph = entry.glyph,
+                title = entry.title,
+                supporting = entry.supporting,
+                onClick = onClick
             )
+
+            else -> Unit
         }
-        if (onClick != null) {
-            M3SymbolIcon(
-                name = SymbolIconName.KeyboardArrowRight,
-                filled = true,
-                contentDescription = null,
-                tint = AppleTheme.colors.tertiaryLabel
-            )
-        }
+
+        // 纯信息行：没有动作，行尾也不放箭头。
+        entry.icon != null -> SettingsRow(
+            icon = entry.icon,
+            title = entry.title,
+            supporting = entry.supporting
+        )
+
+        entry.glyph != null -> SettingsRow(
+            glyph = entry.glyph,
+            title = entry.title,
+            supporting = entry.supporting
+        )
     }
 }
 
-// 导航型 / 开关型 / 骨架行已上提到 core/ui/apple/AppleSettings.kt，
-// 与设置页的二级页（均衡器、在线源）共用一份实现。
+/**
+ * 一个分区：[title] + 玻璃分组卡。行分隔线由这里统一插入，
+ * 因此「过滤后只剩一行」的情况不会留下一条孤零零的线。
+ */
+@Composable
+private fun SettingsSectionBlock(section: SettingsSectionSpec, visible: List<SettingsEntry>) {
+    if (visible.isEmpty()) return
+    AppleSettingsSectionTitle(section.title)
+    AppleGroupedSection(modifier = Modifier.fillMaxWidth()) {
+        visible.forEachIndexed { index, entry ->
+            if (index > 0) AppleSettingsSeparator()
+            key(entry.title) { SettingsEntryRow(entry) }
+        }
+    }
+    Spacer(modifier = Modifier.height(SettingsSectionGap))
+}
 
 // ════════════════════════════════════════════════════════════════
 // 主设置页
@@ -445,6 +524,7 @@ private fun SettingsHeader(
 @Composable
 private fun MainSettingsContent(
     hasApiKey: Boolean,
+    qqAccountNickname: String?,
     onlineLyricsEnabled: Boolean,
     lyricsProviderOrder: List<LyricsProvider>,
     playbackSpeed: Float,
@@ -473,10 +553,15 @@ private fun MainSettingsContent(
     onCancelSleepTimer: () -> Unit,
     onNavigateToScan: () -> Unit,
     onNavigateToExcludeFolders: () -> Unit,
+    excludeRecordings: Boolean,
+    onSetExcludeRecordings: (Boolean) -> Unit,
     onNavigateToApiKeyConfig: () -> Unit,
     onNavigateToLibraryStats: () -> Unit,
     onNavigateToEqualizer: () -> Unit,
     onNavigateToOnlineSources: () -> Unit,
+    onNavigateToQqAccount: () -> Unit,
+    onNavigateToDownloads: () -> Unit,
+    onNavigateToMetadataScrape: () -> Unit,
     onExportBackup: () -> Unit,
     onImportBackup: () -> Unit,
     onImportM3u: () -> Unit,
@@ -491,318 +576,308 @@ private fun MainSettingsContent(
     var showFadeDialog by remember { mutableStateOf(false) }
     var showCacheSheet by remember { mutableStateOf(false) }
     var showBadgeDialog by remember { mutableStateOf(false) }
-    Column(modifier = modifier.verticalScroll(rememberScrollState())) {
-        SettingsHeader(
-            title = stringResource(R.string.settings_app_name),
-            subtitle = stringResource(R.string.settings_app_subtitle)
-        )
+    var search by rememberSaveable { mutableStateOf("") }
+    val query = search.trim()
 
-        // ── 音乐库 ──
-        Text(
-            text = stringResource(R.string.settings_section_library),
-            modifier = Modifier.padding(
-                start = SonSizes.listItemHorizontalPadding,
-                top = SonSpacing.large,
-                bottom = SonSpacing.small
-            ),
-            style = AppleType.footnoteEmphasized,
-            color = AppleTheme.colors.secondaryLabel
-        )
-        AppleGroupedSection(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = SonLayout.screenMargin)
-        ) {
-            SettingsNavigationRow(
-                icon = SymbolIconName.Refresh,
-                title = stringResource(R.string.settings_scan_local),
-                onClick = onNavigateToScan
-            )
-            AppleSeparator(leadingInset = listDividerIndent)
-            SettingsNavigationRow(
-                icon = SymbolIconName.Folder,
-                title = stringResource(R.string.settings_exclude_folders),
-                onClick = onNavigateToExcludeFolders
-            )
-            AppleSeparator(leadingInset = listDividerIndent)
-            SettingsNavigationRow(
-                icon = SymbolIconName.BarChart,
-                title = stringResource(R.string.settings_library_stats),
-                onClick = onNavigateToLibraryStats
-            )
-        }
-
-        // ── 播放 ──
-        Text(
-            text = stringResource(R.string.settings_section_playback),
-            modifier = Modifier.padding(
-                start = SonSizes.listItemHorizontalPadding,
-                top = SonSpacing.large,
-                bottom = SonSpacing.small
-            ),
-            style = AppleType.footnoteEmphasized,
-            color = AppleTheme.colors.secondaryLabel
-        )
-        AppleGroupedSection(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = SonLayout.screenMargin)
-        ) {
-            SettingsNavigationRow(
-                icon = SymbolIconName.GraphicEq,
-                title = stringResource(R.string.settings_equalizer_menu),
-                supporting = stringResource(R.string.settings_equalizer_menu_subtitle),
-                onClick = onNavigateToEqualizer
-            )
-            AppleSeparator(leadingInset = listDividerIndent)
-            SettingsNavigationRow(
-                icon = SymbolIconName.Speed,
-                title = stringResource(R.string.settings_playback_speed),
-                supporting = formatSpeed(playbackSpeed),
-                onClick = { showSpeedDialog = true }
-            )
-            AppleSeparator(leadingInset = listDividerIndent)
-            SettingsNavigationRow(
-                icon = SymbolIconName.Bedtime,
-                title = stringResource(R.string.settings_sleep_timer),
-                supporting = sleepTimerRemainingMs?.let {
-                    stringResource(R.string.settings_sleep_timer_remaining, formatRemaining(it))
-                } ?: stringResource(R.string.settings_sleep_timer_off),
-                onClick = { showSleepTimerDialog = true }
-            )
-            AppleSeparator(leadingInset = listDividerIndent)
-            SettingsSwitchRow(
-                icon = SymbolIconName.VolumeOff,
-                title = stringResource(R.string.settings_skip_silence),
-                supporting = stringResource(R.string.settings_skip_silence_subtitle),
-                checked = skipSilence,
-                onCheckedChange = onSetSkipSilence
-            )
-            AppleSeparator(leadingInset = listDividerIndent)
-            SettingsSwitchRow(
-                icon = SymbolIconName.VolumeUp,
-                title = stringResource(R.string.settings_replay_gain),
-                supporting = stringResource(R.string.settings_replay_gain_subtitle),
-                checked = replayGainEnabled,
-                onCheckedChange = onSetReplayGain
-            )
-            AppleSeparator(leadingInset = listDividerIndent)
-            SettingsNavigationRow(
-                icon = SymbolIconName.Waves,
-                title = stringResource(R.string.settings_audio_fade),
-                supporting = formatFadeDuration(audioFadeDurationMs),
-                onClick = { showFadeDialog = true }
-            )
-            AppleSeparator(leadingInset = listDividerIndent)
-            SettingsSwitchRow(
-                icon = SymbolIconName.History,
-                title = stringResource(R.string.settings_remember_position),
-                supporting = stringResource(R.string.settings_remember_position_subtitle),
-                checked = rememberPlaybackPosition,
-                onCheckedChange = onSetRememberPlaybackPosition
-            )
-            AppleSeparator(leadingInset = listDividerIndent)
-            SettingsSwitchRow(
-                icon = SymbolIconName.PlayCircle,
-                title = stringResource(R.string.settings_open_player_on_play),
-                supporting = stringResource(R.string.settings_open_player_on_play_subtitle),
-                checked = openPlayerOnPlay,
-                onCheckedChange = onSetOpenPlayerOnPlay
-            )
-            AppleSeparator(leadingInset = listDividerIndent)
-            SettingsSwitchRow(
-                icon = SymbolIconName.Autorenew,
-                title = stringResource(R.string.settings_auto_continue),
-                supporting = stringResource(R.string.settings_auto_continue_subtitle),
-                checked = autoContinueEnabled,
-                onCheckedChange = onSetAutoContinue
-            )
-            AppleSeparator(leadingInset = listDividerIndent)
-            SettingsNavigationRow(
-                icon = SymbolIconName.HighQuality,
-                title = stringResource(R.string.settings_hi_res_badge),
-                supporting = hiResBadgeLabel(hiResBadge),
-                onClick = { showBadgeDialog = true }
-            )
-        }
-
-        // ── 在线音乐 ──
-        Text(
-            text = stringResource(R.string.settings_section_online),
-            modifier = Modifier.padding(
-                start = SonSizes.listItemHorizontalPadding,
-                top = SonSpacing.large,
-                bottom = SonSpacing.small
-            ),
-            style = AppleType.footnoteEmphasized,
-            color = AppleTheme.colors.secondaryLabel
-        )
-        AppleGroupedSection(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = SonLayout.screenMargin)
-        ) {
-            SettingsNavigationRow(
-                icon = SymbolIconName.GraphicEq,
-                title = stringResource(R.string.settings_online_sources_menu),
-                supporting = stringResource(R.string.settings_online_sources_menu_subtitle),
-                onClick = onNavigateToOnlineSources
-            )
-        }
-
-        // ── 歌词 ──
-        Text(
-            text = stringResource(R.string.settings_section_lyrics),
-            modifier = Modifier.padding(
-                start = SonSizes.listItemHorizontalPadding,
-                top = SonSpacing.large,
-                bottom = SonSpacing.small
-            ),
-            style = AppleType.footnoteEmphasized,
-            color = AppleTheme.colors.secondaryLabel
-        )
-        AppleGroupedSection(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = SonLayout.screenMargin)
-        ) {
-            SettingsSwitchRow(
-                icon = SymbolIconName.Lyrics,
-                title = stringResource(R.string.settings_online_lyrics),
-                supporting = stringResource(R.string.settings_online_lyrics_subtitle),
-                checked = onlineLyricsEnabled,
-                onCheckedChange = onToggleOnlineLyrics
-            )
-            if (onlineLyricsEnabled) {
-                AppleSeparator(leadingInset = listDividerIndent)
-                LyricsProviderOrder(
-                    providers = lyricsProviderOrder,
-                    onMoveProvider = onMoveLyricsProvider
+    val sections = listOf(
+        SettingsSectionSpec(
+            title = stringResource(R.string.settings_section_library),
+            entries = listOf(
+                SettingsEntry(
+                    title = stringResource(R.string.settings_scan_local),
+                    keywords = "scan 扫描",
+                    icon = SymbolIconName.Refresh,
+                    onClick = onNavigateToScan
+                ),
+                SettingsEntry(
+                    title = stringResource(R.string.settings_exclude_recordings),
+                    supporting = stringResource(R.string.settings_exclude_recordings_subtitle),
+                    keywords = "录音 mic",
+                    icon = SymbolIconName.Mic,
+                    checked = excludeRecordings,
+                    onCheckedChange = onSetExcludeRecordings
+                ),
+                SettingsEntry(
+                    title = stringResource(R.string.settings_exclude_folders),
+                    keywords = "目录 folder",
+                    icon = SymbolIconName.Folder,
+                    onClick = onNavigateToExcludeFolders
+                ),
+                SettingsEntry(
+                    title = stringResource(R.string.settings_library_stats),
+                    keywords = "统计 stats",
+                    icon = SymbolIconName.BarChart,
+                    onClick = onNavigateToLibraryStats
                 )
-            }
-        }
-
-        // ── AI ──
-        Text(
-            text = stringResource(R.string.settings_section_ai),
-            modifier = Modifier.padding(
-                start = SonSizes.listItemHorizontalPadding,
-                top = SonSpacing.large,
-                bottom = SonSpacing.small
-            ),
-            style = AppleType.footnoteEmphasized,
-            color = AppleTheme.colors.secondaryLabel
-        )
-        AppleGroupedSection(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = SonLayout.screenMargin)
-        ) {
-            SettingsNavigationRow(
-                icon = SymbolIconName.Key,
-                title = stringResource(R.string.settings_deepseek_config),
-                supporting = if (hasApiKey) {
-                    stringResource(R.string.settings_api_configured)
+            )
+        ),
+        SettingsSectionSpec(
+            title = stringResource(R.string.settings_section_playback),
+            entries = listOf(
+                SettingsEntry(
+                    title = stringResource(R.string.settings_equalizer_menu),
+                    supporting = stringResource(R.string.settings_equalizer_menu_subtitle),
+                    keywords = "均衡器 eq",
+                    icon = SymbolIconName.GraphicEq,
+                    onClick = onNavigateToEqualizer
+                ),
+                SettingsEntry(
+                    title = stringResource(R.string.settings_playback_speed),
+                    supporting = formatSpeed(playbackSpeed),
+                    keywords = "倍速 speed",
+                    icon = SymbolIconName.Speed,
+                    onClick = { showSpeedDialog = true }
+                ),
+                SettingsEntry(
+                    title = stringResource(R.string.settings_sleep_timer),
+                    supporting = sleepTimerRemainingMs?.let {
+                        stringResource(R.string.settings_sleep_timer_remaining, formatRemaining(it))
+                    } ?: stringResource(R.string.settings_sleep_timer_off),
+                    keywords = "定时 sleep",
+                    icon = SymbolIconName.Bedtime,
+                    onClick = { showSleepTimerDialog = true }
+                ),
+                SettingsEntry(
+                    title = stringResource(R.string.settings_skip_silence),
+                    supporting = stringResource(R.string.settings_skip_silence_subtitle),
+                    keywords = "静音 silence",
+                    icon = SymbolIconName.VolumeOff,
+                    checked = skipSilence,
+                    onCheckedChange = onSetSkipSilence
+                ),
+                SettingsEntry(
+                    title = stringResource(R.string.settings_replay_gain),
+                    supporting = stringResource(R.string.settings_replay_gain_subtitle),
+                    keywords = "响度 gain",
+                    icon = SymbolIconName.VolumeUp,
+                    checked = replayGainEnabled,
+                    onCheckedChange = onSetReplayGain
+                ),
+                SettingsEntry(
+                    title = stringResource(R.string.settings_audio_fade),
+                    supporting = formatFadeDuration(audioFadeDurationMs),
+                    keywords = "淡入淡出 fade",
+                    icon = SymbolIconName.Waves,
+                    onClick = { showFadeDialog = true }
+                ),
+                SettingsEntry(
+                    title = stringResource(R.string.settings_remember_position),
+                    supporting = stringResource(R.string.settings_remember_position_subtitle),
+                    keywords = "记忆 进度",
+                    icon = SymbolIconName.History,
+                    checked = rememberPlaybackPosition,
+                    onCheckedChange = onSetRememberPlaybackPosition
+                ),
+                SettingsEntry(
+                    title = stringResource(R.string.settings_open_player_on_play),
+                    supporting = stringResource(R.string.settings_open_player_on_play_subtitle),
+                    keywords = "播放页 player",
+                    icon = SymbolIconName.PlayCircle,
+                    checked = openPlayerOnPlay,
+                    onCheckedChange = onSetOpenPlayerOnPlay
+                ),
+                SettingsEntry(
+                    title = stringResource(R.string.settings_auto_continue),
+                    supporting = stringResource(R.string.settings_auto_continue_subtitle),
+                    keywords = "连播 continue",
+                    icon = SymbolIconName.Autorenew,
+                    checked = autoContinueEnabled,
+                    onCheckedChange = onSetAutoContinue
+                ),
+                SettingsEntry(
+                    title = stringResource(R.string.settings_hi_res_badge),
+                    supporting = hiResBadgeLabel(hiResBadge),
+                    keywords = "小金标 hires",
+                    icon = SymbolIconName.HighQuality,
+                    onClick = { showBadgeDialog = true }
+                )
+            )
+        ),
+        SettingsSectionSpec(
+            title = stringResource(R.string.settings_section_online),
+            entries = listOf(
+                SettingsEntry(
+                    title = stringResource(R.string.settings_online_sources_menu),
+                    supporting = stringResource(R.string.settings_online_sources_menu_subtitle),
+                    keywords = "音源 脚本 lx",
+                    icon = SymbolIconName.GraphicEq,
+                    onClick = onNavigateToOnlineSources
+                ),
+                SettingsEntry(
+                    title = stringResource(R.string.settings_qq_account_menu),
+                    // 登录后直接显示昵称：这一行是账号是否真的生效的唯一常驻反馈。
+                    supporting = qqAccountNickname?.let {
+                        stringResource(R.string.settings_qq_account_signed_in, it)
+                    } ?: stringResource(R.string.settings_qq_account_menu_subtitle),
+                    keywords = "qq 账号 登录 login ${qqAccountNickname.orEmpty()}",
+                    icon = SymbolIconName.Person,
+                    onClick = onNavigateToQqAccount
+                ),
+                SettingsEntry(
+                    // 字体子集里没有下载码位，走手绘字形；Folder 在这里会被读成「文件管理」。
+                    title = stringResource(R.string.settings_downloads_menu),
+                    supporting = stringResource(R.string.settings_downloads_menu_subtitle),
+                    keywords = "下载 download",
+                    glyph = SonGlyph.Download,
+                    onClick = onNavigateToDownloads
+                ),
+                SettingsEntry(
+                    title = stringResource(R.string.settings_metadata_scrape),
+                    supporting = stringResource(R.string.settings_metadata_scrape_subtitle),
+                    keywords = "刮削 标签 scrape",
+                    icon = SymbolIconName.Tune,
+                    onClick = onNavigateToMetadataScrape
+                )
+            )
+        ),
+        SettingsSectionSpec(
+            title = stringResource(R.string.settings_section_lyrics),
+            entries = listOfNotNull(
+                SettingsEntry(
+                    title = stringResource(R.string.settings_online_lyrics),
+                    supporting = stringResource(R.string.settings_online_lyrics_subtitle),
+                    keywords = "歌词 lyrics",
+                    icon = SymbolIconName.Lyrics,
+                    checked = onlineLyricsEnabled,
+                    onCheckedChange = onToggleOnlineLyrics
+                ),
+                if (onlineLyricsEnabled) {
+                    SettingsEntry(
+                        title = stringResource(R.string.settings_lyrics_provider_order),
+                        keywords = "优先级 排序 provider",
+                        custom = {
+                            LyricsProviderOrder(
+                                providers = lyricsProviderOrder,
+                                onMoveProvider = onMoveLyricsProvider
+                            )
+                        }
+                    )
                 } else {
-                    stringResource(R.string.settings_api_not_configured)
-                },
-                onClick = onNavigateToApiKeyConfig
+                    null
+                }
             )
-        }
-
-        // ── 备份与恢复 ──
-        Text(
-            text = stringResource(R.string.settings_section_backup),
-            modifier = Modifier.padding(
-                start = SonSizes.listItemHorizontalPadding,
-                top = SonSpacing.large,
-                bottom = SonSpacing.small
-            ),
-            style = AppleType.footnoteEmphasized,
-            color = AppleTheme.colors.secondaryLabel
+        ),
+        SettingsSectionSpec(
+            title = stringResource(R.string.settings_section_ai),
+            entries = listOf(
+                SettingsEntry(
+                    title = stringResource(R.string.settings_deepseek_config),
+                    supporting = if (hasApiKey) {
+                        stringResource(R.string.settings_api_configured)
+                    } else {
+                        stringResource(R.string.settings_api_not_configured)
+                    },
+                    keywords = "api key deepseek",
+                    icon = SymbolIconName.Key,
+                    onClick = onNavigateToApiKeyConfig
+                )
+            )
+        ),
+        SettingsSectionSpec(
+            title = stringResource(R.string.settings_section_backup),
+            entries = listOf(
+                SettingsEntry(
+                    title = stringResource(R.string.settings_export_backup),
+                    supporting = stringResource(R.string.settings_export_backup_subtitle),
+                    keywords = "导出 backup",
+                    icon = SymbolIconName.Backup,
+                    enabled = !isTransferring,
+                    onClick = { if (!isTransferring) onExportBackup() }
+                ),
+                SettingsEntry(
+                    title = stringResource(R.string.settings_import_backup),
+                    supporting = if (isTransferring) {
+                        stringResource(R.string.settings_transfer_in_progress)
+                    } else {
+                        stringResource(R.string.settings_import_backup_subtitle)
+                    },
+                    keywords = "导入 restore",
+                    icon = SymbolIconName.Restore,
+                    enabled = !isTransferring,
+                    onClick = { if (!isTransferring) onImportBackup() }
+                ),
+                SettingsEntry(
+                    title = stringResource(R.string.settings_import_m3u),
+                    supporting = stringResource(R.string.settings_import_m3u_subtitle),
+                    keywords = "播放列表 m3u",
+                    icon = SymbolIconName.UploadFile,
+                    enabled = !isTransferring,
+                    onClick = { if (!isTransferring) onImportM3u() }
+                )
+            )
+        ),
+        SettingsSectionSpec(
+            title = stringResource(R.string.settings_section_storage),
+            entries = listOf(
+                SettingsEntry(
+                    title = stringResource(R.string.settings_cache_menu),
+                    supporting = cacheState.usage?.let {
+                        stringResource(R.string.settings_cache_usage, formatCacheSize(it.diskBytes))
+                    } ?: stringResource(R.string.settings_cache_calculating),
+                    keywords = "缓存 cache 清理",
+                    icon = SymbolIconName.Delete,
+                    onClick = { showCacheSheet = true }
+                )
+            )
+        ),
+        SettingsSectionSpec(
+            title = stringResource(R.string.settings_section_about),
+            entries = listOf(
+                SettingsEntry(
+                    title = stringResource(R.string.settings_version_title),
+                    supporting = stringResource(R.string.settings_version_value),
+                    keywords = "版本 version",
+                    icon = SymbolIconName.LibraryMusic
+                )
+            )
         )
-        AppleGroupedSection(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = SonLayout.screenMargin)
-        ) {
-            SettingsNavigationRow(
-                icon = SymbolIconName.Backup,
-                title = stringResource(R.string.settings_export_backup),
-                supporting = stringResource(R.string.settings_export_backup_subtitle),
-                onClick = { if (!isTransferring) onExportBackup() }
-            )
-            AppleSeparator(leadingInset = listDividerIndent)
-            SettingsNavigationRow(
-                icon = SymbolIconName.Restore,
-                title = stringResource(R.string.settings_import_backup),
-                supporting = if (isTransferring) {
-                    stringResource(R.string.settings_transfer_in_progress)
-                } else {
-                    stringResource(R.string.settings_import_backup_subtitle)
-                },
-                onClick = { if (!isTransferring) onImportBackup() }
-            )
-            AppleSeparator(leadingInset = listDividerIndent)
-            SettingsNavigationRow(
-                icon = SymbolIconName.UploadFile,
-                title = stringResource(R.string.settings_import_m3u),
-                supporting = stringResource(R.string.settings_import_m3u_subtitle),
-                onClick = { if (!isTransferring) onImportM3u() }
-            )
-        }
+    )
 
-        // ── 存储 ──
-        Text(
-            text = stringResource(R.string.settings_section_storage),
-            modifier = Modifier.padding(
-                start = SonSizes.listItemHorizontalPadding,
-                top = SonSpacing.large,
-                bottom = SonSpacing.small
-            ),
-            style = AppleType.footnoteEmphasized,
-            color = AppleTheme.colors.secondaryLabel
-        )
-        AppleGroupedSection(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = SonLayout.screenMargin)
-        ) {
-            SettingsNavigationRow(
-                icon = SymbolIconName.Delete,
-                title = stringResource(R.string.settings_cache_menu),
-                supporting = cacheState.usage?.let {
-                    stringResource(R.string.settings_cache_usage, formatCacheSize(it.diskBytes))
-                } ?: stringResource(R.string.settings_cache_calculating),
-                onClick = { showCacheSheet = true }
-            )
-        }
+    val filtered = sections.mapNotNull { section ->
+        section.entries
+            .filter { it.matches(query) || section.title.contains(query, ignoreCase = true) }
+            .takeIf { it.isNotEmpty() }
+            ?.let { section to it }
+    }
 
-        // ── 关于 ──
-        Text(
-            text = stringResource(R.string.settings_section_about),
-            modifier = Modifier.padding(
-                start = SonSizes.listItemHorizontalPadding,
-                top = SonSpacing.large,
-                bottom = SonSpacing.small
-            ),
-            style = AppleType.footnoteEmphasized,
-            color = AppleTheme.colors.secondaryLabel
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = SettingsPageMargin)
+            .padding(top = 8.dp, bottom = appleBottomBarClearance() + bottomPadding)
+    ) {
+        AppleSearchField(
+            value = search,
+            onValueChange = { search = it },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = stringResource(R.string.settings_search_placeholder),
+            onClear = { search = "" }
         )
-        AppleGroupedSection(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = SonLayout.screenMargin)
-        ) {
+        Spacer(modifier = Modifier.height(SettingsSectionGap))
+
+        // 应用标识块 —— 对应 MeloX 设置页顶部的账号卡，位置与分量一致。
+        AppleGroupedSection(modifier = Modifier.fillMaxWidth()) {
             SettingsRow(
-                icon = SymbolIconName.LibraryMusic,
-                title = stringResource(R.string.settings_version_title),
-                supporting = stringResource(R.string.settings_version_value),
-                trailingContent = {}
+                icon = SymbolIconName.GraphicEq,
+                title = stringResource(R.string.settings_app_name),
+                supporting = stringResource(R.string.settings_app_subtitle)
             )
         }
+        Spacer(modifier = Modifier.height(SettingsSectionGap))
 
-        Spacer(modifier = Modifier.height(appleBottomBarClearance() + bottomPadding))
+        filtered.forEach { (section, visible) ->
+            SettingsSectionBlock(section = section, visible = visible)
+        }
+
+        if (filtered.isEmpty()) {
+            Text(
+                text = stringResource(R.string.settings_search_empty),
+                modifier = Modifier.padding(vertical = 24.dp),
+                style = AppleType.subhead,
+                color = AppleTheme.colors.secondaryLabel
+            )
+        }
     }
 
     if (showSpeedDialog) {
@@ -1514,6 +1589,7 @@ private fun LyricsProvider.labelRes(): Int = when (this) {
     LyricsProvider.QQ_MUSIC -> R.string.settings_lyrics_provider_qq_music
     LyricsProvider.KUGOU -> R.string.settings_lyrics_provider_kugou
     LyricsProvider.LRCLIB -> R.string.settings_lyrics_provider_lrclib
+    LyricsProvider.LX -> R.string.settings_lyrics_provider_lx
 }
 
 // ════════════════════════════════════════════════════════════════

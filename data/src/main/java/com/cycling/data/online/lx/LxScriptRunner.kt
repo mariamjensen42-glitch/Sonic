@@ -2,6 +2,7 @@ package com.cycling.data.online.lx
 
 import com.cycling.domain.online.model.MusicInfo
 import com.cycling.domain.online.model.MusicQuality
+import com.cycling.domain.online.model.OnlineLyric
 import com.cycling.domain.online.model.OnlinePlugin
 import com.cycling.domain.online.model.OnlinePluginSource
 import com.cycling.domain.online.model.OnlineSource
@@ -195,6 +196,42 @@ class LxScriptRunner(
             timeoutMs = timeoutMs
         )
         return extractPlaySource(result) ?: throw IllegalStateException("脚本返回空 URL")
+    }
+
+    /**
+     * 取歌词：`action = lyric`，`info = { musicInfo }`。
+     *
+     * 返回的是一份原文，格式不保证（LRC / YRC / QRC / TTML 都可能有），解析交给歌词管线。
+     */
+    suspend fun lyric(
+        source: OnlineSource,
+        info: MusicInfo,
+        timeoutMs: Long = DEFAULT_REQUEST_TIMEOUT_MS
+    ): OnlineLyric {
+        val result = request(
+            source = source.lxKey,
+            action = OnlinePlugin.ACTION_LYRIC,
+            info = linkedMapOf("musicInfo" to info.toLxPayload()),
+            timeoutMs = timeoutMs
+        )
+        return LxJson.extractLyric(result)?.takeIf { !it.isEmpty }
+            ?: throw IllegalStateException("脚本未返回歌词")
+    }
+
+    /** 取封面：`action = pic`，`info = { musicInfo }`，结果是一个 http(s) 地址。 */
+    suspend fun pic(
+        source: OnlineSource,
+        info: MusicInfo,
+        timeoutMs: Long = DEFAULT_REQUEST_TIMEOUT_MS
+    ): String {
+        val result = request(
+            source = source.lxKey,
+            action = OnlinePlugin.ACTION_PIC,
+            info = linkedMapOf("musicInfo" to info.toLxPayload()),
+            timeoutMs = timeoutMs
+        )
+        return LxJson.extractPicUrl(result)
+            ?: throw IllegalStateException("脚本未返回封面地址")
     }
 
     /** 定向执行一段 JS（插件自检用）。 */

@@ -214,6 +214,7 @@ object LxBootstrap {
         md5: function (str) { return callUtil('crypto.md5', [str]); },
         randomBytes: function (size) { return callUtil('crypto.randomBytes', [size]); },
         aesEncrypt: function () { return callUtil('crypto.aesEncrypt', arguments); },
+        aesDecrypt: function () { return callUtil('crypto.aesDecrypt', arguments); },
         rsaEncrypt: function () { return callUtil('crypto.rsaEncrypt', arguments); },
         aesEcbEncryptB64Key: function () { return callUtil('crypto.aesEcbEncryptB64Key', arguments); },
         aesEcbDecryptB64Key: function () { return callUtil('crypto.aesEcbDecryptB64Key', arguments); }
@@ -221,6 +222,8 @@ object LxBootstrap {
       zlib: {
         inflate: function () { return callUtil('zlib.inflate', arguments); },
         deflate: function () { return callUtil('zlib.deflate', arguments); },
+        inflateRaw: function () { return callUtil('zlib.inflateRaw', arguments); },
+        deflateRaw: function () { return callUtil('zlib.deflateRaw', arguments); },
         gzip: function () { return callUtil('zlib.gzip', arguments); },
         gunzip: function () { return callUtil('zlib.gunzip', arguments); }
       },

@@ -27,6 +27,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -59,6 +61,64 @@ fun AppleChevron(tint: Color = AppleTheme.colors.tertiaryLabel) {
         size = AppleDims.trailingIcon
     )
 }
+
+/**
+ * 玻璃圆钮：44dp 圆底 + 22dp 图标，无涟漪，按下只加深一层底色。
+ *
+ * 版式取自 MeloX 歌单详情页顶栏的 `MeloXGlassCircleButton`：托底不是实色 scrim，而是
+ * 「跟着图标明暗走的半透明玻璃」—— 图标浅（压在深封面上）用黑 22%，图标深用白 64%。
+ * 这样同一颗按钮在任意封面上都有对比度，又不会像 60% 黑 scrim 那样压出一块死色。
+ *
+ * [glassAlpha] 给「顶栏随滚动淡出」的页面用（详情页折叠时托底要退干净）。
+ */
+@Composable
+fun AppleGlassCircleButton(
+    icon: SymbolIconName,
+    contentDescription: String?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    tint: Color = AppleTheme.colors.label,
+    size: Dp = 44.dp,
+    iconSize: Dp = 22.dp,
+    glassAlpha: Float = 1f,
+    enabled: Boolean = true
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val base = glassSurfaceFor(tint)
+    val alpha = (base.alpha * (if (pressed) 1.35f else 1f) * glassAlpha).coerceIn(0f, 1f)
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(base.copy(alpha = alpha))
+            .clickable(
+                enabled = enabled,
+                interactionSource = interaction,
+                indication = null,
+                role = Role.Button,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        M3SymbolIcon(
+            name = icon,
+            contentDescription = contentDescription,
+            filled = true,
+            tint = if (enabled) tint else AppleTheme.colors.tertiaryLabel,
+            size = iconSize
+        )
+    }
+}
+
+/**
+ * 玻璃托底色：前景（图标色）偏亮时垫黑 22%，偏暗时垫白 64%。
+ *
+ * MeloX 那边是「前景 == 纯白 ? 黑 22% : 白 64%」的硬判断；这边顶栏的图标色是按折叠进度
+ * 插值出来的中间色，所以改成按相对亮度分档，插值到一半也不会突然跳色。
+ */
+private fun glassSurfaceFor(tint: Color): Color =
+    if (tint.luminance() > 0.5f) Color.Black.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.64f)
 
 /** 标题栏上的图标按钮，44dp 触达区，无涟漪。 */
 @Composable

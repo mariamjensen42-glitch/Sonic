@@ -3,6 +3,7 @@ package com.cycling.data.di
 import com.cycling.data.api.lyrics.AmllLyricsProvider
 import com.cycling.data.api.lyrics.KugouLyricsProvider
 import com.cycling.data.api.lyrics.LrclibLyricsProvider
+import com.cycling.data.api.lyrics.LxLyricsProvider
 import com.cycling.data.api.lyrics.NetEaseLyricsProvider
 import com.cycling.data.api.lyrics.QQMusicLyricsProvider
 import com.cycling.domain.lyrics.provider.OnlineLyricsProvider
@@ -42,4 +43,8 @@ abstract class LyricsModule {
     @Binds
     @IntoSet
     abstract fun bindKugouProvider(impl: KugouLyricsProvider): OnlineLyricsProvider
+
+    @Binds
+    @IntoSet
+    abstract fun bindLxProvider(impl: LxLyricsProvider): OnlineLyricsProvider
 }

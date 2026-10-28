@@ -3,10 +3,12 @@ package com.cycling.data.di
 import android.content.Context
 import androidx.room.Room
 import com.cycling.data.local.dao.AiInfoCacheDao
+import com.cycling.data.local.dao.DownloadTaskDao
 import com.cycling.data.local.dao.LyricsCacheDao
 import com.cycling.data.local.dao.LyricsIndexDao
 import com.cycling.data.local.dao.LyricsOverrideDao
 import com.cycling.data.local.dao.PlayEventDao
+import com.cycling.data.local.dao.PlayUrlCacheDao
 import com.cycling.data.local.dao.PlaylistDao
 import com.cycling.data.local.dao.SearchHistoryDao
 import com.cycling.data.local.dao.SongDao
@@ -21,6 +23,7 @@ import com.cycling.data.local.database.MIGRATION_5_6
 import com.cycling.data.local.database.MIGRATION_6_7
 import com.cycling.data.local.database.MIGRATION_7_8
 import com.cycling.data.local.database.MIGRATION_8_9
+import com.cycling.data.local.database.MIGRATION_9_10
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -44,7 +47,7 @@ object DatabaseModule {
         )
             .addMigrations(
                 MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
-                MIGRATION_7_8, MIGRATION_8_9
+                MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10
             )
             // Downgrades only happen on a sideloaded older build; there is nothing to preserve.
             .fallbackToDestructiveMigrationOnDowngrade()
@@ -99,5 +102,15 @@ object DatabaseModule {
     @Provides
     fun providePlayEventDao(database: AppDatabase): PlayEventDao {
         return database.playEventDao()
+    }
+
+    @Provides
+    fun provideDownloadTaskDao(database: AppDatabase): DownloadTaskDao {
+        return database.downloadTaskDao()
+    }
+
+    @Provides
+    fun providePlayUrlCacheDao(database: AppDatabase): PlayUrlCacheDao {
+        return database.playUrlCacheDao()
     }
 }

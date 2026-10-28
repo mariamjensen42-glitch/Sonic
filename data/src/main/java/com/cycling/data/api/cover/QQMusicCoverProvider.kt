@@ -1,108 +1,76 @@
 package com.cycling.data.api.cover
 
-import com.cycling.data.api.cover.dto.QqSearchResponse
+import com.cycling.data.api.qqmusic.QQMusicSearchClient
+import com.cycling.data.api.qqmusic.QQSearchSong
 import com.cycling.domain.model.CoverCandidate
 import com.cycling.domain.model.CoverSource
 import com.cycling.domain.model.Song
 import com.cycling.domain.repository.CoverArtProvider
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
-import okhttp3.HttpUrl.Companion.toHttpUrl
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import timber.log.Timber
 
 /**
- * QQ Music's web search endpoint as a cover source.
+ * QQ Music as a cover source.
  *
- * One request is enough: the result carries the album's `albummid`, and QQ's image CDN addresses
- * covers by that mid, so the URL is built locally. The endpoint answers with JSON when asked for
- * `format=json`, but some edges still wrap it in a callback prefix, which [parseQqCover] tolerates.
+ * The search result already carries the album's `mid`, and QQ's image CDN addresses covers by that
+ * mid, so the URL is built locally — no second request.
+ *
+ * 搜索走 [QQMusicSearchClient]：老的 `client_search_cp` 已经下线（实测 HTTP 500），这里用的是
+ * `musicu.fcg` 的统一搜索，并且带关键词缓存 —— QQ 对重复搜同一个词有风控，而本项目每次播放
+ * 都会重新搜一次。
  */
 @Singleton
 class QQMusicCoverProvider @Inject constructor(
-    sharedClient: OkHttpClient
+    private val searchClient: QQMusicSearchClient
 ) : CoverArtProvider {
 
     override val source: CoverSource = CoverSource.QQ_MUSIC
 
-    private val client = sharedClient.newBuilder()
-        .callTimeout(CALL_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        .build()
-
     override suspend fun search(song: Song): List<CoverCandidate> = withContext(Dispatchers.IO) {
         if (song.title.isBlank()) return@withContext emptyList()
 
-        val url = "$BASE_URL/soso/fcgi-bin/client_search_cp".toHttpUrl().newBuilder()
-            .addQueryParameter("w", "${song.artist} ${song.title}".trim())
-            .addQueryParameter("format", "json")
-            .addQueryParameter("n", SEARCH_LIMIT.toString())
-            .addQueryParameter("p", "1")
-            .addQueryParameter("cr", "1")
-            .build()
-
-        val request = Request.Builder()
-            .url(url)
-            .header("Referer", "$BASE_URL/")
-            .build()
-
-        try {
-            val body = client.textOf(request) ?: return@withContext emptyList()
-            parseQqCover(body, song)
-        } catch (e: Exception) {
-            Timber.w(e, "QQMusicCoverProvider: search failed for ${song.title}")
-            emptyList()
-        }
+        val keywords = listOf(
+            "${song.artist} ${song.title}".trim(),
+            song.title
+        )
+        qqCoverCandidates(searchClient.search(keywords, SEARCH_LIMIT), song)
     }
 
     private companion object {
-        const val BASE_URL = "https://c.y.qq.com"
         const val SEARCH_LIMIT = 10
-        const val CALL_TIMEOUT_SECONDS = 15L
     }
 }
 
-/** Pure so it can be tested without a network; see `CoverProvidersTest`. */
-internal fun parseQqCover(body: String, song: Song): List<CoverCandidate> {
-    // Drop any JSONP wrapper or trailing `);` before the payload: the endpoint sometimes wraps
-    // the JSON in a callback even when `format=json` was asked for.
-    val payload = body.jsonObjectOrNull() ?: return emptyList()
-    val response = runCatching {
-        Json { ignoreUnknownKeys = true }.decodeFromString<QqSearchResponse>(payload)
-    }.getOrNull() ?: return emptyList()
-
-    val songs = response.data?.song?.list.orEmpty()
-    return rankCoverCandidates(
-        entries = songs,
-        song = song,
-        durationMsOf = { dto -> dto.interval.takeIf { it > 0 }?.let { it * 1000L } },
-        candidateOf = { dto ->
-            dto.albummid
-                .takeIf { it.isNotBlank() }
-                ?.let { mid ->
-                    val durationMs = dto.interval.takeIf { it > 0 }?.let { it * 1000L }
-                    CoverCandidate(
-                        id = "qq#$mid",
-                        source = CoverSource.QQ_MUSIC,
-                        imageUrl = "${QQ_IMAGE_BASE}${mid}.jpg",
-                        album = dto.albumname.plainText().takeIf { it.isNotEmpty() },
-                        artist = dto.singer.joinToString(",") { it.name }
-                            .plainText()
-                            .takeIf { it.isNotEmpty() },
-                        title = dto.songname.plainText().takeIf { it.isNotEmpty() },
-                        // QQ's web search has no track/disc/genre fields, and its album artist is
-                        // not distinguishable from the performers here.
-                        year = yearOfEpochSeconds(dto.pubtime),
-                        durationMs = durationMs
-                    )
-                }
+/**
+ * 搜索结果 → 封面候选。
+ *
+ * 纯函数，不碰网络；见 `CoverProvidersTest`。
+ */
+internal fun qqCoverCandidates(
+    songs: List<QQSearchSong>,
+    song: Song
+): List<CoverCandidate> = rankCoverCandidates(
+    entries = songs,
+    song = song,
+    durationMsOf = { dto -> dto.durationMs.takeIf { it > 0L } },
+    candidateOf = { dto ->
+        dto.albumMid.takeIf { it.isNotBlank() }?.let { mid ->
+            CoverCandidate(
+                id = "qq#$mid",
+                source = CoverSource.QQ_MUSIC,
+                imageUrl = "${QQ_IMAGE_BASE}${mid}.jpg",
+                album = dto.album.plainText().takeIf { it.isNotEmpty() },
+                artist = dto.artist.plainText().takeIf { it.isNotEmpty() },
+                title = dto.title.plainText().takeIf { it.isNotEmpty() },
+                // QQ 的搜索结果没有 track/disc/genre 字段，专辑歌手也分不出来。
+                year = yearOfEpochSeconds(dto.pubTimeSeconds),
+                durationMs = dto.durationMs.takeIf { it > 0L }
+            )
         }
-    ).take(MAX_COVER_CANDIDATES)
-}
+    }
+).take(MAX_COVER_CANDIDATES)
 
 /** QQ's cover CDN: `T002R500x500M000` asks for a 500×500 JPEG for album mid [mid]. */
 private const val QQ_IMAGE_BASE = "https://y.qq.com/music/photo_new/T002R500x500M000"

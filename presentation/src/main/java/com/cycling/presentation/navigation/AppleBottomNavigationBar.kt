@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -39,8 +40,7 @@ import com.cycling.core.ui.apple.AppleDims
 import com.cycling.core.ui.apple.AppleTheme
 import com.cycling.core.ui.apple.AppleType
 import com.cycling.core.ui.apple.applePress
-import com.cycling.core.ui.components.M3SymbolIcon
-import com.cycling.core.ui.components.SymbolIconName
+import com.cycling.core.ui.components.FlamingoIcon
 import com.cycling.presentation.R
 
 /**
@@ -49,8 +49,8 @@ import com.cycling.presentation.R
 data class BottomNavTab(
     val screen: NavKey,
     val label: String,
-    val icon: SymbolIconName,
-    val selectedIcon: SymbolIconName
+    /** 选中 / 未选中共用一张图：Apple Music 的 tab 图标本来就是同形，只换颜色。 */
+    @DrawableRes val icon: Int
 )
 
 /**
@@ -64,13 +64,9 @@ fun rememberBottomNavTabs(): List<BottomNavTab> {
     val library = stringResource(R.string.nav_library)
     return remember(home, library) {
         listOf(
-            BottomNavTab(Screen.Home, home, SymbolIconName.Home, SymbolIconName.Home),
-            BottomNavTab(
-                Screen.Library,
-                library,
-                SymbolIconName.LibraryMusic,
-                SymbolIconName.LibraryMusic
-            )
+            BottomNavTab(Screen.Home, home, R.drawable.ic_nav_home),
+            // 音乐库这颗用的是 Flamingo 自己 tab 栏里的原图，不是手画的。
+            BottomNavTab(Screen.Library, library, R.drawable.ic_flamingo_tab_library)
         )
     }
 }
@@ -157,10 +153,9 @@ fun AppleBottomNavigationBar(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center
                         ) {
-                            M3SymbolIcon(
-                                name = if (selected) tab.selectedIcon else tab.icon,
+                            FlamingoIcon(
+                                res = tab.icon,
                                 contentDescription = tab.label,
-                                filled = selected,
                                 tint = tint,
                                 size = 22.dp
                             )
@@ -184,10 +179,9 @@ fun AppleBottomNavigationBar(
                             .applePress(onSearchClick),
                         contentAlignment = Alignment.Center
                     ) {
-                        M3SymbolIcon(
-                            name = SymbolIconName.Search,
+                        FlamingoIcon(
+                            res = R.drawable.ic_nav_search,
                             contentDescription = stringResource(R.string.search_icon_desc),
-                            filled = false,
                             tint = colors.label,
                             size = 24.dp
                         )

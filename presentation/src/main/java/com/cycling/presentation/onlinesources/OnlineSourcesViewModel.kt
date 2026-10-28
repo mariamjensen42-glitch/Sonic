@@ -80,6 +80,20 @@ class OnlineSourcesViewModel @Inject constructor(
             is OnlineSourcesIntent.ClearBlockedPlatforms -> viewModelScope.launch {
                 pluginRepository.setBlockedPlatforms(intent.pluginId, emptySet())
             }
+
+            OnlineSourcesIntent.RestoreBuiltin -> restoreBuiltin()
+        }
+    }
+
+    private fun restoreBuiltin() {
+        viewModelScope.launch {
+            val restored = runCatching { pluginRepository.restoreBundledPlugins() }.getOrDefault(0)
+            _uiEffect.emit(
+                OnlineSourcesEffect.ShowToast(
+                    R.string.online_sources_restore_builtin_done,
+                    restored.toString()
+                )
+            )
         }
     }
 

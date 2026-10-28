@@ -6,6 +6,7 @@ import androidx.annotation.StringRes
 import com.cycling.domain.model.LyricsMatch
 import com.cycling.domain.model.Song
 import com.cycling.domain.online.model.MusicInfo
+import com.cycling.domain.online.model.OnlineSource
 
 data class SearchUiState(
     val searchQuery: String = "",
@@ -29,8 +30,22 @@ data class SearchUiState(
     /** false 表示当前没有可用音源，空结果要引导去设置页而不是换关键词。 */
     val onlineHasSources: Boolean = true,
     /** 正在取链的那一条（[MusicInfo] 的平台键:id），用来在行尾显示转圈。 */
-    val resolvingOnlineKey: String? = null
-)
+    val resolvingOnlineKey: String? = null,
+    /** 在线结果里选中的平台；null 表示「全部」。 */
+    val selectedOnlineSource: OnlineSource? = null
+) {
+    /** 本轮结果里出现过的平台，按固定的平台顺序排 —— tab 只列真实有结果的，不占空位。 */
+    val onlinePlatforms: List<OnlineSource> get() = onlineResults
+        .map { it.source }
+        .distinct()
+        .sortedBy { OnlineSource.ORDERED.indexOf(it) }
+
+    /** 当前平台 tab 下要显示的条目。 */
+    val visibleOnlineTracks: List<MusicInfo>
+        get() = selectedOnlineSource
+            ?.let { source -> onlineResults.filter { it.source == source } }
+            ?: onlineResults
+}
 
 enum class SearchTab {
     ALL, SONGS, ALBUMS, ARTISTS
@@ -47,6 +62,8 @@ sealed interface SearchIntent {
     data class AlbumClicked(val album: Album) : SearchIntent
     data class ArtistClicked(val artist: Artist) : SearchIntent
     data class OnlineTrackClicked(val track: MusicInfo) : SearchIntent
+    /** 切换在线结果的平台 tab；null = 全部。 */
+    data class OnlineSourceSelected(val source: OnlineSource?) : SearchIntent
     data object LoadMoreOnline : SearchIntent
     data object ClearSearch : SearchIntent
 }

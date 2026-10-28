@@ -24,9 +24,8 @@ import javax.crypto.spec.SecretKeySpec
  * 二进制类工具（zlib / aes / randomBytes）统一返回 base64（NO_WRAP），
  * md5 返回小写十六进制；入参既可以是 base64 字符串也可以是字节数组。
  *
- * `qrc.*`（QQ 音乐的 KRC/QRC 加密歌词）需要独立的 QRC 解密实现，
- * 这里没有移植：调用会抛出「未实现」，宿主把它作为 `__error` 回给脚本，
- * 只有真正用到 QQ 逐字歌词的脚本会受影响。
+ * `qrc.*` 是 QQ 音乐 KRC/QRC 加密歌词的解码入口，实现在 [QrcCodec]；
+ * 脚本也可以只用 `crypto.aesDecrypt` / `zlib.inflateRaw` 这类原语自己解。
  */
 object LxJsUtils {
 
@@ -101,7 +100,37 @@ object LxJsUtils {
             Base64.encodeToString(output, Base64.NO_WRAP)
         }
 
+        "zlib.inflateRaw" -> {
+            val input = decodeBytes(args.getOrNull(0)) ?: ByteArray(0)
+            val inflater = Inflater(true)
+            inflater.setInput(input)
+            val output = ByteArrayOutputStream()
+            val buffer = ByteArray(1024)
+            while (!inflater.finished()) {
+                val read = inflater.inflate(buffer)
+                if (read > 0) output.write(buffer, 0, read) else break
+            }
+            inflater.end()
+            Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP)
+        }
+
+        "zlib.deflateRaw" -> {
+            val input = decodeBytes(args.getOrNull(0)) ?: ByteArray(0)
+            val deflater = Deflater(Deflater.DEFAULT_COMPRESSION, true)
+            deflater.setInput(input)
+            deflater.finish()
+            val output = ByteArrayOutputStream()
+            val buffer = ByteArray(1024)
+            while (!deflater.finished()) {
+                output.write(buffer, 0, deflater.deflate(buffer))
+            }
+            deflater.end()
+            Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP)
+        }
+
         "crypto.aesEncrypt" -> aesEncrypt(args)
+
+        "crypto.aesDecrypt" -> aesDecrypt(args)
 
         "crypto.aesEcbEncryptB64Key" -> {
             val text = args.getOrNull(0)?.toString().orEmpty()
@@ -125,8 +154,10 @@ object LxJsUtils {
 
         "crypto.rsaEncrypt" -> rsaEncrypt(args)
 
-        "qrc.decrypt", "qrc.toLrc", "qrc.toYrc" ->
-            throw IllegalStateException("utils.$name 未实现（QQ 音乐 QRC 解密器未移植）")
+        // QRC（QQ 音乐逐字歌词）不再是缺口：解码器在 QrcCodec，脚本可直接拿到明文 / LRC / YRC。
+        "qrc.decrypt" -> QrcCodec.decrypt(args.firstOrNull()?.toString().orEmpty())
+        "qrc.toLrc" -> QrcCodec.toLrc(args.firstOrNull()?.toString().orEmpty())
+        "qrc.toYrc" -> QrcCodec.toYrc(args.firstOrNull()?.toString().orEmpty())
 
         else -> throw IllegalStateException("utils.$name 未实现")
     }
@@ -166,8 +197,25 @@ object LxJsUtils {
         }
     }
 
-    private fun rsaEncrypt(args: List<Any?>): String {
-        val text = args.getOrNull(0)?.toString().orEmpty()
+    /** 与 [aesEncrypt] 对称：参数 (密文, 模式, key[, iv])，返回 UTF-8 明文。 */
+    private fun aesDecrypt(args: List<Any?>): String {
+        val data = decodeBytes(args.getOrNull(0)) ?: ByteArray(0)
+        val mode = args.getOrNull(1)?.toString() ?: "CBC"
+        val key = aesKey(args.getOrNull(2)?.toString().orEmpty())
+        val plain = if (mode.equals("ECB", ignoreCase = true)) {
+            val cipher = Cipher.getInstance("AES/ECB/PKCS5Padding")
+            cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(key, "AES"))
+            cipher.doFinal(data)
+        } else {
+            val iv = aesKey(args.getOrNull(3)?.toString() ?: "0000000000000000")
+            val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
+            cipher.init(Cipher.DECRYPT_MODE, SecretKeySpec(key, "AES"), IvParameterSpec(iv))
+            cipher.doFinal(data)
+        }
+        return String(plain, StandardCharsets.UTF_8)
+    }
+
+    private fun rsaEncrypt(args: List<Any?>): String {        val text = args.getOrNull(0)?.toString().orEmpty()
         val keyText = args.getOrNull(1)?.toString().orEmpty()
         val encoded = keyText
             .replace("-----BEGIN PUBLIC KEY-----", "")

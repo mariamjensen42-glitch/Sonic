@@ -2,8 +2,10 @@ package com.cycling.domain.usecase
 
 import com.cycling.domain.model.Lyrics
 import com.cycling.domain.model.LyricsCandidate
+import com.cycling.domain.model.LyricsCandidatesBatch
 import com.cycling.domain.model.Song
 import com.cycling.domain.repository.LyricsRepository
+import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -23,8 +25,11 @@ class GetLyricsUseCase @Inject constructor(
         return lyricsRepository.refreshLyrics(song)
     }
 
-    /** Every version the online sources can offer for [song], for the lyrics screen's picker. */
-    suspend fun candidates(song: Song): List<LyricsCandidate> {
+    /**
+     * Every version the online sources can offer for [song], emitted per source as each answers —
+     * the lyrics screen's picker fills in platform by platform.
+     */
+    fun candidates(song: Song): Flow<LyricsCandidatesBatch> {
         return lyricsRepository.findLyricsCandidates(song)
     }
 

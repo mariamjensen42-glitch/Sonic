@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Flamingo 1.0.0（2608310056）的 placeholder_playlist_new，图标含义：占位·新建歌单。
+     pathData 原样搬运；viewport 收到图形包围盒（源文件里的留白已裁掉），
+     所以同一 dp 下各图标的墨迹大小一致。颜色一律 #FF000000，由 Icon 的 tint 决定。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="100"
+    android:viewportHeight="100">
+    <group android:translateX="-0" android:translateY="-0">
+        <path
+            android:fillColor="#FF000000"
+            android:fillType="evenOdd"
+            android:pathData="M0,0h100v100h-100z" />
+        <path
+            android:fillColor="#FF000000"
+            android:fillType="evenOdd"
+            android:fillAlpha="0.12"
+            android:pathData="M0,0h100v100h-100z" />
+        <path
+            android:fillColor="#FF000000"
+            android:pathData="M50,70.69C50.9,70.69 51.66,69.95 51.66,69.05L51.66,52.08L68.14,52.08C69.02,52.08 69.78,51.33 69.78,50.42C69.78,49.52 69.02,48.76 68.14,48.76L51.66,48.76L51.66,31.77C51.66,30.87 50.9,30.13 50,30.13C49.1,30.13 48.34,30.87 48.34,31.77L48.34,48.76L31.88,48.76C30.98,48.76 30.22,49.52 30.22,50.42C30.22,51.33 30.98,52.08 31.88,52.08L48.34,52.08L48.34,69.05C48.34,69.95 49.1,70.69 50,70.69Z" />
+    </group>
+</vector>

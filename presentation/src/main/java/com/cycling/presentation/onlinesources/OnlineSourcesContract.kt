@@ -28,6 +28,9 @@ sealed interface OnlineSourcesIntent {
     data class TestPlugin(val pluginId: String) : OnlineSourcesIntent
     data class SetAutoBlock(val pluginId: String, val enabled: Boolean) : OnlineSourcesIntent
     data class ClearBlockedPlatforms(val pluginId: String) : OnlineSourcesIntent
+
+    /** 把随 App 打包的内置音源重新装回来。 */
+    data object RestoreBuiltin : OnlineSourcesIntent
 }
 
 sealed interface OnlineSourcesEffect {

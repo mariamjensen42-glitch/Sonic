@@ -9,6 +9,7 @@ import android.provider.MediaStore
 import com.cycling.domain.model.Album
 import com.cycling.domain.model.Artist
 import com.cycling.domain.model.Song
+import com.cycling.domain.scanner.RecordingFilter
 import dagger.hilt.android.qualifiers.ApplicationContext
 import timber.log.Timber
 import java.io.File
@@ -19,8 +20,11 @@ import javax.inject.Singleton
 class MediaStoreHelper @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    fun queryAllSongs(excludedPaths: List<String> = emptyList()): List<Song> {
-        Timber.d("queryAllSongs: starting query, excludedPaths = $excludedPaths")
+    fun queryAllSongs(
+        excludedPaths: List<String> = emptyList(),
+        excludeRecordings: Boolean = false
+    ): List<Song> {
+        Timber.d("queryAllSongs: starting query, excludedPaths = $excludedPaths, excludeRecordings = $excludeRecordings")
         val songs = mutableListOf<Song>()
         val projection = arrayOf(
             MediaStore.Audio.Media._ID,
@@ -41,6 +45,7 @@ class MediaStoreHelper @Inject constructor(
         val selectionArgs = arrayOf("1", MIN_DURATION.toString())
         val sortOrder = "${MediaStore.Audio.Media.TITLE} ASC"
 
+        var recordingCount = 0
         context.contentResolver.query(
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
             projection,
@@ -53,10 +58,16 @@ class MediaStoreHelper @Inject constructor(
                 val isExcluded = excludedPaths.any { excludedPath ->
                     song.path.startsWith(excludedPath)
                 }
-                if (!isExcluded) {
-                    songs.add(song)
+                if (isExcluded) continue
+                if (excludeRecordings && RecordingFilter.isRecording(song.path, song.album, song.title)) {
+                    recordingCount++
+                    continue
                 }
+                songs.add(song)
             }
+        }
+        if (recordingCount > 0) {
+            Timber.d("queryAllSongs: skipped $recordingCount recordings")
         }
         Timber.d("queryAllSongs: found ${songs.size} songs")
 

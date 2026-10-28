@@ -1,5 +1,6 @@
 package com.cycling.data.api.cover
 
+import com.cycling.data.api.qqmusic.QQSearchSong
 import com.cycling.domain.model.CoverSource
 import com.cycling.domain.model.Song
 import org.junit.Assert.assertEquals
@@ -60,14 +61,21 @@ class CoverProvidersTest {
 
     @Test
     fun `qq search builds the cover url from the album mid`() {
-        val body = """
-            {"code":0,"data":{"song":{"list":[
-                {"songname":"安静","albumname":"范特西","albummid":"000Abc","interval":181,
-                 "pubtime":1270000000,"singer":[{"name":"周杰伦"}]}
-            ]}}}
-        """.trimIndent()
-
-        val candidates = parseQqCover(body, song)
+        val candidates = qqCoverCandidates(
+            listOf(
+                QQSearchSong(
+                    songMid = "0039MnYb0qxYhV",
+                    songId = 97773L,
+                    title = "安静",
+                    artist = "周杰伦",
+                    album = "范特西",
+                    albumMid = "000Abc",
+                    durationMs = 181_000L,
+                    pubTimeSeconds = 1_270_000_000L
+                )
+            ),
+            song
+        )
 
         assertEquals(1, candidates.size)
         assertEquals(
@@ -76,13 +84,6 @@ class CoverProvidersTest {
         )
         assertEquals(CoverSource.QQ_MUSIC, candidates[0].source)
         assertEquals("2010", candidates[0].year)
-    }
-
-    @Test
-    fun `qq parser tolerates a jsonp wrapper`() {
-        val body = """callback({"code":0,"data":{"song":{"list":[{"songname":"安静","albummid":"mid1"}]}}});"""
-
-        assertEquals(1, parseQqCover(body, song).size)
     }
 
     @Test
@@ -132,7 +133,7 @@ class CoverProvidersTest {
     @Test
     fun `unreadable bodies yield no candidates instead of throwing`() {
         assertTrue(parseNetEaseCover("<html>blocked</html>", song).isEmpty())
-        assertTrue(parseQqCover("", song).isEmpty())
+        assertTrue(qqCoverCandidates(emptyList(), song).isEmpty())
         assertTrue(parseKugouCover("not json", song).isEmpty())
         assertTrue(parseITunesCover("{}", song).isEmpty())
     }

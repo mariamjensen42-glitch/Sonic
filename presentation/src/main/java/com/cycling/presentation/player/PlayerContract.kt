@@ -3,6 +3,7 @@ package com.cycling.presentation.player
 import com.cycling.domain.lyrics.model.SyncedLyrics
 import com.cycling.domain.model.HiResBadge
 import com.cycling.domain.model.LyricsCandidate
+import com.cycling.domain.model.LyricsProvider
 import com.cycling.domain.model.LyricsSource
 import com.cycling.domain.model.PlayerState
 import com.cycling.domain.model.RepeatMode
@@ -28,6 +29,14 @@ data class PlayerUiState(
     val queueIndex: Int = -1,
     val repeatMode: RepeatMode = RepeatMode.OFF,
     val shuffleMode: Boolean = false,
+    /**
+     * 队列播完后是否自动接上风格相近的歌（设置页的「智能续播」）。
+     *
+     * 真正的开关在 `PlayerManager` 手里，这里读回来只为队列页那排模式按钮能显示出当前档位。
+     */
+    val autoContinueEnabled: Boolean = true,
+    /** 切歌时是否淡入淡出。设置里存的是时长，0 即为关。 */
+    val audioFadeEnabled: Boolean = false,
     val isFavorite: Boolean = false,
     val viewMode: PlayerViewMode = PlayerViewMode.COVER,
     val lyrics: SyncedLyrics? = null,
@@ -39,6 +48,15 @@ data class PlayerUiState(
     val lyricsCandidates: List<LyricsCandidate> = emptyList(),
     val showLyricsCandidates: Boolean = false,
     val isLoadingLyricsCandidates: Boolean = false,
+    /**
+     * 还没回答的在线来源。
+     *
+     * 面板是逐家长出来的，所以「还在查哪几家」得单独说出来 —— 只留一个总的转圈，用户分不清
+     * 是卡住了还是某一家本来就没有。
+     */
+    val lyricsCandidatesPending: Set<LyricsProvider> = emptySet(),
+    /** 查询失败的来源。与「查到了但是空的」分开，前者值得再试一次。 */
+    val lyricsCandidatesFailed: Set<LyricsProvider> = emptySet(),
     /** 歌词时间轴的手动校正，正值让歌词延后。每首歌各存一份，见 `SongRepository.getLyricsOffset`。 */
     val lyricsOffsetMs: Long = 0L,
     /** 「播放设置」面板是否展开（倍速与定时关闭）。 */
@@ -61,7 +79,9 @@ data class PlayerUiState(
     /** 歌词当前行是否带柔光。 */
     val lyricsGlowEnabled: Boolean = false,
     /** 歌词非当前行是否按距离虚化。 */
-    val lyricsBlurEnabled: Boolean = true
+    val lyricsBlurEnabled: Boolean = true,
+    /** 歌词是否显示译文。 */
+    val lyricsTranslationEnabled: Boolean = true
 )
 
 /** 歌词偏移一次调整的步长，也是界面上两个按钮的量。 */
@@ -79,6 +99,8 @@ sealed interface PlayerIntent {
     data object SkipToPrevious : PlayerIntent
     data object ToggleRepeatMode : PlayerIntent
     data object ToggleShuffleMode : PlayerIntent
+    data object ToggleAutoContinue : PlayerIntent
+    data object ToggleAudioFade : PlayerIntent
     data class AddToQueue(val song: Song) : PlayerIntent
     data class PlayNext(val song: Song) : PlayerIntent
     data class MoveQueueItem(val fromIndex: Int, val toIndex: Int) : PlayerIntent
@@ -131,6 +153,9 @@ sealed interface PlayerIntent {
     data class SetLyricsGlowEnabled(val enabled: Boolean) : PlayerIntent
 
     data class SetLyricsBlurEnabled(val enabled: Boolean) : PlayerIntent
+
+    /** 歌词译文显隐。入口是歌词页顶栏那颗翻译按钮。 */
+    data class SetLyricsTranslationEnabled(val enabled: Boolean) : PlayerIntent
 }
 
 sealed interface PlayerEffect {

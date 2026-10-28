@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Flamingo 1.0.0（2608310056）的 ic_tips_minus，图标含义：减。
+     pathData 原样搬运；viewport 收到图形包围盒（源文件里的留白已裁掉），
+     所以同一 dp 下各图标的墨迹大小一致。颜色一律 #FF000000，由 Icon 的 tint 决定。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="6.8dp"
+    android:viewportWidth="344"
+    android:viewportHeight="97.5">
+    <group android:translateX="-0" android:translateY="0.5">
+        <path
+            android:fillColor="#FF000000"
+            android:pathData="M52,97L291.5,97C321.5,97 344,78.5 344,48C344,18 321.5,-0.5 291.5,-0.5L52,-0.5C22,-0.5 0,18 0,48C0,78.5 22,97 52,97Z" />
+    </group>
+</vector>

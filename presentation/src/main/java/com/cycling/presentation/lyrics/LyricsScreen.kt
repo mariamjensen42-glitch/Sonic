@@ -88,7 +88,6 @@ fun LyricsScreen(
 ) {
     var showOffsetDialog by remember { mutableStateOf(false) }
     var showSettingsSheet by remember { mutableStateOf(false) }
-    var showMoreSheet by remember { mutableStateOf(false) }
 
     // 页面底色即 surface（已由壁纸动态取色着色）；动态色面铺满整屏。
     Box(
@@ -109,6 +108,9 @@ fun LyricsScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = onNavigateBack) {
+                        // 这里保留 Material Symbols 的返回箭头：Flamingo 那支 `Back` 是给
+                        // 32×55dp 整页翻页按钮画的（缩到 20dp 仍有 4dp 臂厚，48dp 的顶栏压不住），
+                        // 拿它当 24dp 的导航图标会又粗又高。顶栏的收藏 / 更多已经是 Flamingo 了。
                         M3SymbolIcon(
                             name = SymbolIconName.ArrowBack,
                             filled = true,
@@ -119,46 +121,17 @@ fun LyricsScreen(
                         uiState = uiState,
                         onIntent = onIntent,
                         onArtworkClick = onNavigateBack,
-                        onOverflow = { showMoreSheet = true },
+                        // 一键直达在线歌词选择：这颗按钮的全部职责就是它，不再套一层面板。
+                        // 原来那层面板里的「重新获取」与「界面设置」挪到了选择列表的底部。
+                        onOverflow = { onIntent(PlayerIntent.OpenLyricsCandidates) },
+                        showTranslationToggle = true,
+                        overflowIcon = R.drawable.ic_flamingo_lyrics,
+                        overflowDescription = stringResource(R.string.lyrics_pick_online),
                         modifier = Modifier.weight(1f)
                     )
                 }
             }
         )
-    }
-
-    if (showMoreSheet) {
-        AppleSheet(onDismiss = { showMoreSheet = false }) {
-                // 本地 .lrc / 内嵌标签 / 用户手写的歌词会被下载结果盖掉，所以只在来源允许时
-                // 提供「选择歌词」与「重新获取」—— 点了没反应比没有这个入口更糟。
-                if (uiState.lyricsSource != LyricsSource.USER) {
-                    if (uiState.lyricsSource == LyricsSource.ONLINE ||
-                        uiState.lyricsSource == LyricsSource.NONE
-                    ) {
-                        SheetAction(
-                            icon = SymbolIconName.QueueMusic,
-                            title = stringResource(R.string.lyrics_candidates_desc)
-                        ) {
-                            showMoreSheet = false
-                            onIntent(PlayerIntent.OpenLyricsCandidates)
-                        }
-                    }
-                    SheetAction(
-                        icon = SymbolIconName.Refresh,
-                        title = stringResource(R.string.lyrics_fetch_desc)
-                    ) {
-                        showMoreSheet = false
-                        onIntent(PlayerIntent.RefreshLyrics)
-                    }
-                }
-                SheetAction(
-                    icon = SymbolIconName.Tune,
-                    title = stringResource(R.string.lyrics_settings_desc)
-                ) {
-                    showMoreSheet = false
-                    showSettingsSheet = true
-                }
-        }
     }
 
     if (showOffsetDialog) {
@@ -174,8 +147,36 @@ fun LyricsScreen(
         LyricsCandidatesSheet(
             candidates = uiState.lyricsCandidates,
             isLoading = uiState.isLoadingLyricsCandidates,
+            pendingProviders = uiState.lyricsCandidatesPending,
+            failedProviders = uiState.lyricsCandidatesFailed,
             onSelect = { onIntent(PlayerIntent.SelectLyricsCandidate(it)) },
-            onDismiss = { onIntent(PlayerIntent.DismissLyricsCandidates) }
+            onDismiss = { onIntent(PlayerIntent.DismissLyricsCandidates) },
+            footer = {
+                // 当前用的是哪一份 —— 分不清「自己写的」和「下载的」，就无从判断该不该换。
+                AppleSheetRow(
+                    title = stringResource(
+                        R.string.lyrics_panel_source,
+                        lyricsSourceLabel(uiState.lyricsSource)
+                    )
+                )
+                // 手写歌词排在 resolveLyrics 最前面，换不掉，这一档不给「重新获取」。
+                if (uiState.lyricsSource != LyricsSource.USER) {
+                    SheetAction(
+                        icon = SymbolIconName.Refresh,
+                        title = stringResource(R.string.lyrics_fetch_desc)
+                    ) {
+                        onIntent(PlayerIntent.DismissLyricsCandidates)
+                        onIntent(PlayerIntent.RefreshLyrics)
+                    }
+                }
+                SheetAction(
+                    icon = SymbolIconName.Tune,
+                    title = stringResource(R.string.lyrics_settings_desc)
+                ) {
+                    onIntent(PlayerIntent.DismissLyricsCandidates)
+                    showSettingsSheet = true
+                }
+            }
         )
     }
 
@@ -195,7 +196,26 @@ fun LyricsScreen(
     }
 }
 
-/** 「更多」面板里的一行。 */
+/**
+ * 「更多」面板里的一行。
+ *
+ * 这里的图标仍是 Material Symbols（[SymbolIconName]）：Flamingo 那套资源里没有「刷新」与
+ * 「调节」两个图形，凑不出对应形状，硬换只会让同一个菜单里出现两种笔触。顶栏的收藏 / 更多
+ * 与播放页共用 `NowPlayingBar`，已经跟着一起换成了 Flamingo 的图形语言。
+ */
+
+/** 歌词来源的中文名，面板副标题用。文案与歌曲详情页共用一套。 */
+@Composable
+private fun lyricsSourceLabel(source: LyricsSource): String = stringResource(
+    when (source) {
+        LyricsSource.USER -> R.string.song_detail_lyrics_source_user
+        LyricsSource.EMBEDDED -> R.string.song_detail_lyrics_source_embedded
+        LyricsSource.FILE -> R.string.song_detail_lyrics_source_file
+        LyricsSource.ONLINE -> R.string.song_detail_lyrics_source_online
+        LyricsSource.NONE -> R.string.song_detail_lyrics_source_none
+    }
+)
+
 @Composable
 private fun SheetAction(
     icon: SymbolIconName,

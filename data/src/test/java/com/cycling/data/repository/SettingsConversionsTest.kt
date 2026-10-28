@@ -41,7 +41,8 @@ class SettingsConversionsTest {
                 LyricsProvider.NETEASE,
                 LyricsProvider.AMLL,
                 LyricsProvider.QQ_MUSIC,
-                LyricsProvider.KUGOU
+                LyricsProvider.KUGOU,
+                LyricsProvider.LX
             ),
             SettingsConversions.parseLyricsProviders("LRCLIB,NETEASE")
         )
@@ -56,7 +57,8 @@ class SettingsConversionsTest {
                 LyricsProvider.AMLL,
                 LyricsProvider.NETEASE,
                 LyricsProvider.QQ_MUSIC,
-                LyricsProvider.KUGOU
+                LyricsProvider.KUGOU,
+                LyricsProvider.LX
             ),
             SettingsConversions.parseLyricsProviders("SPOTIFY,LRCLIB")
         )
@@ -73,7 +75,8 @@ class SettingsConversionsTest {
                 LyricsProvider.AMLL,
                 LyricsProvider.QQ_MUSIC,
                 LyricsProvider.KUGOU,
-                LyricsProvider.LRCLIB
+                LyricsProvider.LRCLIB,
+                LyricsProvider.LX
             ),
             SettingsConversions.parseLyricsProviders("NETEASE,NETEASE")
         )

@@ -18,9 +18,6 @@ sealed interface Screen : NavKey {
     data class SongDetail(val songId: Long) : Screen
 
     @Serializable
-    data object Player : Screen
-
-    @Serializable
     data object Lyrics : Screen
 
     @Serializable
@@ -33,6 +30,14 @@ sealed interface Screen : NavKey {
     /** 听歌排行榜：时长榜 / 次数榜 × 日周月总 + 乐迷档案。 */
     @Serializable
     data object Leaderboard : Screen
+
+    /** 下载管理：在线曲目的离线队列与已完成文件。 */
+    @Serializable
+    data object Downloads : Screen
+
+    /** 元数据刮削：用在线目录补全本地歌曲的标题 / 艺术家 / 专辑 / 封面。 */
+    @Serializable
+    data object MetadataScrape : Screen
 }
 
 sealed interface LibraryDestination : Screen {

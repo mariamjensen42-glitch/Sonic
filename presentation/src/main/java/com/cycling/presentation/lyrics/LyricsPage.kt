@@ -1,13 +1,20 @@
 package com.cycling.presentation.lyrics
 
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -16,6 +23,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
@@ -47,10 +55,6 @@ import com.cycling.presentation.player.PlayerUiState
  * 这个位置差不多是视口的 1/6 到 1/4，与 Apple Music 的观感一致。
  */
 private val LyricFocusInset = SonSpacing.huge + SonSpacing.extraExtraLarge
-
-/** 非当前行的整体不透明度。压得比卡拉 OK 版更低，当前行才真正跳出来。 */
-private const val LyricInactiveAlphaDark = 0.38f
-private const val LyricInactiveAlphaLight = 0.5f
 
 /** 行高比。Apple Music 的行距比正文松得多，靠它撑出「一句一行」的呼吸感。 */
 private const val LyricLineHeightRatio = 1.32f
@@ -103,11 +107,14 @@ fun LyricsPage(
     val lyrics = uiState.lyrics
     val positionProvider = rememberSmoothLyricsPosition(uiState)
 
-    val activeColor = if (onDarkSurface) extended.onArtwork else extended.lyricsActive
-    val inactiveAlpha = if (onDarkSurface) LyricInactiveAlphaDark else LyricInactiveAlphaLight
+    // 整页唯一取色点：正文、非当前行、伴奏、译文、占位文案全部由它派生。
+    // 通过 LocalLyricsPalette 下发，子组件不再各自去主题里取色。
+    val palette = remember(onDarkSurface, extended) { LyricsPalette.of(onDarkSurface, extended) }
 
     val baseStyle = MaterialTheme.typography.headlineMediumEmphasized
     val sizeSp = uiState.lyricsTextSizeSp
+    // 辉光是**文字投影**，不是文字色：它要的是与正文相反方向的暗色光晕，
+    // 所以刻意用中性的 `lyricsInactive`（两种主题下都是中灰），不参与上面的色阶。
     val normalStyle = remember(baseStyle, sizeSp, uiState.lyricsGlowEnabled, extended) {
         lyricStyle(
             base = baseStyle,
@@ -127,72 +134,91 @@ fun LyricsPage(
         )
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                // 歌词行自带 16dp 内边距，这里补到与顶部歌曲栏的 28dp 对齐。
-                .padding(horizontal = SonSpacing.mediumSmall)
-        ) {
-            when {
-                lyrics != null -> {
-                    // 列表直接从当前行铺起，不要先渲染第 0 行再跳 —— 一进来就滚到当前句的卡顿
-                    // 全部来自那一次白组合。
-                    val initialLineIndex = remember(lyrics) {
-                        val time = uiState.playbackPosition.toInt() - uiState.lyricsOffsetMs.toInt()
-                        val lines = lyrics.lines
-                        if (lines.isEmpty()) {
-                            0
-                        } else {
-                            lines.indexOfLast { it.start <= time }.coerceIn(0, lines.lastIndex)
+    CompositionLocalProvider(LocalLyricsPalette provides palette) {
+        Box(modifier = modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    // 歌词行自带 16dp 内边距，这里补到与顶部歌曲栏的 28dp 对齐。
+                    .padding(horizontal = SonSpacing.mediumSmall)
+            ) {
+                when {
+                    lyrics != null -> {
+                        // 列表直接从当前行铺起，不要先渲染第 0 行再跳 —— 一进来就滚到当前句的卡顿
+                        // 全部来自那一次白组合。
+                        val initialLineIndex = remember(lyrics) {
+                            val time = uiState.playbackPosition.toInt() - uiState.lyricsOffsetMs.toInt()
+                            val lines = lyrics.lines
+                            if (lines.isEmpty()) {
+                                0
+                            } else {
+                                lines.indexOfLast { it.start <= time }.coerceIn(0, lines.lastIndex)
+                            }
                         }
+                        val listState = rememberLazyListState(
+                            initialFirstVisibleItemIndex = initialLineIndex
+                        )
+                        KaraokeLyricsView(
+                            listState = listState,
+                            lyrics = lyrics,
+                            currentPosition = positionProvider,
+                            isPlaying = uiState.isPlaying,
+                            onLineClicked = { line: ISyncedLine ->
+                                onIntent(PlayerIntent.SeekTo(line.start.toLong()))
+                            },
+                            onLinePressed = { onLineLongPressed() },
+                            normalLineTextStyle = normalStyle,
+                            accompanimentLineTextStyle = accompanimentStyle,
+                            useBlurEffect = uiState.lyricsBlurEnabled,
+                            alignCenter = uiState.lyricsAlignCenter,
+                            showTranslation = uiState.lyricsTranslationEnabled,
+                            offset = LyricFocusInset + headerInset,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                // DstIn 必须在自己的层里跑：否则它会把下面已经画好的动态色面一起擦掉，
+                                // 整块歌词区就变成一块硬边的黑方块。
+                                .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                                .lyricFadeMask(palette.textColor, headerInset)
+                        )
                     }
-                    val listState = rememberLazyListState(
-                        initialFirstVisibleItemIndex = initialLineIndex
-                    )
-                    KaraokeLyricsView(
-                        listState = listState,
-                        lyrics = lyrics,
-                        currentPosition = positionProvider,
-                        isPlaying = uiState.isPlaying,
-                        onLineClicked = { line: ISyncedLine ->
-                            onIntent(PlayerIntent.SeekTo(line.start.toLong()))
-                        },
-                        onLinePressed = { onLineLongPressed() },
-                        normalLineTextStyle = normalStyle,
-                        accompanimentLineTextStyle = accompanimentStyle,
-                        textColor = activeColor,
-                        useBlurEffect = uiState.lyricsBlurEnabled,
-                        alignCenter = uiState.lyricsAlignCenter,
-                        inactiveLineAlpha = inactiveAlpha,
-                        offset = LyricFocusInset + headerInset,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            // DstIn 必须在自己的层里跑：否则它会把下面已经画好的动态色面一起擦掉，
-                            // 整块歌词区就变成一块硬边的黑方块。
-                            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-                            .lyricFadeMask(activeColor, headerInset)
-                    )
-                }
 
-                uiState.isLoadingLyrics -> SonLoadingState()
+                    uiState.isLoadingLyrics -> SonLoadingState()
 
-                else -> Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = stringResource(R.string.player_lyrics_unavailable),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = extended.lyricsInactive
-                    )
+                    // 没有歌词时给一个可点的出口：以前这里只有一行「暂无歌词」，用户既不知道
+                    // 歌词是从哪来的，也没有任何办法补救。
+                    else -> Column(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = stringResource(R.string.player_lyrics_unavailable),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = palette.hintColor
+                        )
+                        Spacer(modifier = Modifier.height(SonSpacing.medium))
+                        Text(
+                            text = stringResource(R.string.lyrics_fetch_action),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = palette.textColor,
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .border(
+                                    width = 1.dp,
+                                    color = palette.textColor.copy(alpha = 0.32f),
+                                    shape = CircleShape
+                                )
+                                .clickable { onIntent(PlayerIntent.OpenLyricsCandidates) }
+                                .padding(horizontal = 22.dp, vertical = 10.dp)
+                        )
+                    }
                 }
             }
-        }
 
-        // 顶栏浮在歌词之上：歌词列表铺满整屏，滚到上沿的行从栏后淡出，
-        // 不会在栏的下沿被硬切成半行。
-        header?.invoke()
+            // 顶栏浮在歌词之上：歌词列表铺满整屏，滚到上沿的行从栏后淡出，
+            // 不会在栏的下沿被硬切成半行。
+            header?.invoke()
+        }
     }
 }
 

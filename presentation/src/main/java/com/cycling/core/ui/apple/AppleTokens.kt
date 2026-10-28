@@ -177,6 +177,12 @@ object AppleType {
         fontWeight = FontWeight.Normal, letterSpacing = (-0.2).sp
     )
 
+    /** Title2Medium：20sp Medium —— 合集页头部标题用的就是这一档（style/Title2Medium） */
+    val title2Medium = TextStyle(
+        fontFamily = AppleFontFamily, fontSize = 20.sp, lineHeight = 25.sp,
+        fontWeight = FontWeight.Medium, letterSpacing = (-0.2).sp
+    )
+
     /** Headline：17sp Medium */
     val headline = TextStyle(
         fontFamily = AppleFontFamily, fontSize = 17.sp, lineHeight = 22.sp,
@@ -229,6 +235,18 @@ object AppleType {
     val caption2 = TextStyle(
         fontFamily = AppleFontFamily, fontSize = 11.sp, lineHeight = 13.sp,
         fontWeight = FontWeight.Normal
+    )
+
+    /** Caption2Emphasized：11sp Medium —— 合集页头部的「42 首歌曲 · 2 小时」元数据行 */
+    val caption2Emphasized = TextStyle(
+        fontFamily = AppleFontFamily, fontSize = 11.sp, lineHeight = 13.sp,
+        fontWeight = FontWeight.Medium
+    )
+
+    /** ButtonB：18sp Medium —— button_b 的文本样式（parent SubheadEmphasized 覆写 textSize） */
+    val button = TextStyle(
+        fontFamily = AppleFontFamily, fontSize = 18.sp, lineHeight = 23.sp,
+        fontWeight = FontWeight.Medium, letterSpacing = (-0.2).sp
     )
 
     /** 设置项标题：`item_preference_title_description` 实测 16sp */
@@ -316,6 +334,35 @@ object AppleDims {
 
     /** 详情页动作条胶囊按钮高度 */
     val actionHeight = 40.dp
+
+    // ── 合集页头部（epoxy_layout_collection_page_uber_header） ──────────
+
+    /** header_non_uber_cover_art_margin_horiz —— 封面左右留白，封面边长 = 屏宽 − 144dp */
+    val headerCoverInset = 72.dp
+
+    /**
+     * 合集页头部顶部的 `Space`：`layout_height=?attr/actionBarSize`。
+     * 它不是状态栏占位 —— 顶栏（返回 / 分享 / 更多）是压在这条带上，封面从它**下面**开始。
+     */
+    val headerToolbarSpace = 56.dp
+
+    /** header_non_uber_cover_art_margin_top */
+    val headerCoverTop = 10.dp
+
+    /** header_non_uber_cover_art_shadow_elev */
+    val headerCoverShadow = 10.dp
+
+    /** header_non_uber_title_margin_top —— 封面底沿到标题 */
+    val headerTitleTop = 15.dp
+
+    /** smaller_margin_4 —— 副标题到元数据行 */
+    val headerMetaTop = 4.dp
+
+    /** button_b 的文本行高，也即胶囊按钮高度（44dp） */
+    val headerButtonHeight = 44.dp
+
+    /** button_b 组内间隔 */
+    val headerButtonGap = 8.dp
 
     // ── 底部 Tab 条（bottom_navigation.xml） ────────────────────────
 

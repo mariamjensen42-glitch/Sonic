@@ -49,7 +49,11 @@ data class StoredPlugin(
     val autoBlockedPlatforms: List<String> = emptyList(),
     val opaque: Boolean = false,
     val error: String? = null,
-    val status: String = ""
+    val status: String = "",
+    /** 健康度：连续失败次数与最近失败/成功时间，见 `OnlinePlugin.isDemoted`。 */
+    val consecutiveFailures: Int = 0,
+    val lastFailureAt: Long = 0L,
+    val lastSuccessAt: Long = 0L
 )
 
 @Serializable
@@ -92,7 +96,10 @@ fun StoredPlugin.toDomain(): OnlinePlugin = OnlinePlugin(
     autoBlockedPlatforms = autoBlockedPlatforms.mapNotNull(OnlineSource::fromLxKey).toSet(),
     opaque = opaque,
     error = error,
-    status = status
+    status = status,
+    consecutiveFailures = consecutiveFailures,
+    lastFailureAt = lastFailureAt,
+    lastSuccessAt = lastSuccessAt
 )
 
 fun OnlinePlugin.toStored(): StoredPlugin = StoredPlugin(
@@ -124,7 +131,10 @@ fun OnlinePlugin.toStored(): StoredPlugin = StoredPlugin(
     autoBlockedPlatforms = autoBlockedPlatforms.map { it.lxKey },
     opaque = opaque,
     error = error,
-    status = status
+    status = status,
+    consecutiveFailures = consecutiveFailures,
+    lastFailureAt = lastFailureAt,
+    lastSuccessAt = lastSuccessAt
 )
 
 /**
@@ -144,6 +154,9 @@ class OnlineStore @Inject constructor(
     private val pluginsKey = stringPreferencesKey("plugins_json")
     private val sortModeKey = stringPreferencesKey("sort_mode")
     private val priorityKey = stringPreferencesKey("priority")
+
+    /** 被用户删掉的内置音源 id：删了就别再自动装回来。 */
+    private val removedBuiltinsKey = stringPreferencesKey("removed_builtins")
 
     private val scriptsDir: File
         get() = File(context.filesDir, "online_scripts").apply { if (!exists()) mkdirs() }
@@ -168,6 +181,12 @@ class OnlineStore @Inject constructor(
         context.onlineDataStore.edit { it[priorityKey] = storage }
     }
 
+    suspend fun saveRemovedBuiltins(ids: Set<String>) {
+        context.onlineDataStore.edit {
+            it[removedBuiltinsKey] = json.encodeToString(ids.toList().sorted())
+        }
+    }
+
     suspend fun writeScript(fileName: String, content: String) = withContext(Dispatchers.IO) {
         File(scriptsDir, fileName).writeText(content)
     }
@@ -189,8 +208,16 @@ class OnlineStore @Inject constructor(
         Snapshot(
             plugins = decodePlugins(preferences[pluginsKey]),
             sortMode = preferences[sortModeKey],
-            priority = preferences[priorityKey]
+            priority = preferences[priorityKey],
+            removedBuiltins = decodeIds(preferences[removedBuiltinsKey])
         )
+    }
+
+    private fun decodeIds(raw: String?): Set<String> {
+        if (raw.isNullOrBlank()) return emptySet()
+        return runCatching { json.decodeFromString<List<String>>(raw) }
+            .getOrDefault(emptyList())
+            .toSet()
     }
 
     private fun decodePlugins(raw: String?): List<StoredPlugin> {
@@ -205,6 +232,7 @@ class OnlineStore @Inject constructor(
     data class Snapshot(
         val plugins: List<StoredPlugin>,
         val sortMode: String?,
-        val priority: String?
+        val priority: String?,
+        val removedBuiltins: Set<String> = emptySet()
     )
 }

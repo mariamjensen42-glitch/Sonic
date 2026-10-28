@@ -20,6 +20,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -28,6 +29,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.io.IOException
 
 class LyricsRepositoryImplTest {
 
@@ -118,6 +120,17 @@ class LyricsRepositoryImplTest {
         coEvery { lyricsCacheDao.get(any()) } answers { rowsByKey[firstArg()] }
         coEvery { lyricsCacheDao.delete(any()) } answers { rowsByKey.remove(firstArg()); Unit }
     }
+
+    /**
+     * 候选版本摊平成一条列表。
+     *
+     * 仓库是并发问各家的，批次到达顺序取决于谁先响应；界面按来源固定排序，测试也照做，
+     * 否则断言会时对时错。
+     */
+    private suspend fun candidatesOf(song: Song) = repository.findLyricsCandidates(song)
+        .toList()
+        .sortedBy { it.provider.ordinal }
+        .flatMap { it.candidates }
 
     // ── local sources ────────────────────────────────────────────────
 
@@ -404,16 +417,17 @@ class LyricsRepositoryImplTest {
         )
         coEvery { lrclib.fetchCandidates(any()) } returns listOf(OnlineLyrics(lrc))
 
-        val candidates = repository.findLyricsCandidates(song)
+        val candidates = candidatesOf(song)
 
-        // LRCLIB's copy parses to the same lyrics as NetEase's line-level one, so it is one version
-        // as far as the user is concerned and is collapsed away.
-        assertEquals(2, candidates.size)
+        // LRCLIB's copy is byte-for-byte NetEase's, but it stays listed under LRCLIB: the picker is
+        // grouped by platform, so collapsing it away would remove the only LRCLIB entry.
+        assertEquals(3, candidates.size)
         assertEquals(LyricsProvider.NETEASE, candidates[0].provider)
         assertTrue(candidates[0].wordByWord)
         assertEquals("Golden Best", candidates[0].label)
         assertFalse(candidates[1].wordByWord)
         assertEquals("first line", candidates[1].preview)
+        assertEquals(LyricsProvider.LRCLIB, candidates[2].provider)
     }
 
     @Test
@@ -422,7 +436,7 @@ class LyricsRepositoryImplTest {
         coEvery { netEase.fetchCandidates(any()) } returns listOf(OnlineLyrics(yrc), OnlineLyrics(lrc))
         coEvery { lrclib.fetchCandidates(any()) } returns emptyList()
 
-        val candidates = repository.findLyricsCandidates(song)
+        val candidates = candidatesOf(song)
 
         assertEquals(listOf(false, true), candidates.map { it.isCurrent })
     }
@@ -431,22 +445,38 @@ class LyricsRepositoryImplTest {
     fun `selecting a version caches it and serves it back`() = runTest {
         coEvery { netEase.fetchCandidates(any()) } returns listOf(OnlineLyrics(yrc))
         coEvery { lrclib.fetchCandidates(any()) } returns emptyList()
-        val candidate = repository.findLyricsCandidates(song).single()
+        val candidate = candidatesOf(song).single()
 
         val result = repository.selectLyricsCandidate(song, candidate)
 
         assertEquals(LyricsSource.ONLINE, result.source)
         assertEquals(LyricsProvider.NETEASE, result.provider)
         assertTrue(result.syncedLyrics?.isWordByWord == true)
-        coVerify { lyricsCacheDao.put(match { it.rawContent == yrc && it.source == "netease" }) }
+        // 尾部的 `*` 是「用户亲手挑的」标记，让这一行压过旁车文件与内嵌标签。
+        coVerify { lyricsCacheDao.put(match { it.rawContent == yrc && it.source == "netease*" }) }
     }
 
     @Test
     fun `no versions are offered when online lookup is switched off`() = runTest {
         every { settingsRepository.onlineLyricsEnabled } returns flowOf(false)
 
-        assertTrue(repository.findLyricsCandidates(song).isEmpty())
+        assertTrue(repository.findLyricsCandidates(song).toList().isEmpty())
         coVerify(exactly = 0) { netEase.fetchCandidates(any()) }
+    }
+
+    @Test
+    fun `a source that throws is reported as failed rather than as having nothing`() = runTest {
+        coEvery { netEase.fetchCandidates(any()) } throws IOException("boom")
+        coEvery { lrclib.fetchCandidates(any()) } returns listOf(OnlineLyrics(lrc))
+
+        val batches = repository.findLyricsCandidates(song).toList().sortedBy { it.provider.ordinal }
+
+        // 一家挂了不能连累另一家：列表里该有的还是有，只是失败那家要能被界面标出来。
+        assertEquals(2, batches.size)
+        assertTrue(batches[0].failed)
+        assertTrue(batches[0].candidates.isEmpty())
+        assertFalse(batches[1].failed)
+        assertEquals(1, batches[1].candidates.size)
     }
 
     // ── manual refresh ───────────────────────────────────────────────

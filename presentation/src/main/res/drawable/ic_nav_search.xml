@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 搜索钮：SF `magnifyingglass`（Apple Music 搜索那颗）。
+     约定同 ic_flamingo_*：只描边、2.0 圆头、viewport 收到图形包围盒（含描边），
+     颜色写 #FF000000 当占位，实际由 Icon 的 tint 决定。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="17.6dp"
+    android:height="17.6dp"
+    android:viewportWidth="17.6"
+    android:viewportHeight="17.6">
+    <group android:translateX="-3.4" android:translateY="-3.4">
+        <path
+            android:pathData="M4.4 10.6a6.2 6.2 0 1 0 12.4 0a6.2 6.2 0 1 0 -12.4 0"
+            android:strokeColor="#FF000000"
+            android:strokeWidth="2" />
+        <path
+            android:pathData="M15.2 15.2 20 20"
+            android:strokeColor="#FF000000"
+            android:strokeWidth="2"
+            android:strokeLineCap="round" />
+    </group>
+</vector>

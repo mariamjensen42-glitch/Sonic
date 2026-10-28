@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Flamingo 1.0.0（2608310056）的 ic_nowplaying_play，图标含义：播放。
+     pathData 原样搬运；viewport 收到图形包围盒（源文件里的留白已裁掉），
+     所以同一 dp 下各图标的墨迹大小一致。颜色一律 #FF000000，由 Icon 的 tint 决定。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="21.37dp"
+    android:height="24dp"
+    android:viewportWidth="773.5"
+    android:viewportHeight="868.5">
+    <group android:translateX="0.75" android:translateY="0.5">
+        <path
+            android:fillColor="#FF000000"
+            android:pathData="M-0.75,787C-0.75,841.5 31.75,868 70.25,868C87.25,868 104.75,863 121.75,853.5L712.25,509C755.25,484 772.75,464.5 772.75,434C772.75,403 755.25,384 712.25,359L121.75,14C104.75,4.5 87.25,-0.5 70.25,-0.5C31.75,-0.5 -0.75,26 -0.75,81Z" />
+    </group>
+</vector>

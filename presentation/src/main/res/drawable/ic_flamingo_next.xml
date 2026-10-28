@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Flamingo 1.0.0（2608310056）的 ic_action_next，图标含义：下一首（翻页箭头）。
+     pathData 原样搬运；viewport 收到图形包围盒（源文件里的留白已裁掉），
+     所以同一 dp 下各图标的墨迹大小一致。颜色一律 #FF000000，由 Icon 的 tint 决定。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="13.79dp"
+    android:height="24dp"
+    android:viewportWidth="508.5"
+    android:viewportHeight="885">
+    <group android:translateX="0.5" android:translateY="0.5">
+        <path
+            android:fillColor="#FF000000"
+            android:pathData="M508,442C508,425 501.5,410.5 488.5,397.5L98.5,16C87.5,5 74,-0.5 58,-0.5C25.5,-0.5 -0.5,24.5 -0.5,57C-0.5,73 6,87.5 17,99L369,442L17,785C6.5,796 -0.5,810.5 -0.5,826.5C-0.5,859.5 25.5,884.5 58,884.5C74,884.5 87.5,879 98.5,868L488.5,486.5C502,473.5 508,459 508,442Z" />
+    </group>
+</vector>

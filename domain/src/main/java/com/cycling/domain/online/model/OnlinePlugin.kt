@@ -86,9 +86,26 @@ data class OnlinePlugin(
     /** 导入时没识别到 `lx.` 标记（被压缩/混淆），仅提示，不影响执行。 */
     val opaque: Boolean = false,
     val error: String? = null,
-    val status: String = ""
+    val status: String = "",
+    /**
+     * 连续取链/取词失败次数。成功一次就清零。
+     *
+     * 只用于排序降权与 UI 提示：达到 [HEALTH_DEMOTE_THRESHOLD] 后该插件排到队尾，
+     * 但仍然会被尝试（否则一旦把所有插件都判成「不健康」，就永远没有恢复的机会）。
+     */
+    val consecutiveFailures: Int = 0,
+    /** 最近一次失败的时间戳（0 表示从未失败）。 */
+    val lastFailureAt: Long = 0L,
+    /** 最近一次成功的时间戳（0 表示装好之后还没成功过）。 */
+    val lastSuccessAt: Long = 0L
 ) {
     val musicPlatformCount: Int get() = sources.size
+
+    /** 连续失败够多，排在队尾。 */
+    val isDemoted: Boolean get() = consecutiveFailures >= HEALTH_DEMOTE_THRESHOLD
+
+    /** 随 App 打包的脚本；删掉后会记进「已移除」，需要手动恢复。 */
+    val isBuiltin: Boolean get() = origin == ORIGIN_BUILTIN
 
     fun supports(source: OnlineSource, action: String): Boolean =
         sources.any { it.key == source && it.supports(action) }
@@ -97,8 +114,20 @@ data class OnlinePlugin(
         source in blockedPlatforms || source in autoBlockedPlatforms
 
     companion object {
+        /** [origin] 取值：随 App 打包的内置脚本。 */
+        const val ORIGIN_BUILTIN = "builtin"
+
         /** 取链动作名，与 LX 协议一致。 */
         const val ACTION_MUSIC_URL = "musicUrl"
+
+        /** 取歌词动作名。 */
+        const val ACTION_LYRIC = "lyric"
+
+        /** 取封面动作名。 */
+        const val ACTION_PIC = "pic"
+
+        /** 连续失败几次后降权。两次：一次可能是网络抖动，两次就是真不行。 */
+        const val HEALTH_DEMOTE_THRESHOLD = 2
     }
 }
 

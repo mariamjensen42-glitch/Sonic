@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 自动过渡（AutoMix）：Apple Music 队列条最右那颗 ◉ —— 一个圆环 + 中心实心点。
+     描边色写 #FF000000 当占位，实际由 Icon 的 tint 决定；viewport 收到图形包围盒（含描边）。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="16.4dp"
+    android:height="16.4dp"
+    android:viewportWidth="16.4"
+    android:viewportHeight="16.4">
+    <group android:translateX="-3.8" android:translateY="-3.8">
+        <path
+            android:pathData="M12 12m-7.2 0a7.2 7.2 0 1 1 14.4 0a7.2 7.2 0 1 1 -14.4 0"
+            android:strokeColor="#FF000000"
+            android:strokeWidth="2" />
+        <path
+            android:fillColor="#FF000000"
+            android:pathData="M12 12m-2.4 0a2.4 2.4 0 1 1 4.8 0a2.4 2.4 0 1 1 -4.8 0" />
+    </group>
+</vector>

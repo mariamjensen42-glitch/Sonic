@@ -85,6 +85,15 @@ interface SettingsRepository {
     val lyricsBlurEnabled: Flow<Boolean>
     suspend fun setLyricsBlurEnabled(enabled: Boolean)
 
+    /**
+     * 歌词是否显示译文。
+     *
+     * 默认开：解析器早就把译文并进了 `translation` 字段，改造前一直是「有就显示」。
+     * 关掉只影响渲染，不动已解析的数据 —— 再打开立刻回来，不用重新取词。
+     */
+    val lyricsTranslationEnabled: Flow<Boolean>
+    suspend fun setLyricsTranslationEnabled(enabled: Boolean)
+
     /** 播放页封面左下角的小金标样式；[HiResBadge.OFF] 表示不显示。 */
     val hiResBadge: Flow<HiResBadge>
     suspend fun setHiResBadge(badge: HiResBadge)
@@ -125,13 +134,17 @@ interface SettingsRepository {
          * hand-aligned — and when it does not, the miss costs a single indexed request. NetEase
          * follows (word-by-word `yrc` with time translation), then the two line-level Chinese
          * catalogues, and LRCLIB — the documented one — last.
+         *
+         * `LX`（用户自己导入的音源脚本）排在最后：它只对在线曲目有效，且表现取决于第三方脚本，
+         * 不该抢在内置来源前面。
          */
         val DEFAULT_LYRICS_PROVIDER_ORDER = listOf(
             LyricsProvider.AMLL,
             LyricsProvider.NETEASE,
             LyricsProvider.QQ_MUSIC,
             LyricsProvider.KUGOU,
-            LyricsProvider.LRCLIB
+            LyricsProvider.LRCLIB,
+            LyricsProvider.LX
         )
     }
 }

@@ -35,11 +35,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.cycling.core.ui.apple.appleEdgeFade
-import com.cycling.core.ui.theme.LocalSonExtendedColors
 import com.cycling.core.ui.theme.SonSpacing
 import com.cycling.domain.lyrics.model.karaoke.KaraokeAlignment
 import com.cycling.domain.lyrics.model.karaoke.KaraokeLine
+import com.cycling.presentation.lyrics.LocalLyricsPalette
 import com.cycling.presentation.lyrics.utils.LayerPaint
 import com.cycling.presentation.lyrics.utils.easing.Bounce
 import com.cycling.presentation.lyrics.utils.easing.Swell
@@ -293,6 +292,8 @@ fun KaraokeLineText(
     precalculatedLayouts: List<SyllableLayout>? = null,
     /** 行文本在可用宽度内居中；关掉就按语言方向靠起始侧。 */
     alignCenter: Boolean = false,
+    /** 是否渲染译文行。关掉时译文仍在模型里，只是不画。 */
+    showTranslation: Boolean = true,
     textMeasurer: TextMeasurer = rememberTextMeasurer()
 ) {
     val isLineRtl = remember(line.syllables) { line.syllables.any { it.content.isRtl() } }
@@ -320,17 +321,15 @@ fun KaraokeLineText(
         }
     }
 
-    // 已唱/未唱的刷色都来自主题角色，调用方不传就取"当前行高亮"色
-    val extended = LocalSonExtendedColors.current
-    val lyricsColor = if (activeColor == Color.Unspecified) extended.lyricsActive else activeColor
+    // 已唱/未唱的刷色都来自同一个正文色：调用方不传就取当前页的调色板，
+    // 不回退到主题 token —— 歌词页压在动态色面上，主题 token 只在深色主题下才对。
+    val palette = LocalLyricsPalette.current
+    val lyricsColor = if (activeColor == Color.Unspecified) palette.textColor else activeColor
 
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = SonSpacing.small, horizontal = SonSpacing.medium)
-            // Apple 的歌词行是 FullWidthAlphaGradientFlexboxLayout：两端做 alpha 渐隐，
-            // 长行贴到屏幕边缘时自然淡出，不缩字号也不截断。
-            .appleEdgeFade(),
+            .padding(vertical = SonSpacing.small, horizontal = SonSpacing.medium),
         verticalArrangement = Arrangement.spacedBy(SonSpacing.extraSmall),
         horizontalAlignment = columnHorizontalAlignment
     ) {
@@ -413,13 +412,13 @@ fun KaraokeLineText(
             }
         }
         // 去掉了 graphicsLayer 中的 blendMode
-        line.translation?.let { translation ->
+        line.translation?.takeIf { showTranslation }?.let { translation ->
             // 译文没有逐字时间轴，就跟着原文的高亮走：本行还没开始保持"非当前行"色，开始了就点亮
             val translationColor by animateColorAsState(
                 targetValue = if (phase == KaraokeLinePhase.BeforeStart) {
-                    extended.lyricsInactive
+                    lyricsColor.copy(alpha = palette.translationInactiveAlpha)
                 } else {
-                    extended.lyricsActive
+                    lyricsColor.copy(alpha = palette.translationActiveAlpha)
                 },
                 animationSpec = MaterialTheme.motionScheme.defaultEffectsSpec(),
                 label = "translationColor"

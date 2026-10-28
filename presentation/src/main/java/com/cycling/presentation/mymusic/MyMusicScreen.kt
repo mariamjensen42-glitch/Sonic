@@ -5,20 +5,18 @@ package com.cycling.presentation.mymusic
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -27,37 +25,20 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.DropdownMenuPopup
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.FilledTonalIconButton
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -65,18 +46,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -90,34 +63,29 @@ import com.cycling.core.ui.apple.AppleLargeListRow
 import com.cycling.core.ui.apple.AppleLargeTitle
 import com.cycling.core.ui.apple.AppleMenuRow
 import com.cycling.core.ui.apple.AppleSectionHeader
+import com.cycling.core.ui.apple.AppleSeparator
 import com.cycling.core.ui.apple.AppleSheet
 import com.cycling.core.ui.apple.AppleSheetRow
-import com.cycling.core.ui.apple.AppleSheetTitle
 import com.cycling.core.ui.apple.AppleTextField
-import com.cycling.core.ui.apple.AppleSeparator
-import com.cycling.core.ui.apple.AppleSongRow
 import com.cycling.core.ui.apple.AppleTheme
 import com.cycling.core.ui.apple.AppleType
+import com.cycling.core.ui.components.M3Artwork
 import com.cycling.core.ui.components.M3SymbolIcon
 import com.cycling.core.ui.components.SymbolIconName
-import com.cycling.core.ui.components.M3Artwork
-import com.cycling.core.ui.theme.LocalSonExtendedColors
-import com.cycling.core.ui.theme.SonLayout
-import com.cycling.core.ui.theme.SonSizes
 import com.cycling.core.ui.theme.SonSpacing
 import com.cycling.domain.model.Playlist
 import com.cycling.domain.model.Song
 import com.cycling.presentation.R
-import com.cycling.presentation.components.CollectionActions
-import com.cycling.presentation.components.CollectionHero
+import com.cycling.presentation.components.MeloXPlaylistBackdrop
+import com.cycling.presentation.components.MeloXPlaylistDescription
+import com.cycling.presentation.components.MeloXPlaylistHero
+import com.cycling.presentation.components.MeloXPlaylistToolbar
 import com.cycling.presentation.components.MenuItem
 import com.cycling.presentation.components.MenuItemGroup
-import com.cycling.presentation.components.PlaylistDescription
-import com.cycling.presentation.components.SonEmptyState
 import com.cycling.presentation.components.SonLoadingState
-import com.cycling.presentation.components.SonSectionHeader
 import com.cycling.presentation.components.SongListItem
 import com.cycling.presentation.components.SongQueueActions
+import com.cycling.presentation.components.formatCollectionDuration
 import com.cycling.presentation.components.songMenuItems
 
 /** AI 预览列表在底部弹层内的限定高度，保证确认按钮始终可达。 */
@@ -160,7 +128,12 @@ fun MyMusicScreen(
         viewModel.uiEffect.collect { effect ->
             when (effect) {
                 is MyMusicEffect.NavigateToPlayer -> onNavigateToPlayer(effect.songId)
-                is MyMusicEffect.NavigateToPlaylistDetail -> onNavigateToPlaylistDetail(effect.playlistId)
+                is MyMusicEffect.NavigateToPlaylistDetail -> {
+                    // 在线歌单导入成功后会直接跳到新歌单；对话框是本地状态，不在这里关掉的话
+                    // 用户从详情页返回时会看到它还盖在列表上
+                    showCreateDialog = false
+                    onNavigateToPlaylistDetail(effect.playlistId)
+                }
                 is MyMusicEffect.ShowToast -> {
                     Toast.makeText(context, context.getString(effect.message), Toast.LENGTH_SHORT).show()
                 }
@@ -201,7 +174,7 @@ fun MyMusicScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(AppleTheme.colors.background)
-            // 收藏子页有自己的 Material Scaffold/TopAppBar，会自己吃 inset；
+            // 收藏子页自带工具条与整屏模糊背景，状态栏由它自己吃；
             // 只有歌单列表（自绘大标题）需要在这里补状态栏间距。
             .then(if (uiState.showFavoriteSongs) Modifier else Modifier.statusBarsPadding())
     ) {
@@ -263,6 +236,13 @@ fun MyMusicScreen(
 // 收藏歌曲
 // ════════════════════════════════════════════════════════
 
+/**
+ * 收藏页：整页照「歌单详情」的 MeloX 版式实现 ——
+ * 封面模糊铺满 + 58dp 玻璃工具条 + 居中封面英雄区 + 整段可点的简介 + 封面行曲目表。
+ *
+ * 这一页没有歌单名可读，标题恒为「我喜欢」，封面取第一首收藏曲目的专辑封面；
+ * 一首都没有时英雄区照样渲染（0 首歌曲、动作禁用），标题与返回就不会消失。
+ */
 @Composable
 private fun FavoritesContent(
     songs: List<Song>,
@@ -279,155 +259,72 @@ private fun FavoritesContent(
     onToggleFavorite: (Song) -> Unit,
     queueActions: SongQueueActions? = null
 ) {
-    when {
-        isLoading -> FavoritesStandaloneScaffold(
-            title = stringResource(R.string.mymusic_title_favorites),
-            onNavigateBack = onNavigateBack
-        ) { SonLoadingState() }
+    val title = stringResource(R.string.mymusic_title_favorites)
+    val artwork = songs.firstOrNull()?.albumArt
+    val listState = rememberLazyListState()
 
-        songs.isEmpty() -> FavoritesStandaloneScaffold(
-            title = stringResource(R.string.mymusic_title_favorites),
-            onNavigateBack = onNavigateBack
-        ) {
-            SonEmptyState(
-                icon = SymbolIconName.Favorite,
-                title = stringResource(R.string.mymusic_empty_favorites_title),
-                subtitle = stringResource(R.string.mymusic_empty_favorites_subtitle)
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        containerColor = AppleTheme.colors.background,
+        // 与歌单详情同一套：状态栏交给工具条，模糊背景一路铺到屏幕顶端。
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        topBar = {
+            MeloXPlaylistToolbar(
+                onBack = onNavigateBack,
+                backContentDescription = stringResource(R.string.mymusic_back_desc),
+                backIcon = SymbolIconName.ArrowBack,
+                contentColor = AppleTheme.colors.label
             )
         }
+    ) { innerPadding ->
+        Box(modifier = Modifier.fillMaxSize()) {
+            MeloXPlaylistBackdrop(
+                artwork = artwork,
+                placeholderIcon = SymbolIconName.Favorite
+            )
 
-        else -> {
-            val listState = rememberLazyListState()
-
-            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                val heroSide = maxWidth
-                val density = LocalDensity.current
-                val collapse = remember(heroSide, density, listState) {
-                    derivedStateOf {
-                        val sidePx = with(density) { heroSide.toPx() }
-                        if (sidePx <= 0f) {
-                            0f
-                        } else {
-                            val offsetPx = if (listState.firstVisibleItemIndex == 0) {
-                                listState.firstVisibleItemScrollOffset
-                            } else {
-                                sidePx.toInt()
+            if (isLoading) {
+                // 收藏曲目来自 Room，几乎瞬间就到：只有真慢了才画转圈（见 SonLoadingState）。
+                SonLoadingState(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(top = innerPadding.calculateTopPadding())
+                )
+            } else {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        top = innerPadding.calculateTopPadding(),
+                        bottom = appleBottomBarClearance() + bottomPadding
+                    )
+                ) {
+                    item(key = "favorites-hero") {
+                        MeloXPlaylistHero(
+                            title = title,
+                            // 收藏集没有创作者一栏，副标题留空（与本地歌单一致）。
+                            subtitle = "",
+                            meta = favoritesMeta(songs),
+                            artwork = artwork,
+                            placeholderIcon = SymbolIconName.Favorite,
+                            onPlay = { songs.firstOrNull()?.let(onSongClick) },
+                            onShuffle = onShuffle,
+                            hasSongs = songs.isNotEmpty(),
+                            // 收藏曲目本身不属于任何歌单，「添加到歌单」不挂。
+                            footer = {
+                                MeloXPlaylistDescription(
+                                    description = description,
+                                    expanded = isDescriptionExpanded,
+                                    isGenerating = isDescriptionGenerating,
+                                    onToggle = onToggleDescription
+                                )
                             }
-                            (offsetPx.toFloat() / sidePx).coerceIn(0f, 1f)
-                        }
-                    }
-                }
-
-                val extended = LocalSonExtendedColors.current
-                Scaffold(
-                    containerColor = AppleTheme.colors.background,
-                    contentWindowInsets = WindowInsets(0, 0, 0, 0),
-                    topBar = {
-                        CenterAlignedTopAppBar(
-                            title = {
-                                val titleAlpha = ((collapse.value - 0.45f) / 0.25f).coerceIn(0f, 1f)
-                                if (titleAlpha > 0f) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        M3Artwork(
-                                            artwork = songs.firstOrNull()?.albumArt,
-                                            placeholderIcon = SymbolIconName.Favorite,
-                                            shape = RoundedCornerShape(AppleDims.cornerS),
-                                            modifier = Modifier
-                                                .size(SonSizes.appBarArtwork)
-                                                .graphicsLayer { alpha = titleAlpha }
-                                        )
-                                        Spacer(Modifier.size(SonSpacing.small))
-                                        Text(
-                                            text = stringResource(R.string.mymusic_title_favorites),
-                                            style = AppleType.headline,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            modifier = Modifier.graphicsLayer { alpha = titleAlpha }
-                                        )
-                                    }
-                                }
-                            },
-                            navigationIcon = {
-                                FilledTonalIconButton(
-                                    onClick = onNavigateBack,
-                                    colors = IconButtonDefaults.filledTonalIconButtonColors(
-                                        // 同 CollectionDetail：压在封面上的图标要有 0.60 的托底，
-                                        // 亮封面上的白图标才看得清。
-                                        containerColor = extended.artworkScrim.copy(alpha = 0.60f),
-                                        contentColor = extended.onArtwork
-                                    )
-                                ) {
-                                    M3SymbolIcon(
-                                        name = SymbolIconName.ArrowBack,
-                                        filled = true,
-                                        contentDescription = stringResource(R.string.mymusic_back_desc)
-                                    )
-                                }
-                            },
-                            colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                                containerColor = lerp(
-                                    Color.Transparent,
-                                    AppleTheme.colors.background,
-                                    (collapse.value * 1.6f).coerceIn(0f, 1f)
-                                ),
-                                scrolledContainerColor = AppleTheme.colors.background,
-                                navigationIconContentColor = lerp(
-                                    extended.onArtwork,
-                                    AppleTheme.colors.label,
-                                    collapse.value
-                                ),
-                                titleContentColor = lerp(
-                                    extended.onArtwork,
-                                    AppleTheme.colors.label,
-                                    collapse.value
-                                )
-                            )
                         )
                     }
-                ) { _ ->
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(
-                            bottom = appleBottomBarClearance() + bottomPadding
-                        )
-                    ) {
-                        item(key = "favorites-hero") {
-                            CollectionHero(
-                                name = stringResource(R.string.mymusic_title_favorites),
-                                subtitle = stringResource(
-                                    R.string.collection_detail_song_count,
-                                    songs.size
-                                ),
-                                artwork = songs.firstOrNull()?.albumArt,
-                                placeholderIcon = SymbolIconName.Favorite,
-                                side = heroSide,
-                                collapse = collapse
-                            )
-                        }
 
-                        item(key = "favorites-actions") {
-                            // 收藏曲目不属于任何歌单，「添加到歌单」不挂。
-                            CollectionActions(
-                                onPlayAll = { songs.firstOrNull()?.let(onSongClick) },
-                                onShuffle = onShuffle,
-                                onAddToPlaylist = null
-                            )
-                        }
-
-                        item(key = "favorites-description") {
-                            PlaylistDescription(
-                                description = description,
-                                expanded = isDescriptionExpanded,
-                                isGenerating = isDescriptionGenerating,
-                                onToggle = onToggleDescription,
-                                modifier = Modifier.padding(
-                                    horizontal = SonLayout.screenMargin,
-                                    vertical = SonSpacing.small
-                                )
-                            )
-                        }
-
+                    if (songs.isEmpty()) {
+                        item(key = "favorites-empty") { FavoritesEmptyHint() }
+                    } else {
                         itemsIndexed(songs, key = { _, song -> song.id }) { _, song ->
                             // 每行自己的展开状态：菜单开着时点别处就关，开第二行时第一行自动收起。
                             var menuExpanded by remember(song.id) { mutableStateOf(false) }
@@ -435,29 +332,19 @@ private fun FavoritesContent(
                                 song = song,
                                 subtitle = song.artist,
                                 isCurrentSong = song.id == currentSongId,
-                                // quiet surface：收藏列表同样不画分割线。
+                                // quiet surface：与歌单详情一致，不画分割线、行首不显序号。
                                 showDivider = false,
-                                // 心形已经在行尾，菜单里不再重复一条「收藏」。
                                 showMoreButton = queueActions != null,
                                 moreMenuExpanded = menuExpanded,
                                 onMoreClick = { menuExpanded = true },
                                 onMoreDismiss = { menuExpanded = false },
-                                moreMenuItems = songMenuItems(song, queueActions),
-                                onClick = { onSongClick(song) },
-                                trailingContent = {
-                                    IconButton(
-                                        onClick = { onToggleFavorite(song) },
-                                        colors = IconButtonDefaults.iconButtonColors(
-                                            contentColor = AppleTheme.colors.key
-                                        )
-                                    ) {
-                                        M3SymbolIcon(
-                                            name = SymbolIconName.Favorite,
-                                            filled = true,
-                                            contentDescription = stringResource(R.string.mymusic_unfavorite_desc)
-                                        )
-                                    }
-                                }
+                                // 取消收藏收进 ⋮ 菜单：行尾不再单独挂一颗心，行宽与歌单详情对齐。
+                                moreMenuItems = songMenuItems(
+                                    song = song,
+                                    queueActions = queueActions,
+                                    onToggleFavorite = onToggleFavorite
+                                ),
+                                onClick = { onSongClick(song) }
                             )
                         }
                     }
@@ -467,87 +354,45 @@ private fun FavoritesContent(
     }
 }
 
-/**
- * 收藏页「没有封面可压」时的形态：载入中、或一首都没喜欢。
- *
- * 这里的顶栏必须是实底、标题常显。内容态那种透明顶栏是**压在 hero 封面上的**，标题与返回
- * 按钮靠封面托住；一旦没有 hero，页面就只剩一段空态文字 —— 没有标题、没有返回，用户只能
- * 用系统手势退出整个「音乐库」。而「音乐库」自己的大标题栏在收藏子视图里是隐藏的，所以
- * 这个缺口没人补。
- */
+/** 英雄区元数据行：`42 首歌曲 · 2 小时 30 分钟`，与歌单详情同一句。 */
 @Composable
-private fun FavoritesStandaloneScaffold(
-    title: String,
-    onNavigateBack: () -> Unit,
-    content: @Composable () -> Unit
-) {
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        containerColor = AppleTheme.colors.background,
-        // 与收藏页内容态同一套：状态栏交给顶栏，内容从顶栏下沿开始。
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = {
-                    Text(
-                        text = title,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        M3SymbolIcon(
-                            name = SymbolIconName.ArrowBack,
-                            filled = true,
-                            contentDescription = stringResource(R.string.mymusic_back_desc)
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = AppleTheme.colors.background,
-                    titleContentColor = AppleTheme.colors.label,
-                    navigationIconContentColor = AppleTheme.colors.label
-                )
-            )
-        }
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
-            content()
-        }
-    }
+private fun favoritesMeta(songs: List<Song>): String {
+    if (songs.isEmpty()) return ""
+    return listOf(
+        stringResource(R.string.collection_detail_song_count, songs.size),
+        formatCollectionDuration(songs.sumOf { it.duration })
+    ).joinToString(" · ")
 }
 
+/** 一首都没喜欢时的提示块，排在英雄区之下（标题与返回由英雄区/工具条保住）。 */
 @Composable
-private fun SongList(
-    songs: List<Song>,
-    bottomPadding: Dp,
-    onSongClick: (Song) -> Unit,
-    trailingContent: @Composable ((Song) -> Unit)? = null
-) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-            top = SonLayout.contentTopPadding,
-            bottom = appleBottomBarClearance() + bottomPadding
-        )
+private fun FavoritesEmptyHint() {
+    val colors = AppleTheme.colors
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = AppleDims.padding, vertical = AppleDims.topMargin),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        items(songs, key = { it.id }) { song ->
-            val trailingSlot: (@Composable () -> Unit)? = trailingContent?.let { content ->
-                { content(song) }
-            }
-            AppleSongRow(
-                artwork = song.albumArt,
-                title = song.title,
-                subtitle = song.artist,
-                onClick = { onSongClick(song) },
-                trailing = trailingSlot
-            )
-        }
+        M3SymbolIcon(
+            name = SymbolIconName.Favorite,
+            filled = false,
+            contentDescription = null,
+            modifier = Modifier.size(48.dp),
+            tint = colors.tertiaryLabel
+        )
+        Spacer(Modifier.height(12.dp))
+        Text(
+            text = stringResource(R.string.mymusic_empty_favorites_title),
+            style = AppleType.body,
+            color = colors.secondaryLabel
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = stringResource(R.string.mymusic_empty_favorites_subtitle),
+            style = AppleType.footnote,
+            color = colors.tertiaryLabel
+        )
     }
 }
 
@@ -713,8 +558,16 @@ private fun PlaylistItem(
 // 新建播放列表（手动 + AI）
 // ════════════════════════════════════════════════════════
 
-private enum class CreateMode { MANUAL, AI }
+private enum class CreateMode { MANUAL, AI, ONLINE }
 private enum class AiMode { RANDOM, THEME }
+
+/**
+ * 「我的歌单」列表的高度。
+ *
+ * 必须给死：外层是 `verticalScroll` 的 Column，LazyColumn 在这种无限高约束下无法测量。
+ * 四行半的高度既能让用户看出「这里可以滚」，又不会把下面的导入按钮挤出屏幕。
+ */
+private val MY_PLAYLIST_LIST_HEIGHT = 208.dp
 
 @Composable
 private fun CreatePlaylistDialog(
@@ -727,6 +580,12 @@ private fun CreatePlaylistDialog(
     var manualName by remember { mutableStateOf("") }
     var aiMode by remember { mutableStateOf(AiMode.RANDOM) }
     var sliderValue by remember { mutableFloatStateOf(uiState.selectedSongCount.toFloat()) }
+
+    // 「我的歌单」只有切到导入页时才问：另外两个 tab 不需要它，提前请求纯属浪费一次往返。
+    LaunchedEffect(createMode) {
+        if (createMode == CreateMode.ONLINE) onIntent(MyMusicIntent.LoadMyPlaylists)
+    }
+
     AppleSheet(onDismiss = onDismiss) {
         Column(
             modifier = Modifier
@@ -736,21 +595,21 @@ private fun CreatePlaylistDialog(
                 .padding(horizontal = 16.dp)
                 .padding(bottom = SonSpacing.extraLarge)
         ) {
-            val createModeOptions = listOf(
-                stringResource(R.string.mymusic_create_manual),
-                stringResource(R.string.mymusic_create_ai)
-            )
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                createModeOptions.forEachIndexed { index, label ->
+                CreateMode.entries.forEach { mode ->
                     AppleChip(
-                        label = label,
-                        selected = (if (createMode == CreateMode.MANUAL) 0 else 1) == index,
-                        onClick = {
-                            createMode = if (index == 0) CreateMode.MANUAL else CreateMode.AI
-                        }
+                        label = stringResource(
+                            when (mode) {
+                                CreateMode.MANUAL -> R.string.mymusic_create_manual
+                                CreateMode.AI -> R.string.mymusic_create_ai
+                                CreateMode.ONLINE -> R.string.mymusic_create_import
+                            }
+                        ),
+                        selected = createMode == mode,
+                        onClick = { createMode = mode }
                     )
                 }
             }
@@ -991,6 +850,120 @@ private fun CreatePlaylistDialog(
                         )
                     }
 
+                    Spacer(Modifier.height(SonSpacing.small))
+                    AppleActionButton(
+                        label = stringResource(R.string.mymusic_cancel),
+                        onClick = onDismiss,
+                        filled = false,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                CreateMode.ONLINE -> {
+                    Text(
+                        text = stringResource(R.string.mymusic_import_title),
+                        style = AppleType.headline,
+                        color = AppleTheme.colors.label
+                    )
+                    Spacer(Modifier.height(SonSpacing.medium))
+                    Text(
+                        text = stringResource(R.string.mymusic_import_subtitle),
+                        style = AppleType.footnote,
+                        color = AppleTheme.colors.secondaryLabel
+                    )
+                    Spacer(Modifier.height(SonSpacing.medium))
+                    AppleTextField(
+                        value = uiState.importInput,
+                        onValueChange = { onIntent(MyMusicIntent.SetImportInput(it)) },
+                        placeholder = stringResource(R.string.mymusic_import_placeholder),
+                        singleLine = false,
+                        minHeight = 64.dp
+                    )
+                    // 登录账号名下的歌单：比粘贴链接短一步，点一下直接导入。
+                    // 未登录或读取失败时列表为空，这一整块（含标题）都不出现。
+                    if (uiState.myPlaylists.isNotEmpty()) {
+                        Spacer(Modifier.height(SonSpacing.large))
+                        Text(
+                            text = stringResource(R.string.mymusic_import_my_playlists),
+                            style = AppleType.headline,
+                            color = AppleTheme.colors.label
+                        )
+                        Spacer(Modifier.height(SonSpacing.small))
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(MY_PLAYLIST_LIST_HEIGHT)
+                        ) {
+                            items(uiState.myPlaylists, key = { it.id }) { playlist ->
+                                ListItem(
+                                    // 整行可点：点一下就直接导入这张歌单。
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            onIntent(MyMusicIntent.ImportMyPlaylist(playlist.id))
+                                        },
+                                    leadingContent = {
+                                        M3Artwork(
+                                            artwork = playlist.coverUrl,
+                                            shape = MaterialTheme.shapes.small,
+                                            modifier = Modifier.size(44.dp)
+                                        )
+                                    },
+                                    headlineContent = {
+                                        Text(
+                                            text = playlist.title,
+                                            style = AppleType.body,
+                                            color = AppleTheme.colors.label,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    },
+                                    supportingContent = {
+                                        Text(
+                                            text = stringResource(
+                                                R.string.mymusic_import_my_playlist_tracks,
+                                                playlist.trackCount
+                                            ),
+                                            style = AppleType.caption1,
+                                            color = AppleTheme.colors.secondaryLabel,
+                                            maxLines = 1
+                                        )
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    // 进度和错误共用一行：空着的时候不该多出两行空白把按钮往下推
+                    val importError = uiState.importError
+                    val importStatus = when {
+                        importError != null -> stringResource(importError)
+                        uiState.isImporting && uiState.importTotal > 0 -> stringResource(
+                            R.string.mymusic_import_progress,
+                            uiState.importDone,
+                            uiState.importTotal
+                        )
+                        uiState.isImporting -> stringResource(R.string.mymusic_import_fetching)
+                        else -> null
+                    }
+                    if (importStatus != null) {
+                        Spacer(Modifier.height(SonSpacing.small))
+                        Text(
+                            text = importStatus,
+                            style = AppleType.footnote,
+                            color = if (importError != null) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                AppleTheme.colors.secondaryLabel
+                            }
+                        )
+                    }
+                    Spacer(Modifier.height(SonSpacing.large))
+                    AppleActionButton(
+                        label = stringResource(R.string.mymusic_import_action),
+                        onClick = { onIntent(MyMusicIntent.ImportOnlinePlaylist) },
+                        enabled = uiState.importInput.isNotBlank() && !uiState.isImporting,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                     Spacer(Modifier.height(SonSpacing.small))
                     AppleActionButton(
                         label = stringResource(R.string.mymusic_cancel),

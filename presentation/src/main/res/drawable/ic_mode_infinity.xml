@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 无尽播放（Autoplay）：Apple Music 队列条那颗 ∞。
+     与 ic_flamingo_* 同一套约定 —— 只描边不填色（strokeColor 由 Icon 的 tint 决定，
+     所以这里写 #FF000000 当占位），viewport 收到图形包围盒（含描边）。
+     几何取自 Lucide 的 infinity（ISC），描边重量按 Apple Music 调到 2.0 / 圆头。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="22dp"
+    android:height="10dp"
+    android:viewportWidth="22"
+    android:viewportHeight="10">
+    <group android:translateX="-1" android:translateY="-7">
+        <path
+            android:pathData="M12 12c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4Zm0 0c2 2.67 4 4 6 4a4 4 0 0 0 0-8c-2 0-4 1.33-6 4Z"
+            android:strokeColor="#FF000000"
+            android:strokeWidth="2"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+    </group>
+</vector>

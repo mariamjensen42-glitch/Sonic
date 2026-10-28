@@ -1,6 +1,7 @@
 package com.cycling.domain.lyrics.model
 
 import com.cycling.domain.lyrics.model.karaoke.KaraokeLine
+import com.cycling.domain.lyrics.model.synced.SyncedLine
 
 data class SyncedLyrics(
     val lines: List<ISyncedLine>,
@@ -14,6 +15,22 @@ data class SyncedLyrics(
      */
     val isWordByWord: Boolean
         get() = lines.any { it is KaraokeLine }
+
+    /**
+     * 是否含译文。
+     *
+     * 译文是**逐行可有可无**的：一份纯外语 LRC 往往一行翻译都没有，这时候歌词页就不该摆一个
+     * 按了没反应的「译文开关」。逐行类型各自带 `translation`，[ISyncedLine] 本身没有，所以只能
+     * 按类型问；将来加新的行类型时这里的 `else` 会安静地当作「没有译文」。
+     */
+    val hasTranslation: Boolean
+        get() = lines.any { line ->
+            when (line) {
+                is KaraokeLine -> line.translation != null
+                is SyncedLine -> line.translation != null
+                else -> false
+            }
+        }
 
     fun getCurrentAllHighlightLineIndicesByTime(time: Int): List<Int> {
         if (lines.isEmpty()) {
@@ -46,24 +63,33 @@ data class SyncedLyrics(
             (low - 1).coerceAtLeast(0)
         }
 
+        // 区间必须是**左闭右开**：LRC 的惯例是每一行的 end 就取下一行的 start，
+        // 右端闭合时「跳到某句开头」会让上一句的 end 也等于这个时刻，于是两句一起亮。
         for (i in searchStartIndex downTo 0) {
             val line = lines[i]
-            if (time in line.start..line.end) {
+            if (time >= line.start && time < line.end) {
                 results.add(i)
             }
-            if (line.end < time) {
+            if (line.end <= time) {
                 break
             }
         }
 
         for (i in (searchStartIndex + 1) until lines.size) {
             val line = lines[i]
-            if (time in line.start..line.end) {
+            if (time >= line.start && time < line.end) {
                 results.add(i)
             }
             if (line.start > time) {
                 break
             }
+        }
+
+        // 行与行之间有空隙、或最后一句已经唱完时，`results` 会空 —— 那就保持
+        // 「最后开始的那一句」亮着，否则整屏歌词会突然一句都不高亮。
+        if (results.isEmpty()) {
+            val lastStarted = lines.indexOfLast { it.start <= time }
+            if (lastStarted >= 0) results.add(lastStarted)
         }
 
         return results.sorted()

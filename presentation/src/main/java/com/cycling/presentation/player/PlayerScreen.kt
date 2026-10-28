@@ -37,6 +37,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import com.cycling.core.ui.apple.AppleChip
 import com.cycling.core.ui.apple.AppleDims
 import com.cycling.core.ui.apple.AppleSheet
+import com.cycling.presentation.components.LyricsCandidatesSheet
 import com.cycling.core.ui.apple.AppleTextAction
 import com.cycling.core.ui.apple.AppleTheme
 import com.cycling.core.ui.apple.AppleType
@@ -70,6 +71,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import com.cycling.core.ui.components.FlamingoIcon
 import com.cycling.core.ui.components.M3Artwork
 import com.cycling.core.ui.components.SonGlyph
 import com.cycling.core.ui.components.SonGlyphIcon
@@ -97,9 +99,13 @@ import kotlin.math.roundToInt
 fun PlayerScreen(
     uiState: PlayerUiState,
     onIntent: (PlayerIntent) -> Unit,
-    onNavigateBack: () -> Unit,
+    progress: Float,
+    onProgressChange: (Float) -> Unit,
+    onSettle: (Boolean) -> Unit,
     beatFlow: Flow<BeatState> = emptyFlow(),
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** 封面由外层飞行图接管（见 PlayerArtworkFlight）。 */
+    artworkOwned: Boolean = false
 ) {
     // 节拍快照只写进一个本地 State，并且只在 Canvas 的绘制阶段读 —— 见 BeatSpectrum。
     val beatHolder = remember { mutableStateOf(BeatState.Idle) }
@@ -110,9 +116,12 @@ fun PlayerScreen(
     NowPlayingSurface(
         uiState = uiState,
         onIntent = onIntent,
-        onNavigateBack = onNavigateBack,
+        progress = progress,
+        onProgressChange = onProgressChange,
+        onSettle = onSettle,
         beat = { beatHolder.value },
-        modifier = modifier
+        modifier = modifier,
+        artworkOwned = artworkOwned
     )
 
     if (uiState.showPlaybackSettings) {
@@ -128,6 +137,19 @@ fun PlayerScreen(
                 onToggleSpectrum = { onIntent(PlayerIntent.SetPlayerSpectrumEnabled(it)) }
             )
         }
+    }
+
+    // 歌词页上的「获取歌词 / 切换歌词」是从这里弹的：状态在 ViewModel 里，但这个面板原先只在
+    // 独立歌词路由里渲染，播放页里点那颗按钮会「状态改了但没人画」。
+    if (uiState.showLyricsCandidates) {
+        LyricsCandidatesSheet(
+            candidates = uiState.lyricsCandidates,
+            isLoading = uiState.isLoadingLyricsCandidates,
+            pendingProviders = uiState.lyricsCandidatesPending,
+            failedProviders = uiState.lyricsCandidatesFailed,
+            onSelect = { onIntent(PlayerIntent.SelectLyricsCandidate(it)) },
+            onDismiss = { onIntent(PlayerIntent.DismissLyricsCandidates) }
+        )
     }
 }
 
@@ -322,6 +344,22 @@ internal fun DraggableQueueList(
                 label = "elevation"
             )
 
+            val dismissState = rememberSwipeToDismissBoxState()
+
+            // 删除**不能**写在 confirmValueChange 里：那个回调每次 settle 都会被问到，
+            // 一旦在里面删，列表一变、锚点重算，同一行会再次 settle 到 EndToStart →
+            // 同一个下标被连删好几首（实测一次左滑删了 4 首），并且留下只有垃圾桶的空行。
+            // 这里改成「状态真的变成 EndToStart 之后删一次」，再复位状态，绝不残留 dismissed 行。
+            LaunchedEffect(dismissState.currentValue) {
+                if (dismissState.currentValue != SwipeToDismissBoxValue.EndToStart) {
+                    return@LaunchedEffect
+                }
+                onRemoveFromQueue(index)
+                // 行若因为下标变化没被真正删掉，也滑回原位 —— 否则它会停在「内容移出屏幕、
+                // 只剩 backgroundContent」的样子，就是那条空白行。
+                dismissState.reset()
+            }
+
             Box(
                 modifier = Modifier
                     .zIndex(if (isDragging) 1f else 0f)
@@ -332,32 +370,31 @@ internal fun DraggableQueueList(
                     }
             ) {
                 SwipeToDismissBox(
-                    state = rememberSwipeToDismissBoxState(
-                        confirmValueChange = { value ->
-                            if (value == SwipeToDismissBoxValue.EndToStart) {
-                                onRemoveFromQueue(index)
-                                true
-                            } else false
-                        }
-                    ),
+                    state = dismissState,
                     backgroundContent = {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(
-                                    color = AppleTheme.colors.fill,
-                                    shape = RoundedCornerShape(AppleDims.cornerM)
-                                ),
-                            contentAlignment = Alignment.CenterEnd
-                        ) {
-                            SonGlyphIcon(
-                                glyph = SonGlyph.Trash,
-                                contentDescription = stringResource(R.string.player_swipe_delete_desc),
-                                tint = AppleTheme.colors.label,
+                        // 只在真的在滑的时候才画：队列行本身是半透明的（动态色面上的一层玻璃），
+                        // 常驻的删除背景会从行底下透出来，行尾就变成"垃圾桶 + 正在播放标记"叠在一起。
+                        // 用 dismissDirection 而不是 progress：后者在锚点还没初始化时会抛异常，
+                        // 前者对 NaN 偏移直接返回 Settled。
+                        if (dismissState.dismissDirection != SwipeToDismissBoxValue.Settled) {
+                            Box(
                                 modifier = Modifier
-                                    .padding(end = SonSpacing.medium)
-                                    .size(SonSizes.iconMedium)
-                            )
+                                    .fillMaxSize()
+                                    .background(
+                                        color = AppleTheme.colors.fill,
+                                        shape = RoundedCornerShape(AppleDims.cornerM)
+                                    ),
+                                contentAlignment = Alignment.CenterEnd
+                            ) {
+                                SonGlyphIcon(
+                                    glyph = SonGlyph.Trash,
+                                    contentDescription = stringResource(R.string.player_swipe_delete_desc),
+                                    tint = AppleTheme.colors.label,
+                                    modifier = Modifier
+                                        .padding(end = SonSpacing.medium)
+                                        .size(SonSizes.iconMedium)
+                                )
+                            }
                         }
                     },
                     enableDismissFromStartToEnd = false,
@@ -409,8 +446,8 @@ private fun QueueSongItem(
     // 正在播放的那一行尾标记，只在需要时构造，避免为其它行白建一个 lambda
     val currentSongMarker: (@Composable () -> Unit)? = if (isCurrentSong) {
         {
-            SonGlyphIcon(
-                glyph = SonGlyph.Play,
+            FlamingoIcon(
+                res = R.drawable.ic_flamingo_mini_play,
                 contentDescription = null,
                 tint = if (onDarkSurface) extended.onArtwork else AppleTheme.colors.key,
                 modifier = Modifier.size(SonSizes.iconSmall)

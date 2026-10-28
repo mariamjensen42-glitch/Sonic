@@ -5,9 +5,10 @@ package com.cycling.domain.model
  * track's file tags.
  *
  * Read from ID3v2 (MP3), VorbisComment (FLAC / OGG), or MP4 `ilst` atoms; the same fields can be
- * written back for MP3 / FLAC / OGG / M4A / MP4. The extra fields beyond the descriptive ones are
- * deliberately absent from [Song]: the `songs` table mirrors what MediaStore publishes, while these
- * come from the file's own tags and are read on demand for the detail page.
+ * written back for MP3 / FLAC / OGG / M4A / MP4 / WAV / AIFF / WMA / DSF. The extra fields beyond
+ * the descriptive ones are deliberately absent from [Song]: the `songs` table mirrors what
+ * MediaStore publishes, while these come from the file's own tags and are read on demand for the
+ * detail page.
  */
 data class AudioMetadata(
     val bitrate: Int = 0,

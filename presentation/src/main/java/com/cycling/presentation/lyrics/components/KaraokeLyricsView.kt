@@ -47,7 +47,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.util.fastRoundToInt
-import com.cycling.core.ui.theme.LocalSonExtendedColors
 import com.cycling.core.ui.theme.SonMotionTiming
 import com.cycling.core.ui.theme.SonSpacing
 import com.cycling.domain.lyrics.model.ISyncedLine
@@ -55,6 +54,7 @@ import com.cycling.domain.lyrics.model.SyncedLyrics
 import com.cycling.domain.lyrics.model.karaoke.KaraokeAlignment
 import com.cycling.domain.lyrics.model.karaoke.KaraokeLine
 import com.cycling.domain.lyrics.model.synced.SyncedLine
+import com.cycling.presentation.lyrics.LocalLyricsPalette
 import com.cycling.presentation.lyrics.utils.isRtl
 import com.cycling.presentation.lyrics.utils.modifier.dynamicFadingEdge
 import kotlinx.coroutines.Dispatchers
@@ -89,21 +89,31 @@ fun KaraokeLyricsView(
     accompanimentLineTextStyle: TextStyle = MaterialTheme.typography.titleMedium.copy(
         textMotion = TextMotion.Animated,
     ),
-    textColor: Color = Color.Unspecified,
+    /** 正文色。调用方不传就取 [LocalLyricsPalette]，绝不回退到主题 token。 */
+    textColor: Color = LocalLyricsPalette.current.textColor,
     breathingDotsDefaults: KaraokeBreathingDotsDefaults = KaraokeBreathingDotsDefaults(),
     useBlurEffect: Boolean = true,
     /** 行文本在可用宽度内居中；关掉就是按语言方向靠起始侧。 */
     alignCenter: Boolean = false,
     offset: Dp = SonSpacing.extraLarge,
     /** 非当前行整行的不透明度。当前行恒为 1，伴奏行按它的 0.6 倍。 */
-    inactiveLineAlpha: Float = 0.5f,
+    inactiveLineAlpha: Float = LocalLyricsPalette.current.inactiveLineAlpha,
+    /**
+     * 是否渲染译文行。
+     *
+     * 只影响渲染，解析出来的 `translation` 一直留在模型里 —— 再打开立刻回来，不用重新取词。
+     */
+    showTranslation: Boolean = true,
 ) {
     val density = LocalDensity.current
-    val extended = LocalSonExtendedColors.current
+    val palette = LocalLyricsPalette.current
     val motionScheme = MaterialTheme.motionScheme
-    val activeTextColor = if (textColor == Color.Unspecified) extended.lyricsActive else textColor
-    val mutedTextColor = extended.lyricsInactive
-    val fadeMaskColor = MaterialTheme.colorScheme.surface
+    // 这一页只有一种文字色：当前行与非当前行同色，明暗全交给 LyricsLineItem 的整行 alpha。
+    // （以前非当前行另取一个「非当前行色」token，它跟着系统主题走 —— 浅色主题下就在
+    //  深色歌词底上压成黑字，和当前行的白字并排，看着像两套皮肤。）
+    //
+    // 淡出遮罩只借 alpha 做 DstIn、RGB 不参与，所以也别跟着主题的 surface 色走。
+    val fadeMaskColor = Color.Black
 
     val stableNormalTextStyle = remember(normalLineTextStyle) { normalLineTextStyle }
     val stableAccompanimentTextStyle =
@@ -427,9 +437,10 @@ fun KaraokeLyricsView(
                                         phase = linePhase,
                                         normalLineTextStyle = stableNormalTextStyle,
                                         accompanimentLineTextStyle = stableAccompanimentTextStyle,
-                                        activeColor = activeTextColor,
+                                        activeColor = textColor,
                                         alignCenter = alignCenter,
-                                        precalculatedLayouts = layoutCache.value?.get(index)
+                                        precalculatedLayouts = layoutCache.value?.get(index),
+                                        showTranslation = showTranslation
                                     )
                                 }
                             } else {
@@ -479,8 +490,9 @@ fun KaraokeLyricsView(
                                         onLineClicked = { onLineClicked(line) },
                                         onLinePressed = { onLinePressed(line) },
                                         blurRadius = { blurRadiusState.value },
-                                        activeAlpha = 0.6f,
-                                        inactiveAlpha = inactiveLineAlpha * 0.6f
+                                        activeAlpha = palette.accompanimentAlphaRatio,
+                                        inactiveAlpha =
+                                            inactiveLineAlpha * palette.accompanimentAlphaRatio
                                     ) {
                                         KaraokeLineText(
                                             line = line,
@@ -488,9 +500,10 @@ fun KaraokeLyricsView(
                                             phase = linePhase,
                                             normalLineTextStyle = stableNormalTextStyle,
                                             accompanimentLineTextStyle = stableAccompanimentTextStyle,
-                                            activeColor = activeTextColor,
+                                            activeColor = textColor,
                                             alignCenter = alignCenter,
-                                            precalculatedLayouts = layoutCache.value?.get(index)
+                                            precalculatedLayouts = layoutCache.value?.get(index),
+                                            showTranslation = showTranslation
                                         )
                                     }
                                 }
@@ -513,8 +526,8 @@ fun KaraokeLyricsView(
                                     line = line,
                                     isLineRtl = isLineRtl,
                                     textStyle = stableNormalTextStyle.copy(lineHeight = 1.2.em),
-                                    textColor = if (isCurrentFocusLine) activeTextColor else mutedTextColor,
                                     alignCenter = alignCenter,
+                                    showTranslation = showTranslation
                                 )
                             }
                         }

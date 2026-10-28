@@ -29,9 +29,10 @@ import timber.log.Timber
  * that the download endpoint wants. The download then serves a base64-encoded **LRC**, which the
  * project's `LrcParser` reads as line-level lyrics.
  *
- * The search is keyword-based, so the candidate list can contain covers and wrong edits — the
- * duration is what separates them, and [candidatesByDurationDistance] applies the same tight
- * tolerance the other providers use. A wrong-length lyric is worse than none.
+ * The search is keyword-based, so the candidate list can contain covers and wrong edits. Two things
+ * separate them: the title/artist check, and then the duration against a tolerance graded by how
+ * exactly the title matched — see [rankCandidates]. A wrong-length lyric is worse than none, but a
+ * five-second line was also throwing away correct ones.
  *
  * This is the same catalogue family as [com.cycling.data.api.cover.KugouCoverProvider] but a
  * different pair of hosts, and it only ever returns line-level lyrics: Kugou's word-by-word KRC
@@ -62,7 +63,9 @@ class KugouLyricsProvider @Inject constructor(
         collect(query, limit = MAX_LYRIC_CHOICES)
 
     private suspend fun collect(query: LyricsQuery, limit: Int): List<OnlineLyrics> {
-        if (query.title.isBlank() || query.artist.isBlank()) return emptyList()
+        // 只有曲名是必需的：酷狗按关键词检索，缺歌手标签时仍能按曲名搜到，
+        // 是不是同一首由 [rankCandidates] 的曲名与时长校验决定。
+        if (query.title.isBlank()) return emptyList()
 
         return withContext(Dispatchers.IO) {
             val found = mutableListOf<OnlineLyrics>()
@@ -94,7 +97,7 @@ class KugouLyricsProvider @Inject constructor(
             .addQueryParameter("ver", "1")
             .addQueryParameter("man", "yes")
             .addQueryParameter("client", "mobi")
-            .addQueryParameter("keyword", "${query.artist} ${query.title}".trim())
+            .addQueryParameter("keyword", query.searchKeywords())
             // 本地时长也提交过去：服务端会顺手排一遍，本地再按同一容差筛一遍。
             .addQueryParameter("duration", query.durationMs.toString())
             .addQueryParameter("hash", "")
@@ -146,7 +149,10 @@ class KugouLyricsProvider @Inject constructor(
 private val KUGOU_TIMING_TAG = Regex("\\[\\d{1,2}:\\d{1,2}\\.\\d{2,3}]")
 
 /**
- * The candidates worth downloading, closest in length first.
+ * The candidates worth downloading, the most plausible first.
+ *
+ * 关键词检索会把翻唱、伴奏、同名歌一起返回，以前只按时长（±5 秒）筛，时长撞上就串歌；
+ * 现在曲名与歌手先过一遍，时长再按曲名匹配的强度分级把关（见 [rankCandidates]）。
  *
  * Pure so it can be tested without a network; see `LyricsProvidersTest`.
  */
@@ -159,7 +165,13 @@ internal fun parseKugouLyricCandidates(
     }.getOrNull() ?: return emptyList()
 
     val usable = response.candidates.filter { it.id.isNotBlank() && it.accesskey.isNotBlank() }
-    return candidatesByDurationDistance(usable, query, KugouLyricCandidateDto::durationMs)
+    return rankCandidates(
+        usable,
+        query,
+        KugouLyricCandidateDto::song,
+        KugouLyricCandidateDto::singer,
+        KugouLyricCandidateDto::durationMs
+    )
 }
 
 /**

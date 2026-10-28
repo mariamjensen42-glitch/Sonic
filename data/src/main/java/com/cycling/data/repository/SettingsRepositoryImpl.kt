@@ -183,6 +183,13 @@ class SettingsRepositoryImpl @Inject constructor(
         context.settingsDataStore.edit { it[LYRICS_BLUR_KEY] = enabled }
     }
 
+    override val lyricsTranslationEnabled: Flow<Boolean> =
+        context.settingsDataStore.data.map { it[LYRICS_TRANSLATION_KEY] ?: true }
+
+    override suspend fun setLyricsTranslationEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { it[LYRICS_TRANSLATION_KEY] = enabled }
+    }
+
     override val hiResBadge: Flow<HiResBadge> =
         context.settingsDataStore.data.map { prefs ->
             HiResBadge.fromId(prefs[HI_RES_BADGE_KEY])
@@ -220,6 +227,7 @@ class SettingsRepositoryImpl @Inject constructor(
         private val LYRICS_ALIGN_CENTER_KEY = booleanPreferencesKey("lyrics_align_center")
         private val LYRICS_GLOW_KEY = booleanPreferencesKey("lyrics_glow_enabled")
         private val LYRICS_BLUR_KEY = booleanPreferencesKey("lyrics_blur_enabled")
+        private val LYRICS_TRANSLATION_KEY = booleanPreferencesKey("lyrics_translation_enabled")
         private val HI_RES_BADGE_KEY = stringPreferencesKey("hi_res_badge")
         private val HI_RES_BADGE_URI_KEY = stringPreferencesKey("hi_res_badge_custom_uri")
     }

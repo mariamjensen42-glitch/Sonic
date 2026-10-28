@@ -7,6 +7,7 @@ import com.cycling.domain.model.ScanProgress
 import com.cycling.domain.model.ScanResult
 import com.cycling.domain.model.ScanStep
 import com.cycling.domain.repository.ExcludedFolderRepository
+import com.cycling.domain.repository.RecordingFilterRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -24,7 +25,8 @@ class MusicScanner @Inject constructor(
     @ApplicationContext private val context: Context,
     private val mediaStoreHelper: MediaStoreHelper,
     private val songLibraryWriter: SongLibraryWriter,
-    private val excludedFolderRepository: ExcludedFolderRepository
+    private val excludedFolderRepository: ExcludedFolderRepository,
+    private val recordingFilterRepository: RecordingFilterRepository
 ) {
     private val _scanProgress = MutableStateFlow(ScanProgress())
     val scanProgress: StateFlow<ScanProgress> = _scanProgress.asStateFlow()
@@ -41,8 +43,9 @@ class MusicScanner @Inject constructor(
             Timber.d("scanMediaStore: querying MediaStore for songs")
             
             val excludedPaths = excludedFolderRepository.getExcludedPaths()
-            Timber.d("scanMediaStore: excluded paths = $excludedPaths")
-            val songs = mediaStoreHelper.queryAllSongs(excludedPaths)
+            val excludeRecordings = recordingFilterRepository.isExcludeRecordingsEnabled()
+            Timber.d("scanMediaStore: excluded paths = $excludedPaths, excludeRecordings = $excludeRecordings")
+            val songs = mediaStoreHelper.queryAllSongs(excludedPaths, excludeRecordings)
             Timber.d("scanMediaStore: found ${songs.size} songs")
             
             _scanProgress.value = ScanProgress(

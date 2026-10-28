@@ -13,10 +13,12 @@ import com.cycling.domain.model.Song
 import com.cycling.presentation.R
 import com.cycling.presentation.collectiondetail.SongCollectionIntent
 import com.cycling.presentation.components.CollectionDetailScreen
+import com.cycling.presentation.components.CollectionHeroStyle
 import com.cycling.presentation.components.CollectCollectionDetailEffects
+import com.cycling.presentation.components.MeloXPlaylistDescription
 import com.cycling.presentation.components.MenuItem
-import com.cycling.presentation.components.PlaylistDescription
 import com.cycling.presentation.components.SongQueueActions
+import com.cycling.presentation.components.formatCollectionDuration
 
 @Composable
 fun PlaylistDetailScreen(
@@ -40,10 +42,22 @@ fun PlaylistDetailScreen(
     // songMoreMenu 是普通 lambda（不是 @Composable），stringResource 必须在外层取好值。
     val removeSongLabel = stringResource(R.string.playlist_detail_remove)
 
+    // 头部元数据行：「42 首歌曲 · 2 小时 30 分钟」。本地歌单没有策展人，
+    // 副标题留空，件数与时长的位置与原版一致。
     CollectionDetailScreen(
         uiState = uiState,
         titleFallback = stringResource(R.string.playlist_detail_unknown),
-        subtitle = stringResource(R.string.collection_detail_song_count, uiState.songs.size),
+        // 本地歌单没有策展人一栏，副标题留空。
+        subtitle = "",
+        heroStyle = CollectionHeroStyle.CenteredCover,
+        // 顶栏换成 MeloX 的 58dp 工具条：不收起、不显大标题。
+        topBarCollapse = false,
+        // MeloX 的歌单曲目行行首是封面（专辑页才是序号）。
+        showTrackNumbers = false,
+        headerMeta = listOf(
+            stringResource(R.string.collection_detail_song_count, uiState.songs.size),
+            formatCollectionDuration(uiState.songs.sumOf { it.duration })
+        ),
         placeholderIcon = SymbolIconName.QueueMusic,
         backContentDescription = stringResource(R.string.playlist_detail_back_desc),
         onNavigateBack = onNavigateBack,
@@ -78,7 +92,8 @@ fun PlaylistDetailScreen(
             )
         },
         headerExtra = {
-            PlaylistDescription(
+            // MeloX 的歌单简介：14sp、折叠 3 行、整段可点展开（没有单独的「更多」按钮）。
+            MeloXPlaylistDescription(
                 description = uiState.description.orEmpty(),
                 expanded = uiState.isDescriptionExpanded,
                 isGenerating = uiState.isDescriptionGenerating,

@@ -20,11 +20,17 @@ package com.cycling.domain.model
  * `YrcParser` and `TTMLParser` understand. AMLL also publishes one recording several times over,
  * as different contributors' submissions, which is part of what the lyrics screen's version picker
  * is for.
+ *
+ * [LX] is the user's own LX source scripts (`LxLyricsProvider`). It is not a catalogue: it answers
+ * only for online tracks, because the script protocol takes a platform song id rather than a
+ * search query. It sits last by default — the user added it, but the built-in sources are far more
+ * predictable.
  */
 enum class LyricsProvider {
     AMLL,
     NETEASE,
     QQ_MUSIC,
     KUGOU,
-    LRCLIB
+    LRCLIB,
+    LX
 }

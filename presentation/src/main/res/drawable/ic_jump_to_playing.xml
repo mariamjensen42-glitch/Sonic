@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 「跳到正在播放」：SF `scope` 的轮廓（十字准星 + 圆环），表示"定位到当前位置"。
+     约定同 ic_flamingo_*：只描边、2.0 圆头、viewport 收到图形包围盒（含描边），
+     颜色写 #FF000000 当占位，实际由 Icon 的 tint 决定。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="22dp"
+    android:height="22dp"
+    android:viewportWidth="22"
+    android:viewportHeight="22">
+    <group android:translateX="-1.5" android:translateY="-1.5">
+        <path
+            android:pathData="M12 5.5A6.5 6.5 0 1 0 12 18.5A6.5 6.5 0 1 0 12 5.5"
+            android:strokeColor="#FF000000"
+            android:strokeWidth="2"
+            android:strokeLineCap="round" />
+        <path
+            android:pathData="M12 2.5V4.5M12 19.5V21.5M2.5 12H4.5M19.5 12H21.5"
+            android:strokeColor="#FF000000"
+            android:strokeWidth="2"
+            android:strokeLineCap="round" />
+    </group>
+</vector>

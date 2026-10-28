@@ -2,10 +2,12 @@ package com.cycling.presentation.mymusic
 
 import com.cycling.domain.model.PlayerState
 import com.cycling.domain.model.Song
+import com.cycling.domain.online.OnlinePlaylistRepository
 import com.cycling.domain.repository.AiRepository
 import com.cycling.domain.repository.PlaylistRepository
 import com.cycling.domain.repository.PlayerRepository
 import com.cycling.domain.repository.SongRepository
+import com.cycling.domain.usecase.ImportOnlinePlaylistUseCase
 import com.cycling.domain.usecase.SongQueryUseCase
 import com.cycling.presentation.util.TestDispatcherRule
 import io.mockk.coEvery
@@ -56,7 +58,9 @@ class MyMusicViewModelTest {
             songRepository = songRepository,
             playerRepository = playerRepository,
             playlistRepository = playlistRepository,
-            aiRepository = aiRepository
+            aiRepository = aiRepository,
+            onlinePlaylistRepository = mockk<OnlinePlaylistRepository>(relaxed = true),
+            importOnlinePlaylistUseCase = mockk<ImportOnlinePlaylistUseCase>(relaxed = true)
         )
         advanceUntilIdle()
 

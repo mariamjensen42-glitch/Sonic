@@ -12,6 +12,7 @@ import com.cycling.domain.lyrics.utils.LrcMetadataHelper
 import com.cycling.domain.lyrics.utils.LyricsFormatGuesser
 import com.cycling.domain.model.AudioMetadata
 import com.cycling.domain.model.Lyrics
+import com.cycling.domain.model.LyricsCandidate
 import com.cycling.domain.model.Song
 import com.cycling.domain.model.TagUpdate
 import com.cycling.domain.repository.AudioMetadataRepository
@@ -237,10 +238,25 @@ class SongDetailViewModel @AssistedInject constructor(
                 return@launch
             }
 
-            _uiState.update { it.copy(showLyricsCandidates = true, isLoadingLyricsCandidates = true) }
+            _uiState.update {
+                it.copy(
+                    showLyricsCandidates = true,
+                    isLoadingLyricsCandidates = true,
+                    lyricsCandidates = emptyList()
+                )
+            }
 
-            val found = try {
-                getLyricsUseCase.candidates(song)
+            val found = mutableListOf<LyricsCandidate>()
+            try {
+                getLyricsUseCase.candidates(song).collect { batch ->
+                    if (batch.candidates.isNotEmpty()) {
+                        found += batch.candidates
+                        // 逐家填进列表：这里是挑一份文本填进编辑器，没必要等最慢的那家；
+                        // 稳定排序只是为了平台分组别跳来跳去（同一家内部的顺序保持提供方给的优先级）。
+                        val merged = found.sortedBy { it.provider.ordinal }
+                        _uiState.update { it.copy(lyricsCandidates = merged) }
+                    }
+                }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
@@ -252,9 +268,7 @@ class SongDetailViewModel @AssistedInject constructor(
                 return@launch
             }
 
-            _uiState.update {
-                it.copy(lyricsCandidates = found, isLoadingLyricsCandidates = false)
-            }
+            _uiState.update { it.copy(isLoadingLyricsCandidates = false) }
 
             if (found.isEmpty()) {
                 _uiEffect.emit(SongDetailEffect.ShowToast(R.string.lyrics_candidates_empty))

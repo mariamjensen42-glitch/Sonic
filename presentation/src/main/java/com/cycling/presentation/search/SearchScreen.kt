@@ -67,6 +67,8 @@ import com.cycling.core.ui.apple.AppleTheme
 import com.cycling.core.ui.apple.AppleType
 import com.cycling.core.ui.apple.applePress
 import com.cycling.core.ui.components.M3SymbolIcon
+import com.cycling.core.ui.components.SonGlyph
+import com.cycling.core.ui.components.SonGlyphIcon
 import com.cycling.core.ui.components.SymbolIconName
 import com.cycling.core.ui.components.M3Artwork
 import com.cycling.core.ui.theme.SonLayout
@@ -77,7 +79,18 @@ import com.cycling.domain.model.Artist
 import com.cycling.domain.model.LyricsMatch
 import com.cycling.domain.model.Song
 import com.cycling.domain.online.model.MusicInfo
+import com.cycling.domain.online.model.OnlineSource
+import com.cycling.domain.online.model.toDownloadSong
 import com.cycling.presentation.R
+import com.cycling.presentation.download.LocalDownloadRequester
+
+/*
+ * 同一个 LazyColumn 里并列了在线结果 / 歌曲 / 歌词命中 / 专辑 / 艺人五个区块。
+ * 这些区块的 id 空间彼此独立（MediaStore 的 songId、albumId、artistId 会撞号），
+ * 而且同一首歌可以**同时**出现在「歌曲」与「歌词命中」两处（`SearchResult` 的文档写明了这一点），
+ * 所以每个区块的 key 都必须带自己的前缀 —— 共用裸 `id` 会直接触发
+ * `Key ... was already used` 崩溃。
+ */
 
 @Composable
 fun SearchScreen(
@@ -251,9 +264,25 @@ fun SearchScreen(
                                     color = AppleTheme.colors.key
                                 )
                             }
-                            items(uiState.onlineResults, key = { it.onlineKey }) { track ->
+                            // 同一首歌在各平台都有，混在一列里用户没法「只找网易云的版本」。
+                            // 只有一个平台有结果时不显示切换条：一个 tab 的 tab 栏没有意义。
+                            if (uiState.onlinePlatforms.size > 1) {
+                                item {
+                                    OnlinePlatformTabs(
+                                        platforms = uiState.onlinePlatforms,
+                                        selected = uiState.selectedOnlineSource,
+                                        onSelect = {
+                                            viewModel.handleIntent(
+                                                SearchIntent.OnlineSourceSelected(it)
+                                            )
+                                        }
+                                    )
+                                }
+                            }
+                            items(uiState.visibleOnlineTracks, key = { "online-${it.onlineKey}" }) { track ->
                                 OnlineSongRow(
                                     track = track,
+                                    showSource = uiState.selectedOnlineSource == null,
                                     resolving = uiState.resolvingOnlineKey == track.onlineKey,
                                     onClick = {
                                         viewModel.handleIntent(SearchIntent.OnlineTrackClicked(track))
@@ -296,7 +325,7 @@ fun SearchScreen(
                             color = AppleTheme.colors.label
                         )
                     }
-                    items(uiState.songs, key = { it.id }) { song ->
+                    items(uiState.songs, key = { "song-${it.id}" }) { song ->
                         SongRow(
                             song = song,
                             onClick = { viewModel.handleIntent(SearchIntent.SongClicked(song)) },
@@ -318,7 +347,7 @@ fun SearchScreen(
                             color = AppleTheme.colors.label
                         )
                     }
-                    items(uiState.lyricsMatches, key = { it.song.id }) { match ->
+                    items(uiState.lyricsMatches, key = { "lyrics-${it.song.id}" }) { match ->
                         LyricsMatchRow(
                             match = match,
                             onClick = {
@@ -341,7 +370,7 @@ fun SearchScreen(
                             color = AppleTheme.colors.label
                         )
                     }
-                    items(uiState.albums, key = { it.id }) { album ->
+                    items(uiState.albums, key = { "album-${it.id}" }) { album ->
                         AlbumRow(
                             album = album,
                             onClick = { viewModel.handleIntent(SearchIntent.AlbumClicked(album)) }
@@ -362,7 +391,7 @@ fun SearchScreen(
                             color = AppleTheme.colors.label
                         )
                     }
-                    items(uiState.artists, key = { it.id }) { artist ->
+                    items(uiState.artists, key = { "artist-${it.id}" }) { artist ->
                         ArtistRow(
                             artist = artist,
                             onClick = { viewModel.handleIntent(SearchIntent.ArtistClicked(artist)) }
@@ -567,6 +596,39 @@ private fun OnlineHintRow(text: String) {
 }
 
 /**
+ * 在线结果的平台切换条：全部 + 本轮有结果的平台。
+ *
+ * 只列**真的有结果**的平台 —— 搜不到的平台给个空 tab 只会让人多点一次。
+ */
+@Composable
+private fun OnlinePlatformTabs(
+    platforms: List<OnlineSource>,
+    selected: OnlineSource?,
+    onSelect: (OnlineSource?) -> Unit
+) {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = AppleDims.padding),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.padding(bottom = 4.dp)
+    ) {
+        item {
+            AppleChip(
+                label = stringResource(R.string.search_online_all_platforms),
+                selected = selected == null,
+                onClick = { onSelect(null) }
+            )
+        }
+        items(platforms, key = { it.lxKey }) { platform ->
+            AppleChip(
+                label = platform.displayName,
+                selected = selected == platform,
+                onClick = { onSelect(platform) }
+            )
+        }
+    }
+}
+
+/**
  * 在线歌曲行：平台名放 overline（同一首歌在各平台都有，得先让用户看清是哪一家），
  * 取链期间行尾换成加载指示器。
  */
@@ -574,6 +636,7 @@ private fun OnlineHintRow(text: String) {
 @Composable
 private fun OnlineSongRow(
     track: MusicInfo,
+    showSource: Boolean,
     resolving: Boolean,
     onClick: () -> Unit
 ) {
@@ -592,14 +655,17 @@ private fun OnlineSongRow(
         )
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            // 来源压在最上面一行，用 key 色 —— 在线结果必须先说清"从哪来"
-            Text(
-                text = track.source.displayName,
-                style = AppleType.caption2,
-                color = colors.key,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            // 来源压在最上面一行，用 key 色 —— 在线结果必须先说清"从哪来"。
+            // 已经切到单平台 tab 时就不重复了。
+            if (showSource) {
+                Text(
+                    text = track.source.displayName,
+                    style = AppleType.caption2,
+                    color = colors.key,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
             Text(
                 text = track.title,
                 style = AppleType.body,
@@ -620,6 +686,23 @@ private fun OnlineSongRow(
         if (resolving) {
             Spacer(modifier = Modifier.width(8.dp))
             LoadingIndicator(modifier = Modifier.size(16.dp))
+        }
+        // 搜索结果常常是「听到一半才想存」，这里给一个直接入队的按钮：
+        // 走的是全站同一个 LocalDownloadRequester（含音质选择），不另开一条下载路径。
+        val downloadRequest = LocalDownloadRequester.current
+        if (downloadRequest != null) {
+            IconButton(
+                onClick = { downloadRequest(track.toDownloadSong()) },
+                colors = IconButtonDefaults.iconButtonColors(
+                    contentColor = colors.tertiaryLabel
+                )
+            ) {
+                SonGlyphIcon(
+                    glyph = SonGlyph.Download,
+                    contentDescription = stringResource(R.string.download_menu_item),
+                    size = 18.dp
+                )
+            }
         }
     }
 }

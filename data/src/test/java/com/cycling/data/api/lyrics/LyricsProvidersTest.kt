@@ -1,5 +1,6 @@
 package com.cycling.data.api.lyrics
 
+import com.cycling.data.api.qqmusic.QQSearchSong
 import com.cycling.domain.model.LyricsQuery
 import java.util.Base64
 import org.junit.Assert.assertEquals
@@ -66,24 +67,47 @@ class LyricsProvidersTest {
 
     // ── QQ Music ─────────────────────────────────────────────────────
 
-    private val qqSearch = """
-        {"code":0,"data":{"song":{"list":[
-          {"songname":"晴天","songmid":"0039MnYb0qxYhV","interval":269,"singer":[{"name":"周杰伦"}]},
-          {"songname":"晴天","songmid":"004Z8Ihr0JIu5s","interval":210,"singer":[{"name":"某翻唱"}]},
-          {"songname":"晴天","songmid":"","interval":269,"singer":[{"name":"周杰伦"}]}
-        ]}}}
-    """.trimIndent()
+    private fun qqSong(
+        mid: String,
+        title: String,
+        artist: String,
+        seconds: Int
+    ) = QQSearchSong(
+        songMid = mid,
+        songId = 97773L,
+        title = title,
+        artist = artist,
+        album = "叶惠美",
+        albumMid = "000MkMni19ClKG",
+        durationMs = seconds * 1000L
+    )
+
+    private fun qqMatches(songs: List<QQSearchSong>) = rankCandidates(
+        songs,
+        query,
+        QQSearchSong::title,
+        QQSearchSong::artist,
+        { song -> song.durationMs.takeIf { it > 0L } }
+    )
 
     @Test
     fun `qq candidates need a songmid and a length inside the tolerance`() {
-        val candidates = parseQqLyricCandidates(qqSearch, query)
+        val candidates = listOf(
+            qqSong("0039MnYb0qxYhV", "晴天", "周杰伦", 269),
+            qqSong("004Z8Ihr0JIu5s", "晴天 (Live)", "周杰伦", 210)
+        )
 
-        assertEquals(listOf("0039MnYb0qxYhV"), candidates.map { it.songmid })
+        assertEquals(listOf("0039MnYb0qxYhV"), qqMatches(candidates).map { it.songMid })
     }
 
     @Test
-    fun `qq search wrapped in a callback is still readable`() {
-        assertEquals(1, parseQqLyricCandidates("callback($qqSearch);", query).size)
+    fun `qq rejects a cover of the same title`() {
+        val candidates = listOf(
+            qqSong("0039MnYb0qxYhV", "晴天", "周杰伦", 269),
+            qqSong("004Z8Ihr0JIu5s", "晴天", "某翻唱", 269)
+        )
+
+        assertEquals(listOf("0039MnYb0qxYhV"), qqMatches(candidates).map { it.songMid })
     }
 
     @Test

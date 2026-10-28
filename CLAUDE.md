@@ -24,7 +24,7 @@ with the code, in which case the code wins.** Known drift:
 | `spotify-clone-jetpack-compose-main/` reference project | Not present |
 | Turbine asserts Flow behaviour | Declared in `:data` and `:presentation`, imported by no test |
 | All UseCases are `@Singleton` with `operator fun invoke` | Only `GetLyricsUseCase` is `@Singleton`; `ScanMusicUseCase`, `SearchHistoryUseCase`, `SongQueryUseCase` expose named methods instead |
-| Metadata reading/writing is mp3agic (MP3) | MP3 still uses mp3agic; FLAC / OGG-Vorbis / MP4(M4A) read+write go through `:taglib`, a vendored copy of the local SaltAudioTag `core` module (LGPL-2.1, `taglib/LICENSE`). Only `:data`'s `AudioMetadataHelper` touches it. Opus is read-only |
+| Metadata reading/writing is mp3agic (MP3) | `net.jthink:jaudiotagger` 统一处理：MP3 / FLAC / OGG-Vorbis / MP4-M4A / WAV / AIFF / WMA / DSF 读写，DFF 只读；Opus 与裸 AAC 退到 `MediaMetadataRetriever` 拿基础字段（不可写）。只有 `:data` 的 `AudioMetadataHelper` 与 `EmbeddedLyricsHelper` 用它。`:taglib` 模块已删除 |
 | Root `README.md` / `CONTRIBUTING.md` tech-stack versions | Two Kotlin/Compose generations behind — trust `gradle/libs.versions.toml` |
 
 | `AGENTS.md` says Compose BOM only | `composeBom = "2026.09.00"`, but **`androidx.compose.material3` is explicitly pinned to `1.5.0-alpha29`** in the catalog, overriding the BOM's constraint (the BOM pins material3 1.4.0, which lacks `LoadingIndicator`, `WavyProgressIndicator`, `ListItem(onClick)`, `ButtonShapes`). The pin is deliberate — see the `composeMaterial3` comment in `gradle/libs.versions.toml`. Consequence: `androidx.compose.foundation:foundation` is dragged to `1.13.0-alpha01` by material3's own requirement |
@@ -39,10 +39,10 @@ with the code, in which case the code wins.** Known drift:
 ./gradlew installDebug          # build + install on device/emulator
 ./gradlew test                  # every module's JVM unit tests
 ./gradlew lint                  # Android Lint
-./gradlew :domain:test          # one module (also :data:, :presentation:, :taglib: — :app: has no tests)
+./gradlew :domain:test          # one module (also :data:, :presentation: — :app: has no tests)
 ```
 
-Single test class or method — the test modules (`:domain`, `:data`, `:presentation`, `:taglib`) are
+Single test class or method — the test modules (`:domain`, `:data`, `:presentation`) are
 Android libraries, so the task is `testDebugUnitTest`, and `--tests` matches the **literal Kotlin
 name, spaces included**, hence the quoting:
 
@@ -180,7 +180,8 @@ that line's tag. Every parser pairs adjacent lines with an equal start into orig
 this is also how a provider hands over two separate documents as one blob.
 
 Text is sourced by `LyricsRepositoryImpl` in order: a sidecar file next to the audio
-(`<name>.lrc`, then `.ttml`, then `.xml`) → embedded ID3 `lyrics` via mp3agic (**MP3 only**) → the
+(`<name>.lrc`, then `.ttml`, then `.xml`) → embedded lyrics via jaudiotagger
+(`FieldKey.LYRICS`: ID3 USLT / Vorbis `LYRICS` / MP4 `©lyr`, all readable containers) → the
 `lyrics_cache` row for the track's `LyricsQuery.cacheKey` → online providers, in the order given by
 `lyricsProviderOrder` and only when `onlineLyricsEnabled`. `LyricsSource.ONLINE` covers the cached
 and the freshly downloaded case alike. `refreshLyrics` (the lyrics screen's fetch button) deletes the
@@ -188,7 +189,7 @@ and the freshly downloaded case alike. `refreshLyrics` (the lyrics screen's fetc
 remembered miss but still loses to a sidecar file or an embedded tag.
 
 A source only counts when it yields **timed** lines. An embedded USLT frame — unsynchronised text,
-which mp3agic happily returns — is not an answer, so that track still reaches the network; the same
+which jaudiotagger happily returns — is not an answer, so that track still reaches the network; the same
 goes for an `.lrc` with no timestamps. A lookup that finds nothing anywhere writes a blank
 `lyrics_cache` row, and a blank row suppresses repeat lookups for `SETTLED_TTL_MS` (7 days) so a
 lyric-less track does not cost two HTTP round trips on every play.

@@ -25,3 +25,14 @@
 # 只保库本身的类名；我们自己实现 FunctionBinding 的 lambda 不需要 keep（不是按名字反射的入口）。
 -keep class com.dokar.quickjs.** { *; }
 -dontwarn com.dokar.quickjs.**
+
+# jaudiotagger 的 ID3v2 帧体是按 Class.forName("org.jaudiotagger.tag.id3.framebody." + 帧id)
+# 造出来的，R8 重命名后丢的不只是一个类，而是整类帧（APIC 封面、USLT 歌词、TXXX ReplayGain 都在
+# 这层）。只保这一层，其余靠正常可达性分析。
+-keep class org.jaudiotagger.tag.id3.framebody.** { *; }
+# 封面解码那几条路径引用 AWT / ImageIO / Swing，Android 上没有这些包；Sonic 的封面走 Coil +
+# MediaStore，不会实例化它们，缺类不必报错。
+-dontwarn org.jaudiotagger.**
+-dontwarn java.awt.**
+-dontwarn javax.imageio.**
+-dontwarn javax.swing.**

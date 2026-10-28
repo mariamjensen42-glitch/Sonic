@@ -4,6 +4,278 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- 🐞 **底部导航启动即崩（`Unknown command for: R`）**：`ic_flamingo_tab_library` 的 pathData 尾部
+  混进了 aapt2 dump 的 `(Raw: …)` 残段，运行到 `painterResource` 时 `PathParser` 直接抛
+  `IllegalArgumentException`。
+  - 根因：aapt2 的 xmltree 输出是 `"<值>" (Raw: <原始串>)`，个别资源的值自带引号，
+    导出脚本的正则把 Raw 段一起捕获了。现在先砍 Raw 段再清引号。
+  - 顺手加了字符集断言：pathData 只允许 `MmLlHhVvCcSsQqTtAaZz0-9 .,+-eE`，
+    不合规就中止生成，不再靠肉眼。
+  - 全部 65 个图标重新生成并用路径语法解析器逐个过了一遍（之前只验了 XML 是否 well-formed，
+    那是验不出来的）。
+- 🐞 **QQ 音乐全都搜不到（歌词、封面、在线目录一起坏）**：根因是搜索端点下线，不是没登录。
+  - 老的 `c.y.qq.com/soso/fcgi-bin/client_search_cp` 实测直接回 **HTTP 500**。它曾是本项目
+    里三处（QQ 歌词、QQ 封面、在线目录搜索）的唯一入口，所以三处一起失效，表现为「QQ 音乐
+    一律不可用」。
+  - 换成 `u.y.qq.com/cgi-bin/musicu.fcg` 的 `music.search.SearchCgiService.DoSearchForQQMusicDesktop`
+    （实测可用）。逐字（`PlayLyricInfo`）与行级（`fcg_query_lyric_new.fcg`）两个取词接口本身
+    一直是好的 —— 缺的只是 `songmid`，所以登录与否都救不了：登录影响的是「会员曲目给不给
+    完整歌词」，不是「能不能找到这首歌」。
+  - QQ 对**重复搜索同一个关键词**有风控：同一个词短时间内再搜会返回 `code = 2001` 与空列表
+    （实测：新关键词立刻能搜到，重复搜同一个词就 2001）。而本项目每次播放都会重新搜一次，
+    于是新增了关键词缓存（成功 6 小时 / 失败 2 分钟）、请求串行化与最小间隔，并给每个调用方
+    准备了几个关键词变体 —— 风控按词算，换一种写法就是另一个词。
+- 🐞 **在线歌词「匹配不正确、找不到」**：以前的匹配只看时长（±5 秒），两个方向都错。
+  - 串歌：平台的关键词检索是模糊的，`"歌手 曲名"` 会返回翻唱、伴奏、同名歌、DJ 版，其中任何
+    一条只要时长落在 5 秒内就会被当成答案。
+  - 找不到：现场版、不同母带、被裁剪过的文件与在线时长相差十几秒时，真正的原曲被这条 5 秒的
+    硬线全部丢掉。
+  - 现在的顺序是**先认歌再对时长**：曲名必须对得上（完全一致，或去掉 `(Live)` / `- Remastered`
+    / `feat. X` 之后一致）、歌手必须对得上，然后时长按曲名匹配的强度分级放宽容差（完全一致
+    15 秒 / 同版本 12 秒 / 版本标记不同 6 秒），最后按「曲名强度 → 时长距离」排序。
+  - 歌手比对不再做任意子串包含 —— 那会把 `Different Artist` 判成 `Artist`。
+  - 搜索词也做了去噪（新增 `TrackText`）：本地标签里的 `(Live)`、`- Remastered 2011`、
+    `01 - `、`feat. X` 在平台的曲名索引里通常不存在，带上它们只会把本来能命中的结果筛掉。
+  - 曲名**不做**「一方包含另一方」的判断：`Song` 会吃掉 `Song of the Wind`，`Hello` 会吃掉
+    `Hello Again`。
+
+### Added
+- 🎼 **AMLL 歌词尽量用起来**：以前只要「歌手标签缺失」「曲名带后缀」「排第一的那份文档是空的」
+  三者之一成立，就拿不到 AMLL 的逐词歌词。四处都补上了（`AmllLyricsProvider` / `LyricsMatch`）：
+  - 检索改**多轮曲名变体**：先去噪曲名（`Song`），没结果再拿标签原文（`Song - Remastered 2011`）
+    搜一次 —— 词库索引的是提交者登记的写法，`匿名M (feat. 初音ミク & ARuFa)` 这类别名只有原文
+    才命中。命中时仍然只发一次请求。
+  - **多份候选依次下载**：播放最多试 3 份、面板最多下 5 份凑 3 个版本，跳过没有时间轴的
+    （纯乐器 / 占位文档）和「歌词比整首歌还长」的（现场版 / 加长版）。以前只下排名第一的那份，
+    它一坏这首歌在 AMLL 就等于没有。
+  - **缺歌手标签不再直接放弃**：改为只采信有旁证的结果 —— 平台 id 相同、专辑同名、或词库里这个
+    曲名只有一份文档；三者都没有时仍交给下一家（同名曲目随手挑一份就是串歌）。
+  - 排序从「只看专辑」换成「**平台 id → 曲名强度 → 专辑**」：在线曲目的网易云 / QQ id 与文档
+    登记的 `ncmMusicIds` / `qqMusicIds` 相同即同一条母带；`Song` 也终于排在 `Song (Live)` 前面。
+  - `LYRICS_CACHE_GENERATION` 4 → 5：以前被记成「AMLL 没有」的歌会重查一次。
+- 🎤 **歌词切换按平台分组，且随时可用**：以前播放页的歌词顶栏那颗按钮是「更多 → 播放设置」，
+  于是**已经有歌词的时候反而没有换词的入口**（独立歌词路由 `Screen.Lyrics` 根本没有导航入口）。
+  - 歌词页顶栏改成歌词图标，一点就开「选择歌词」；播放设置仍在封面页的三点里。
+  - 面板顶部是平台胶囊（全部 / AMLL / 网易云 / QQ 音乐 / 酷狗 / LRCLIB / 音源脚本，带版本数），
+    点一家只看这一家的版本 —— 六家混排时不用再靠前缀去认。
+  - 结果**逐家到达**：`findLyricsCandidates` 从 `suspend List` 改成 `Flow<LyricsCandidatesBatch>`，
+    各来源并发取词、谁先答完谁先画；慢的那家挂在「正在查询 X、Y」里，查询失败单独标「暂时不可用」，
+    与「这家没有」分开。
+  - 去重只在同一家内部做：两家给同一份文档时各留各的，否则「用网易云这份」会从网易云那栏消失，
+    留下谁还取决于谁先响应。
+- 🔐 **QQ 音乐账号登录（扫码，无 WebView）**：设置 → 在线音乐 → QQ 音乐账号。移植自 MeloX 的
+  原生扫码授权链，重写成 Sonic 的三层结构。
+  - 两条通道：手机 QQ（`ptlogin2` 二维码 → `ptqrlogin` 轮询 → `check_sig` 换 `p_skey` →
+    `graph.qq.com` 授权拿 `code` → `musicu.fcg` 换票）与微信（开放平台二维码 → 长轮询
+    `l/qrconnect` → 同一条换票接口）。每个会话一份独立 Cookie 罐，且不跟随重定向 ——
+    `authorize` 的 `code` 就在 `Location` 头里。
+  - 换票成功不等于凭据可用：先带 Cookie 取一次账号资料（`fcg_get_profile_homepage.fcg`），
+    通过了才落盘，避免存下「看着登录成功、实际处处被拒」的会话。
+  - 登录态存 DataStore（`QQMusicSessionStore`），页面显示昵称 / 头像 / UIN，可一键退出。
+  - 二维码过期自动换一张，不打断等待；二维码可存进相册（MediaStore `IS_PENDING`，无需权限）。
+  - **登录态已接入 QQ 歌词**：带 Cookie 请求 `fcg_query_lyric_new.fcg`，会员曲目才给完整歌词；
+    登录态失效时该接口只回非零 `retcode`（表现为歌词凭空消失），因此空结果会自动匿名重试一次。
+  - **登录是否生效一眼可见**：设置页那一行直接显示「已登录：昵称」，账号页写明登录带来的收益；
+    歌词取词时打一条 `QQMusicLyricsProvider: "歌名" as uin=…`，logcat 可直接确认是否带上了账号。
+  - 协议解析层（`QQMusicLoginParsing`）是纯函数，补了单测钉住 `ptuiCB` / 微信轮询的状态码、
+    Cookie 拼装与 `hash33` 的已知值。
+- 🧩 **Flamingo 图标全量抽取（39 → 65）**：之前只搬了播放页 / 歌词页用到的那些，这次把 APK 里
+  应用自有的图标全抽出来，一次性补齐。
+  - tab 栏、资料库四个分类、播放模式（随机 / 循环的细体与「关」变体）、迷你条的五种模式、
+    四种占位图（文件夹 / 封面 / 歌单 / 新建歌单）、应用图标族（主图 / 单色 / 通知 / 分享 /
+    状态栏歌词 / 小部件）、制作人员人像、圆角提示底。
+  - 底部导航「音乐库」换成真图 `ic_flamingo_tab_library`，手画的 `ic_nav_library` 删掉。
+  - 顺手修了导出脚本两个坑：按空白切 token 的 path 解析器遇到「flag 与坐标粘在一起」的弧命令
+    会崩（这批里有 16 个中招），改成字符级解析；pathData 被 aapt2 连引号吐出来时会把属性写坏，
+    现在统一清掉引号。
+  - `raw/keep.xml` 的 wildcard 规则本来就覆盖新文件，注释同步成 65 个。
+- 🎨 **迷你播放条与底部导航的图标换成 Apple 造型的 XML 矢量**：这两处原来还在用 Material
+  Symbols 字体，跟全站的 Apple Music 语言对不上。
+  - 迷你播放条：播放 / 暂停 / 下一首改用 `ic_flamingo_mini_play` / `_mini_pause` /
+    `_mini_fast_forward` —— 这三个是 Apple Music 专门给 48dp 胶囊画的版本，笔画比大播放键
+    粗一档，缩到 24dp 不用再补字重。
+  - 底部导航：首页、音乐库、搜索钮换成 `ic_nav_home` / `ic_nav_library` / `ic_nav_search`
+    （SF `house` / `music.note.list` / `magnifyingglass` 的轮廓）。当时这三颗在 Flamingo
+    抽取里都没有，按同一套约定手写成 XML；音乐库那颗后来换成了真图 `ic_flamingo_tab_library`。
+  - `BottomNavTab.selectedIcon` 删掉：两个字段一直传的是同一个值，选中态本来就只换颜色。
+- 🔘 **详情页顶栏换成玻璃圆钮**：照 MeloX 歌单详情页那颗按钮重做 —— 44dp 半透明圆底 +
+  22dp 图标，底色跟着图标明暗走（图标浅就垫黑 22%，图标深就垫白 64%），无涟漪，
+  按下只是把底色加深一层。
+  - 原来是 `IconButton` 叠一层 60% 黑 scrim：色块死、边缘硬。玻璃底在任意封面上都能留住
+    对比度，又不会压出一块黑饼。
+  - 动作图标改成品牌红（MeloX 用 `#FF3147`，这边走 `AppleColors.systemRed`），滚动折叠后
+    仍过渡回 `onSurfaceVariant`；返回键保持自适应色。
+  - 原来 scrim 的「折叠过半就退干净」那条曲线原封不动搬到玻璃底上，否则实底顶栏上会留两个玻璃点。
+  - 歌单 / 专辑 / 歌手三个详情页共用这个顶栏，一起生效。
+- 🎚️ **播放页进度条下面的中间位显示音质**：以前那一行只有左边已播、右边剩余，中间空着。
+  现在按 Apple Music 的读法补上徽标 —— 无损曲目是 `ic_flamingo_lossless` +「无损」，
+  码率超过 CD（1411 kbps）的显示「Hi-Res 无损」，有损曲目那一格留白（Apple 也是这样，
+  硬塞一个「MP3 320k」只会让这一行变吵）。
+  - 判定按「容器 + 码率」两级：先看 mime / 后缀是不是 flac / wav / aiff / ape / wv / tta / dsf，
+    再看码率是否高过 1411。阈值与设置页统计 SQL（HR / SQ）同一套，两处不会各说各话。
+    `m4a` 不在无损容器里 —— AAC 也用这个容器，算进去会把有损误判成无损。
+  - 时间行从 `Row(SpaceBetween)` 换成 `Box` + 三处 `align`：左右时间长度不一样，
+    `SpaceBetween` 会把中间那颗挤歪。行高 16 → 18dp 给图标留余量。
+- 🎛️ **播放队列页的四档模式胶囊**：原来队列页顶部只有两颗没底色的图标（随机 / 循环）
+  加一个「3 / 12」，现在按 MeloX 的队列面板做成四颗等宽胶囊：随机、循环、智能续播、淡入淡出。
+  选中那档反白（白 70% 底 + 黑图标），未选中是白 12% 的半透明底，整排压在封面色面上。
+  - 「智能续播」和「淡入淡出」直接写设置（`autoContinueEnabled` / `audioFadeDurationMs`）——
+    它们本来就是跨会话偏好，只改内存里的播放器开关的话，退出再进来按钮会自己弹回去。
+  - 图标全部走 XML 矢量资源，并且只按 Apple Music 的造型：前两档复用既有的
+    `ic_flamingo_shuffle` / `ic_flamingo_repeat`，后两档新增 `ic_mode_infinity.xml`（∞）与
+    `ic_mode_automix.xml`（◉ 圆环 + 中心点），对应 Apple Music 的 Autoplay 与 AutoMix。
+    这两颗在 Flamingo 1.0.0 的抽取里没有，按 SF 的描边语言（只描边、2.0 圆头、包围盒 viewport）
+    手写成 XML；拿到新抽取资源后同名覆盖即可，调用点不用动。
+  - 「当前 / 总数」挪到胶囊下面右对齐，四颗胶囊占满整行后行尾已经塞不下它了。
+- ⚙️ **设置页按 MeloX 的 iOS 骨架重做**：原来只是「Material 的分组 + Apple 的配色」，现在是真正的
+  iOS grouped list。
+  - 顶部加了玻璃搜索框，按标题/副标题/关键词实时过滤设置项；搜不到时给一行「没有匹配的设置项」，
+    而不是留一片空白让人以为页面坏了。顶栏保持固定，只有搜索框和列表滚动。
+  - 图标与箭头统一成 Apple Music 红，行分隔线两侧各缩进 16dp，行高抬到 ≥56dp，
+    开关换成 51×31dp 的苹果绿 iOS 开关。
+  - 分组卡底色不再写死成 `#1C1C1E` / `#F2F2F7`：页面底色是壁纸动态取色来的，固定中性灰会
+    出现「卡片偏冷、页面偏紫」的脏对比。改成把页面底色抬 6%，任何壁纸下都成立。
+  - 设置行改成数据驱动（`SettingsEntry` → `SettingsSectionBlock`）。原来是 42 行手工分隔线，
+    过滤掉一行就会剩一条孤零零的线；抽成模型后分隔线由分区统一插，搜索框也才有东西可匹配。
+  - 没做 MeloX 底部那张「重置 / 登出」危险卡 —— 本项目没有对应的重置用例，凭空造一个按钮
+    就是给用户一个能删配置的坑。
+- 📝 **歌词页「选择在线歌词」**：顶栏那颗歌词按钮现在**一键直达在线版本选择**，不再套一层
+  「更多」面板 —— 那颗按钮的全部职责就是换歌词，中间多一次点击只是多一次麻烦。
+  - 没有歌词时，歌词区中央也有一颗「获取歌词」（原来那里只有一行灰字，用户既不知道词从哪来，
+    也没有任何补救手段）。
+  - 面板里原来的「重新获取」「歌词界面设置」挪到了版本列表底部（`LyricsCandidatesSheet` 新增
+    `footer` 槽，只有歌词页传；歌曲详情页那边有自己的编辑入口）。列表底部还会显示「当前来源：
+    网易云音乐 / 旁车文件 / 手写 …」—— 分不清手里这份词是谁给的，就无从判断该不该换。
+  - **有本地歌词时也能切换了**：旁车 `.lrc` 与内嵌标签不再挡住选择器，用户挑中的那一版会带一个
+    `pinned` 标记写进歌词缓存（`source` 加 `*` 后缀），`resolveLyrics` 见到它就排在旁车文件与内嵌
+    标签之前返回。之前「选了也不生效」是因为优先级写死成 `旁车 > 内嵌 > 缓存`，点完切歌回来又变回
+    本地那份。标记没做成 `lyrics_override` 的新列 —— 那要改 schema 写迁移，迁移 SQL 与 Room 期望
+    差一个字节就会在启动时崩，为一个「谁优先」的标记不值当。只有用户手写的歌词仍不给切换入口：
+    它排在 `resolveLyrics` 最前面，换了也不生效。
+  - 播放页里的歌词页也能弹候选面板了。状态一直在 ViewModel 里，但这个面板原先只在独立歌词路由与
+    歌曲详情页渲染，播放页点那颗按钮是「状态改了但没人画」。
+  - 「一个都没搜到」和「在线取词被关了」现在分开提示，后者会告诉你先去设置里打开。
+- 🎵 **导入 QQ 音乐歌单**：音乐库 → 右上角「＋」→「导入歌单」，把 QQ 音乐里歌单的分享链接
+  （或整段分享文本、裸歌单 id）粘进来就行。解析走 `c.y.qq.com` 的
+  `fcg_ucc_getcdinfo_byids_cp.fcg`（公开歌单不要登录态，一次返回全部曲目，671 首实测不分页），
+  短链 `c6.y.qq.com/base/fcgi-bin/u?__=` 会先跟一次重定向再取 id。
+  曲目**只写指针不取链**：`songmid` 与搜索接口用的是同一个值，也就是洛雪 `tx` 源的 `musicId`，
+  所以入库后跟「在线搜索点一首播放」走同一条取链路（`CachedPlaySourceResolver`），
+  几百首不必逐个预解析。**本地优先**：按「归一化标题 → 艺术家 → 时长 ±3 秒」在本地库里对上的，
+  直接指本地文件，音质更好、断网也能放，也不会在库里多占一行。同名歌单不覆盖，改成 `名字（2）`。
+  本地匹配用的是导入前建的一次性标题索引 —— 逐首查 `searchSongs` 是 `LIKE '%x%'` 全表扫，
+  几百首会慢到几十秒。
+- 🌐 **歌词译文可开关**：歌词页顶栏多一颗翻译按钮（Flamingo 的 `Translate` / `TranslateOn`），
+  关掉只收起译文行、不丢数据 —— `translation` 一直留在解析结果里，再打开立刻回来，不用重新取词。
+  默认开，与改造前「有译文就显示」的表现一致；设置落 `lyrics_translation_enabled`。
+  按钮**只在当前歌词真有译文时出现**（`SyncedLyrics.hasTranslation`）：一份纯外语 LRC 一行翻译都
+  没有时，摆一个按了没反应的开关比没有这个入口更让人困惑。播放页的歌词页与独立歌词路由共用
+  `NowPlayingBar`，两边同时生效；队列页不显示。
+- 🎛 **Flamingo 播放页 / 歌词页图标**：`presentation/src/main/res/drawable/ic_flamingo_*.xml` 新增
+  39 个 vector drawable，来自 Flamingo 1.0.0（2608310056）的播放页与歌词页 —— `pathData`、填充规则、
+  描边宽度、`fillAlpha` 全部原样，颜色统一写 `#FF000000` 交给 `Icon` 的 tint。入口是
+  `core/ui/components/FlamingoIcons.kt` 的 `FlamingoIcon(res, ...)`；与 `SonGlyph`（Apple Music
+  造型）并存，同一屏别混用。
+  **viewport 收到了图形的实际包围盒**，不是源文件的画布：源资源里 `Repeat` 只占 46%、`Volume` 40%，
+  而 `Play` / `Favorite` 满格，直接搬过来同一 dp 下会「大的过大、小的过小」；裁掉留白后每个图标
+  在自己的尺寸里铺满（描边图标按裁剪比例同步收细，`SwipeQueue` 的 12 单位粗线才没被放大）。
+  播放页与歌词页顶栏已经整体切到这套：运输键换成双三角 `rewind` / `fast_forward`（不再是 Apple 的
+  「竖条 + 三角」）、收藏 `favorite` / `favorite_filled`、更多 `more`、页脚 `lyrics` / `lyrics_on` 与
+  `queue` / `queue_on`（选中时**换图**而不是只提亮透明度 —— 这两个图标就是靠多一道笔画表达打开）、
+  队列行正在播放的标记用 `mini_play`。主播放键的图标从 48dp 收到 40dp：Flamingo 的三角贴着画布画，
+  同样 48dp 会明显压过两侧。歌词页「更多」面板里的刷新 / 调节没有对应图形（歌词页返回也保留
+  Material 的箭头，Flamingo 那支是 32×55dp 的整页翻页箭头，缩到 24dp 又粗又高），其余图标全部来自
+  这套资源。
+- 🏷 **元数据刮削**：设置 → 在线音乐 → 元数据刮削，把元数据不全的本地歌曲用在线目录补齐 ——
+  标题是文件名、艺术家/专辑是 `<unknown>` 或「未知…」的都会被列出来。「全部刮削」只应用**可信匹配**
+  （标题归一化后一致，或标题近似且艺术家一致；时长相差 30 秒以上直接降到自动线以下），
+  其余标成「待确认」让用户自己挑，宁可少补也不批量改错名。写回分三步且互相独立：歌曲行（列表立刻正确）、
+  覆盖表（年份/流派/曲号）、文件标签（分区存储下多半写不进去，行尾会如实标注「仅在本 App 生效」），
+  封面存成 App 私有副本。匹配规则在 `domain/scrape/ScrapeMatch`，单测覆盖归一化、置信度与
+  「文件名当标题」的判定。
+- 🗂 **搜索页在线结果按平台分 tab**：在线音乐区块上方多一条平台切换条（全部平台 / 网易云音乐 /
+  酷狗音乐 …），只列**本轮真有结果**的平台，按 `OnlineSource.ORDERED` 固定排序。切到单平台后
+  行首的平台 overline 自动收起（已经不必重复说明来源）。新查询会把选择重置回「全部平台」。
+  实现是纯 UI 派生：`SearchUiState.onlinePlatforms` / `visibleOnlineTracks` 由现有
+  `onlineResults` 算出来，没有额外请求，也没有把结果拆成多份状态。
+- 📦 **内置三个洛雪音源**：`assets/lx_sources/` 随包带 `星海音乐源`（wy/tx/kg/kw/mg，含取词与封面）、
+  `统一音乐源`（GD 音乐台，wy/kw）、`稳定版音源`（wy/tx/kg）。首次启动由 `LxPluginManager.initialize()`
+  写进脚本目录并登记成插件（`origin = builtin`，id 前缀 `builtin:`），之后和用户自己导入的插件
+  走同一条启停 / 排序 / 屏蔽 / 取链链路。删掉的内置插件记进 `removed_builtins`，不会下次启动偷偷回来；
+  在线音源页新增「恢复内置」按钮把它装回来。脚本来自第三方仓库，来源与授权见
+  `data/src/main/assets/lx_sources/NOTICE.md`（脚本正文不改动，升级整份替换）。
+- 🎼 **QQ 音乐 QRC 逐字歌词可解**：新增 `QrcCodec`，按 amll `formats/eqrc` 1:1 移植 QQ 的非标准
+  3DES（社区称 buggy DES —— 字节序、S 盒、PC-2 的 `pos - 27` 全都与标准 DES 不同）与 zlib 解压。
+  脚本侧的 `lx.utils.qrc.decrypt / toLrc / toYrc` 从「未实现」变成可用；顺带补了
+  `crypto.aesDecrypt`、`zlib.inflateRaw / deflateRaw`，脚本要自己解也有原语。
+  歌词管线不认识 QRC，`LxLyricsProvider` 拿到 QRC 先转 YRC 再交给解析器。
+- 🎤 **音源脚本的 `lyric` / `pic` 两个 action 接上了**：此前只有 `musicUrl`，脚本里声明的取词、
+  取封面能力一律落空。`LxScriptRunner` 增加 `lyric()` / `pic()`，`LxPluginManager` 增加
+  `fetchLyric` / `fetchCover`（按当前排序问第一个答得出来的插件）。
+  - 歌词走进新的 `LyricsProvider.LX`（默认排最后）：脚本按平台 id 取词，只对在线曲目有效，
+    本地歌曲直接跳过、零开销；主歌词与 `tlyric` 按起始时间合拼，翻译行紧跟主行（解析器约定）。
+  - 封面走 `ResolveOnlineCoverUseCase`：在线曲目 `albumArt` 为空时在**后台**补一张，
+    不挡出声，补到后同时更新歌曲注册表与当前状态。
+- 🩺 **插件健康度降权**：连续取链失败 2 次的插件排到队尾，成功一次立刻恢复。降权只是稳定排序的
+  第二趟，不剔除 —— 否则后端恢复后永远没有翻身的机会。计数与时间戳落库，重装同一个脚本不清零；
+  在线音源页会显示「连续失败 N 次」。
+- 🎙 **排除录音**：设置 → 音乐库新增开关（默认开）。扫描时按路径目录名 + 标签把通话录音、
+  录音笔、语音备忘这类非音乐音频踢出曲库（MIUI `/MIUI/sound_recorder`、各家 `Recordings`、
+  中文「录音 / 通话 / 语音备忘」目录，以及 `Call_20261023_1830.m4a` 这类通话录音文件名）。
+  判定逻辑在 `domain/scanner/RecordingFilter`，只认足够特殊的片段，不碰 `record`/`records`
+  这类可能是专辑名的词。切换开关会立刻重扫一遍，已入库的录音随即被清出去。
+
+### Changed
+- 🎧 **「我喜欢」页改成歌单详情那套版式**：原来走 Apple 的满铺方形 hero（标题压在封面上、
+  顶栏随滚动淡入），和歌单详情页对不上。现在两页共用同一组 `MeloXPlaylist*` 组件：
+  封面模糊铺满 + 58dp 玻璃工具条 + 居中封面英雄区（圆钮 / 播放胶囊 / 圆钮）+ 整段可点的简介，
+  曲目行也回到「封面 + 标题 + 歌手 + 时长 + ⋮」。
+  - 元数据行、时长文案与歌单详情同一句（`N 首歌曲 · 2 小时 30 分钟`），时长格式化提到
+    `components/PlaylistPage.kt` 的 `formatCollectionDuration` 供两页共用。
+  - 一首收藏都没有时英雄区照样渲染（0 首歌曲、动作禁用），标题与返回不会再消失。
+  - 行尾那颗实心心形收进 ⋮ 菜单（「取消收藏」）：行宽与歌单详情对齐，功能没少。
+  - 顺手删掉随之失去调用方的 `CollectionHero`（视差 hero）与 `PlaylistDescription`
+    （Apple 版简介），以及 `MyMusicScreen` 里早已无人调用的 `SongList`。
+- 🏷 **标签读写换成 jaudiotagger，删掉自研 `:taglib`**：`net.jthink:jaudiotagger` 3.0.1 一个库覆盖
+  读写 —— MP3、FLAC、OGG-Vorbis、MP4/M4A、WAV、AIFF、WMA、DSF（DFF 只读），字段统一走
+  `FieldKey`，不再为每个容器各写一套 reader / writer。顺带丢掉 mp3agic（原先只处理 MP3）与
+  `kotlinx-io`：`AudioMetadataHelper`、`EmbeddedLyricsHelper` 都只剩一层薄映射。
+  - 内嵌歌词从「只认 MP3 的 USLT」扩到所有可读容器（ID3 `USLT` / Vorbis `LYRICS` / MP4 `©lyr`）。
+  - 写标签直接在原文件上重写标签块，不再先写临时文件再整份覆盖，也不再有 80MB 的"整文件进内存"上限。
+  - Opus 与裸 AAC 是唯一退步：jaudiotagger 不认识这两个容器，改由 `MediaMetadataRetriever` 拿
+    码率 / 采样率 / 标题 / 艺术家 / 专辑 / 年份 / 曲号，字段比以前少，但详情页不会整片空白。
+  - R8 只补一条 keep：ID3v2 帧体是按类名反射造的（`framebody.**`），不保会静默丢 APIC/USLT 帧。
+- 🪂 **播放页下拉：整页 1:1 跟手收回**：收起只用**一个变换**（`PlayerMorph.shell`）—— 等比缩到
+  0.62、下沉 0.67 个屏高、尾段淡出，三项全部线性跟着 `progress` 走。下沉量是**反推**出来的：
+  `0.86 - (1 - 0.62) / 2`，使缩放抬起的顶边加上下沉正好等于手势行程 ⇒ 顶边和手指 1:1。
+  透明度只在最后 16% 才降（之前是实心的），圆角在脱离屏幕边缘后到 28dp。
+  试过的两条路都删了：矩形 morph 到迷你胶囊（进度走满、画面几乎不动）与按卡片尺寸重排内容
+  （只有某一小段看得见）。手势位移按 `scaleAt` 补回缩放坐标系，不会越拖越快。
+- 🖼 **封面在迷你播放条与播放页之间共享**：新增 `PlayerArtworkTransition`（CompositionLocal
+  收几何）与 `PlayerArtworkFlight`（根坐标里那一张会飞的图，按屏宽见方排版一次、之后只改
+  `graphicsLayer`）。两端各自把封面让开，中途只剩这一份：`dive` 之前它跟着整页的缩放 / 下沉
+  走，收尾插值进迷你条的缩略图，圆角 28dp → 5dp、投影同步归零。
+- 🎚 **播放页控制区上移**：新增 `PlayerSceneSpec.controlsLift`（16dp）垫在控制区下方，标题行、
+  进度条、运输键、页脚整块上移，页脚不再顶着手势条；控制区收起时这段留白一起归零，
+  歌词页排版不受影响。
+- 🏠 **首页精简**：依次去掉「收藏歌曲」「常播歌曲」「最近播放」三个分区，首页只剩
+  推荐专辑 / 推荐歌手 / 最近添加。对应数据源一并从 `HomeViewModel` 撤掉（六个 Flow → 三个），
+  `HomeUiState` 也删了 `favoriteSongs`、`mostPlayed`、`recentlyPlayed` 三个字段。
+
+### Fixed
+- 🎬 **播放页改为浮层（对齐 MeloX）**：`Screen.Player` 这条导航路由删掉，播放页变成盖在
+  app 之上的 `PlayerOverlay` —— 底下页面、底栏、迷你播放器都还在组合中，下拉时露出的是
+  它们本身，不再需要拿色面冒充背景。展开 / 收起 / 手势中途反悔共用一条 0..1 的进度：
+  行程 = 0.86 屏高，松手时**展开进度 ≤ 0.58 或下甩 ≥ 1200px/s** 才收起。
+  入口两处：顶部把手整行 28dp 命中区、封面页任意位置；歌词页列表滚到顶后继续下拉也接着收起
+  （`NestedScrollConnection` 交接）。系统返回先收浮层，再往下才是路由返回。
+- 📜 **播放页长标题跑马灯**：封面页与歌词 / 队列页顶栏的歌名改成 `Modifier.basicMarquee()` +
+  `TextOverflow.Clip`，`I Knew You Were Trouble.` 这类长标题不再被截成「…Tr…」。
+- 🔤 **歌词首尾字被渐隐吃掉**：`KaraokeLineText` 行容器的 `appleEdgeFade()`（24dp 两端 alpha 渐隐）
+  与 16dp 横向 padding 重叠，每行第一个字母半透明、长行右端发灰。歌词本就换行、不贴边，
+  渐隐没有存在意义，已连同 `AppleEdgeFade.kt` 一起删除，顺带省掉每行一个离屏层。
+
 ## [1.0.2] - 2026-10-23
 
 ### Added

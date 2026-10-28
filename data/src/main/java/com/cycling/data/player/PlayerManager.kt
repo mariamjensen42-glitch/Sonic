@@ -15,8 +15,9 @@ import com.cycling.domain.model.Song
 import com.cycling.domain.online.model.MusicInfo
 import com.cycling.domain.online.model.MusicQuality
 import com.cycling.domain.online.model.OnlineSource
-import com.cycling.domain.online.model.PlaySourceResolution
-import com.cycling.domain.online.usecase.ResolveOnlinePlaySourceUseCase
+import com.cycling.domain.online.usecase.ResolveOnlineCoverUseCase
+import com.cycling.data.online.CachedPlaySourceResolver
+import com.cycling.domain.repository.PlayUrlCacheRepository
 import com.cycling.domain.repository.AudioMetadataRepository
 import com.cycling.domain.repository.PlayerRepository
 import com.cycling.domain.repository.SettingsRepository
@@ -66,7 +67,9 @@ class PlayerManager @Inject constructor(
     private val getContinuationSongs: GetContinuationSongsUseCase,
     private val playbackServiceController: PlaybackServiceController,
     private val playEventRecorder: PlayEventRecorder,
-    private val resolveOnlinePlaySource: ResolveOnlinePlaySourceUseCase,
+    private val resolvePlaySource: CachedPlaySourceResolver,
+    private val playUrlCache: PlayUrlCacheRepository,
+    private val resolveOnlineCover: ResolveOnlineCoverUseCase,
     @PlayerDispatcher private val dispatcher: CoroutineDispatcher
 ) : PlayerRepository {
 
@@ -94,6 +97,9 @@ class PlayerManager @Inject constructor(
      * engine change, so a stale entry silently reverts the heart icon.
      */
     private val songLookup = mutableMapOf<Long, Song>()
+
+    /** 已经为哪些在线曲目问过脚本封面：同一首不重复问，成功与否都算问过了。 */
+    private val coverRequested = mutableSetOf<Long>()
 
     private var progressLoopJob: Job? = null
     private var sleepTimerJob: Job? = null
@@ -260,6 +266,13 @@ class PlayerManager @Inject constructor(
             event.itemId,
             event.errorCodeName
         )
+
+        // 在线曲目失败十有八九是直链过期：把缓存作废，下次播放重新取链，
+        // 否则 20 分钟 TTL 内每次重播都会再撞一次同一个死地址。
+        val current = _playerState.value.currentSong
+        if (current != null && current.isOnline) {
+            scope.launch { playUrlCache.invalidate(current.id, MusicQuality.EXHIGH) }
+        }
 
         val now = SystemClock.elapsedRealtime()
         consecutivePlaybackErrors = if (now - lastPlaybackErrorAtMs > ERROR_STREAK_WINDOW_MS) {
@@ -467,13 +480,55 @@ class PlayerManager @Inject constructor(
             durationSeconds = song.duration / 1000,
             coverUrl = song.albumArt
         )
-        return when (val resolution = resolveOnlinePlaySource(track, MusicQuality.EXHIGH)) {
-            is PlaySourceResolution.Success -> resolution.source.url
-            is PlaySourceResolution.Failure -> {
-                Timber.w("resolveOnlineUri: %s 取链失败 —— %s", song.title, resolution.message)
-                null
+        val quality = MusicQuality.EXHIGH
+        return resolvePlaySource.resolve(song.id, track, quality)?.url
+    }
+
+    /**
+     * 在线曲目缺封面时，用音源脚本的 `pic` 补一张。
+     *
+     * 脚本没声明 pic、超时、返回空都当成「没有」，返回 null，不影响播放。
+     */
+    private suspend fun resolveOnlineCoverFromScript(song: Song): String? {
+        val source = OnlineSource.fromLxKey(song.onlineSourceKey ?: return null) ?: return null
+        val trackId = song.onlineSongId ?: return null
+        val track = MusicInfo(
+            source = source,
+            id = trackId,
+            title = song.title,
+            artist = song.artist,
+            album = song.album,
+            durationSeconds = song.duration / 1000
+        )
+        return resolveOnlineCover(track)
+    }
+
+    /**
+     * 后台给在线曲目补封面：脚本的 `pic` 可能要几秒，绝不能挡住出声。
+     *
+     * 补到之后同时更新注册表与当前状态，播放页 / 迷你条下一帧就换成真封面；
+     * 问不到就保持占位图，下次不再问。
+     */
+    private fun requestOnlineCover(song: Song) {
+        if (!coverRequested.add(song.id)) return
+        scope.launch {
+            val cover = withContext(Dispatchers.IO) { resolveOnlineCoverFromScript(song) }
+            if (cover == null) return@launch
+            val current = songLookup[song.id] ?: song
+            val updated = current.copy(albumArt = cover)
+            songLookup[updated.id] = updated
+            _playerState.update { state ->
+                state.copy(
+                    currentSong = if (state.currentSong?.id == updated.id) {
+                        updated
+                    } else {
+                        state.currentSong
+                    },
+                    playbackQueue = state.playbackQueue.map {
+                        if (it.id == updated.id) updated else it
+                    }
+                )
             }
-            PlaySourceResolution.NotConfigured -> null
         }
     }
 
@@ -514,6 +569,8 @@ class PlayerManager @Inject constructor(
                     _events.tryEmit(PlayerEvent.PlaybackFailed(songId = song.id, skipped = false))
                     return@launch
                 }
+                // 封面只是装饰：搜索接口没给的时候让脚本补一张，但要放到后台 —— 脚本请求
+                // 可能几秒，不能让「缺一张图」推迟出声。见 [requestOnlineCover]。
                 song.copy(path = url)
             } else {
                 song
@@ -551,6 +608,10 @@ class PlayerManager @Inject constructor(
             playbackServiceController.start()
             engine.play()
             fadeIn()
+
+            if (playable.isOnline && playable.albumArt.isNullOrBlank()) {
+                requestOnlineCover(playable)
+            }
         }
     }
 

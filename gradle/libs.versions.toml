@@ -26,11 +26,8 @@ lifecycleViewmodelNav3 = "2.10.0-rc01"
 navigation3 = "1.1.4"
 kotlinxSerialization = "1.7.3"
 kotlinxCoroutines = "1.8.1"
-# 多格式标签库（:taglib 里 vendored 的 SaltAudioTag）用它做字节流与临时文件读写。
-kotlinxIo = "0.7.0"
-# :taglib 上游测试用的 kotlin-test：跟上游 SaltAudioTag 的 Kotlin 版本走（新编译器能读旧
-# metadata，反过来不行），这样即使 AGP 内置的 Kotlin 编译器与项目的 2.3.0 不一致也能编译测试。
-kotlinTest = "2.2.21"
+# 多格式标签读写（MP3/FLAC/OGG/MP4/WAV/AIFF/WMA/DSF）。纯 Java，无 NDK。
+jaudiotagger = "3.0.1"
 datastorePreferences = "1.1.1"
 composeMarkdown = "0.5.4"
 glance = "1.2.0"
@@ -110,18 +107,11 @@ okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version = "4.12.0" }
 #kotlinx-serialization-json
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
 
-# kotlinx-io（:taglib 的字节流 / 文件系统抽象）
-kotlinx-io-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-io-core", version.ref = "kotlinxIo" }
-kotlinx-io-bytestring = { group = "org.jetbrains.kotlinx", name = "kotlinx-io-bytestring", version.ref = "kotlinxIo" }
-
-# kotlin-test（:taglib 搬入的上游测试用 kotlin.test 断言）
-kotlin-test-junit = { group = "org.jetbrains.kotlin", name = "kotlin-test-junit", version.ref = "kotlinTest" }
-
 #compose-markdown
 compose-markdown = { group = "com.github.jeziellago", name = "compose-markdown", version.ref = "composeMarkdown" }
 
-#mp3agic
-mp3agic = { group = "com.mpatric", name = "mp3agic", version = "0.9.1" }
+#jaudiotagger（多格式标签读写，替代 :taglib 与 mp3agic）
+jaudiotagger = { group = "net.jthink", name = "jaudiotagger", version.ref = "jaudiotagger" }
 
 #quickjs（在线音源脚本运行时）
 quickjs-android = { group = "io.github.dokar3", name = "quickjs-kt-android", version.ref = "quickjs" }

@@ -1,15 +1,11 @@
 package com.cycling.presentation.navigation
 
 import android.widget.Toast
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
@@ -26,7 +22,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation3.runtime.EntryProviderScope
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
-import androidx.navigation3.runtime.metadata
 import androidx.navigation3.ui.NavDisplay
 import com.cycling.presentation.ai.AiInfoScreen
 import com.cycling.presentation.albumdetail.AlbumDetailScreen
@@ -36,6 +31,9 @@ import com.cycling.presentation.artistdetail.ArtistDetailScreen
 import com.cycling.presentation.artistdetail.ArtistDetailViewModel
 import com.cycling.presentation.artists.ArtistsScreen
 import com.cycling.presentation.components.SongQueueActions
+import com.cycling.presentation.download.DownloadRequestProvider
+import com.cycling.presentation.download.DownloadScreen
+import com.cycling.presentation.scrape.ScrapeScreen
 import com.cycling.presentation.folder.FolderScreen
 import com.cycling.presentation.home.HomeScreen
 import com.cycling.presentation.home.HomeViewModel
@@ -43,7 +41,6 @@ import com.cycling.presentation.leaderboard.LeaderboardScreen
 import com.cycling.presentation.lyrics.LyricsScreen
 import com.cycling.presentation.mymusic.MyMusicScreen
 import com.cycling.presentation.mymusic.MyMusicViewModel
-import com.cycling.presentation.player.PlayerScreen
 import com.cycling.presentation.player.PlayerViewModel
 import com.cycling.presentation.playlistdetail.PlaylistDetailScreen
 import com.cycling.presentation.playlistdetail.PlaylistDetailViewModel
@@ -68,7 +65,9 @@ fun AppNavGraph(
     playerViewModel: PlayerViewModel,
     navigator: Navigator,
     navigationState: NavigationState,
-    bottomContentPadding: Dp = 0.dp
+    bottomContentPadding: Dp = 0.dp,
+    /** 播放页是浮层（见 PlayerOverlay），不再是一条导航路由，所以打开它靠这个回调。 */
+    onOpenPlayer: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val motionScheme = MaterialTheme.motionScheme
@@ -78,7 +77,7 @@ fun AppNavGraph(
     // 打开播放页，走 MainActivity 那边的 navigate，不受这个开关管。
     val openPlayerOnPlay = playerViewModel.openPlayerOnPlay.collectAsStateWithLifecycle()
     fun navigateToPlayer() {
-        if (openPlayerOnPlay.value) navigator.navigate(Screen.Player)
+        if (openPlayerOnPlay.value) onOpenPlayer()
     }
 
     // 各列表共用的歌曲动作：队列交给播放器，详情走导航。传进每个带曲目列表的页面，
@@ -100,22 +99,14 @@ fun AppNavGraph(
     val entryProvider = entryProvider<NavKey> {
         entry<Screen.Home> { _ ->
             val homeViewModel = hiltViewModel<HomeViewModel>()
+            // 首页就是全部歌曲：只有设置入口与播放，不再接分区跳转。
             HomeScreen(
                 viewModel = homeViewModel,
-                onNavigateToSongs = { navigator.navigate(LibraryDestination.Songs) },
-                onNavigateToAlbums = { navigator.navigate(LibraryDestination.Albums) },
-                onNavigateToArtists = { navigator.navigate(LibraryDestination.Artists) },
                 onNavigateToSettings = { navigator.navigate(SettingsDestination.Main) },
-                onNavigateToAlbumDetail = { albumId ->
-                    navigator.navigate(LibraryDestination.AlbumDetail(albumId))
-                },
-                onNavigateToArtistDetail = { artistId ->
-                    navigator.navigate(LibraryDestination.ArtistDetail(artistId))
-                },
                 onNavigateToPlayer = { navigateToPlayer() },
-                onNavigateToMyMusic = { navigator.navigate(LibraryDestination.MyMusic) },
-                onNavigateToSearch = { navigator.navigate(Screen.Search) },
-                onNavigateToFolders = { navigator.navigate(LibraryDestination.Folders) },
+                onNavigateToSongDetail = { songId ->
+                    navigator.navigate(Screen.SongDetail(songId))
+                },
                 bottomPadding = bottomContentPadding
             )
         }
@@ -152,41 +143,6 @@ fun AppNavGraph(
                 queueActions = songQueueActions,
                 // 「我喜欢」盖住整个 tab，不是一个导航路由：底栏让位只能由页面自己报上来。
                 onBottomBarHiddenChange = navigationState::requestBottomBarHidden
-            )
-        }
-
-        entry<Screen.Player>(
-            metadata = metadata {
-                // Slide up from bottom when entering (mini player -> full player)
-                put(NavDisplay.TransitionKey) {
-                    slideInVertically(
-                        initialOffsetY = { it },
-                        animationSpec = motionScheme.defaultSpatialSpec()
-                    ) togetherWith ExitTransition.KeepUntilTransitionsFinished
-                }
-                // Slide down to bottom when going back
-                put(NavDisplay.PopTransitionKey) {
-                    EnterTransition.None togetherWith
-                        slideOutVertically(
-                            targetOffsetY = { it },
-                            animationSpec = motionScheme.defaultSpatialSpec()
-                        )
-                }
-                put(NavDisplay.PredictivePopTransitionKey) {
-                    EnterTransition.None togetherWith
-                        slideOutVertically(
-                            targetOffsetY = { it },
-                            animationSpec = motionScheme.defaultSpatialSpec()
-                        )
-                }
-            }
-        ) { _ ->
-            val uiState = playerViewModel.uiState.collectAsStateWithLifecycle()
-            PlayerScreen(
-                uiState = uiState.value,
-                onIntent = playerViewModel::handleIntent,
-                onNavigateBack = { navigator.goBack() },
-                beatFlow = playerViewModel.beat
             )
         }
 
@@ -229,6 +185,20 @@ fun AppNavGraph(
             )
         }
 
+        entry<Screen.MetadataScrape> { _ ->
+            ScrapeScreen(
+                viewModel = hiltViewModel(),
+                onNavigateBack = { navigator.goBack() }
+            )
+        }
+
+        entry<Screen.Downloads> { _ ->
+            DownloadScreen(
+                viewModel = hiltViewModel(),
+                onNavigateBack = { navigator.goBack() }
+            )
+        }
+
         entry<Screen.Leaderboard> { _ ->
             LeaderboardScreen(
                 viewModel = hiltViewModel(),
@@ -244,6 +214,7 @@ fun AppNavGraph(
 
     fun isTabRoute(key: Any): Boolean = tabRoutes.any { it == key }
 
+    DownloadRequestProvider {
     NavDisplay(
         modifier = Modifier.fillMaxSize(),
         entries = navigationState.toEntries(entryProvider),
@@ -288,6 +259,7 @@ fun AppNavGraph(
                 )
         }
     )
+    }
 }
 
 private fun EntryProviderScope<NavKey>.libraryEntries(
@@ -472,7 +444,9 @@ private fun EntryProviderScope<NavKey>.settingsEntries(navigator: Navigator) {
         SettingsScreen(
             viewModel = hiltViewModel(),
             onNavigateBack = { navigator.goBack() },
-            onShowToast = { message -> /* Toast handled in AppNavGraph */ }
+            onShowToast = { message -> /* Toast handled in AppNavGraph */ },
+            onNavigateToDownloads = { navigator.navigate(Screen.Downloads) },
+            onNavigateToMetadataScrape = { navigator.navigate(Screen.MetadataScrape) }
         )
     }
 }
@@ -495,3 +469,4 @@ private fun buildSongQueueActions(
     },
     onViewDetail = { navigator.navigate(Screen.SongDetail(it.id)) }
 )
+

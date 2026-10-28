@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Flamingo 1.0.0（2608310056）的 ic_back，图标含义：返回。
+     pathData 原样搬运；viewport 收到图形包围盒（源文件里的留白已裁掉），
+     所以同一 dp 下各图标的墨迹大小一致。颜色一律 #FF000000，由 Icon 的 tint 决定。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="13.79dp"
+    android:height="24dp"
+    android:viewportWidth="508.5"
+    android:viewportHeight="885">
+    <group android:translateX="0.5" android:translateY="0.5">
+        <path
+            android:fillColor="#FF000000"
+            android:pathData="M-0.5,442C-0.5,459 6,473.5 19.5,486.5L409.5,868C420,879 434,884.5 450,884.5C482.5,884.5 508,859.5 508,826.5C508,810.5 501.5,796 490.5,785L139,442L490.5,99C501.5,87.5 508,73 508,57C508,24.5 482.5,-0.5 450,-0.5C434,-0.5 420,5 409.5,16L19.5,397.5C6,410.5 0,425 -0.5,442Z" />
+    </group>
+</vector>

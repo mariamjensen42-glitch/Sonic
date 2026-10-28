@@ -51,6 +51,24 @@ class AudioMetadataRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun writeCoverArtwork(
+        filePath: String,
+        imageBytes: ByteArray
+    ): Result<Boolean> {
+        return try {
+            val success = audioMetadataHelper.writeCoverArtwork(filePath, imageBytes)
+            if (success) {
+                Timber.i("writeCoverArtwork: wrote cover for filePath=$filePath")
+            } else {
+                Timber.w("writeCoverArtwork: cover not written for filePath=$filePath")
+            }
+            Result.success(success)
+        } catch (e: Exception) {
+            Timber.e(e, "writeCoverArtwork: exception for filePath=$filePath")
+            Result.failure(e)
+        }
+    }
+
     override fun isTagWriteSupported(filePath: String): Boolean =
         audioMetadataHelper.isTagWriteSupported(filePath)
 
