@@ -15,17 +15,25 @@ import com.cycling.domain.lyrics.model.karaoke.KaraokeLine
 import com.cycling.domain.lyrics.model.synced.SyncedLine
 import com.cycling.domain.lyrics.model.synced.UncheckedSyncedLine
 import com.cycling.domain.lyrics.parser.AutoParser
+import com.cycling.domain.lyrics.provider.OnlineLyrics
 import com.cycling.domain.lyrics.provider.OnlineLyricsProvider
 import com.cycling.domain.lyrics.utils.LyricsFormatGuesser
 import com.cycling.domain.model.Lyrics
 import com.cycling.domain.model.LyricsCandidate
+import com.cycling.domain.model.LyricsCandidatesBatch
 import com.cycling.domain.model.LyricsProvider
 import com.cycling.domain.model.LyricsQuery
 import com.cycling.domain.model.LyricsSource
 import com.cycling.domain.model.Song
 import com.cycling.domain.repository.LyricsRepository
 import com.cycling.domain.repository.SettingsRepository
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import timber.log.Timber
@@ -39,8 +47,11 @@ import kotlin.coroutines.cancellation.CancellationException
  *
  * - 1 → 2：加入 AMLL；
  * - 2 → 3：加入 QQ 音乐 / 酷狗音乐的歌词来源。
+ * - 3 → 4：加入音源脚本（LX）的歌词来源。
+ * - 4 → 5：AMLL 的检索与匹配增强（曲名变体、多份候选、缺歌手标签时的旁证匹配、平台 id 排序）
+ *   —— 以前记成“AMLL 没有”的歌，现在很可能是有的，旧缓存必须重查一次。
  */
-internal const val LYRICS_CACHE_GENERATION = 3
+internal const val LYRICS_CACHE_GENERATION = 5
 
 /**
  * Resolves lyrics for a track, cheapest and most authoritative source first.
@@ -119,10 +130,24 @@ class LyricsRepositoryImpl @Inject constructor(
 
         userLyrics(song)?.let { return it }
 
+        val query = LyricsQuery.of(song)
+        val cached = lyricsCacheDao.get(query.cacheKey)
+
+        // 用户在「切换歌词」里选过的那一份，优先级排在旁车文件与内嵌标签之前。
+        //
+        // 标记做在 cache 行的 source 后缀上，而不是给《lyrics_override》加一列：加列要写迁移，
+        // 而迁移 SQL 与 Room 期望的 schema 差一个字节就会在启动时崩 —— 为一个「谁优先」的标记
+        // 冒那个风险不值当。用户手写的歌词（lyrics_override）仍然排在它前面，那是更高的一档。
+        if (cached != null && cached.source.endsWith(PINNED_SUFFIX)) {
+            usableLyrics(cached.rawContent)?.let { parsed ->
+                Timber.d("getLyrics: pinned pick for ${query.cacheKey} (${cached.source})")
+                return Lyrics(parsed, cached.rawContent, LyricsSource.ONLINE, providerOf(cached.source))
+            }
+        }
+
         localLyrics(songPath)?.let { return it }
 
-        val query = LyricsQuery.of(song)
-        val cached = lyricsCacheDao.get(query.cacheKey) ?: return onlineLyrics(query)
+        if (cached == null) return onlineLyrics(query)
 
         val parsed = usableLyrics(cached.rawContent)
         if (parsed != null && !cached.hasExpired(parsed)) {
@@ -159,45 +184,77 @@ class LyricsRepositoryImpl @Inject constructor(
         return getLyrics(song)
     }
 
-    override suspend fun findLyricsCandidates(song: Song): List<LyricsCandidate> {
-        if (!settingsRepository.onlineLyricsEnabled.first()) return emptyList()
+    /**
+     * 每个来源一条协程，谁先答完谁先上报。
+     *
+     * 串行问六家时，一家的超时会把已经拿到结果的五家一起压在面板后面 —— 用户看到的是一段没有
+     * 任何反馈的等待，然后一次性刷出全部。并发之后面板是逐家长出来的，慢的那家最后补上。
+     *
+     * 解析刻意留在一条协程里串行做：`AutoParser` 与各格式解析器都不是为并发调用写的，
+     * 而解析是纯 CPU、比网络快两个数量级，串起来几乎不影响「谁先出现」。
+     */
+    override fun findLyricsCandidates(song: Song): Flow<LyricsCandidatesBatch> = channelFlow {
+        if (!settingsRepository.onlineLyricsEnabled.first()) return@channelFlow
         ensureCacheGeneration()
 
         val query = LyricsQuery.of(song)
         val inUse = lyricsCacheDao.get(query.cacheKey)?.rawContent
+        val asked = settingsRepository.lyricsProviderOrder.first()
+            .mapNotNull { kind -> providersByKind[kind]?.let { kind to it } }
 
-        val candidates = mutableListOf<LyricsCandidate>()
-        for (kind in settingsRepository.lyricsProviderOrder.first()) {
-            val provider = providersByKind[kind] ?: continue
+        // null 表示这一家查询失败，与「查到了但是空的」分开。
+        val answers = Channel<Pair<LyricsProvider, List<OnlineLyrics>?>>(Channel.UNLIMITED)
 
-            val found = try {
-                provider.fetchCandidates(query)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Timber.w(e, "findLyricsCandidates: ${kind.name} failed for ${query.cacheKey}")
-                continue
+        coroutineScope {
+            val fetchers = asked.map { (kind, provider) ->
+                launch {
+                    val found = try {
+                        provider.fetchCandidates(query)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Timber.w(e, "findLyricsCandidates: ${kind.name} failed for ${query.cacheKey}")
+                        null
+                    }
+                    answers.send(kind to found)
+                }
             }
-            Timber.d("findLyricsCandidates: ${kind.name} returned ${found.size} for ${query.cacheKey}")
+            launch {
+                fetchers.joinAll()
+                answers.close()
+            }
+            launch {
+                for ((kind, found) in answers) {
+                    if (found == null) {
+                        send(LyricsCandidatesBatch(kind, emptyList(), failed = true))
+                        continue
+                    }
+                    Timber.d("findLyricsCandidates: ${kind.name} returned ${found.size} for ${query.cacheKey}")
 
-            found.forEachIndexed { index, lyrics ->
-                val parsed = usableLyrics(lyrics.rawContent) ?: return@forEachIndexed
-                // Two entries of the same recording that parse to the same lyrics are one version
-                // as far as the user is concerned; listing both would only make the choice harder.
-                if (candidates.any { it.rawContent == lyrics.rawContent }) return@forEachIndexed
+                    // 只在这一家内部去重：同一家把同一份文档上架两次，对用户来说是一个版本；
+                    // 但两家各自有一份同样的 LRC 时**不能**合并 —— 面板是按平台分的，网易云那栏
+                    // 少了这一条，用户就没法「用网易云这份」。跨家去重还会让留下的是谁取决于
+                    // 谁先响应，每次打开都可能不一样。
+                    val seen = HashSet<String>()
+                    val versions = mutableListOf<LyricsCandidate>()
+                    found.forEachIndexed { index, lyrics ->
+                        val parsed = usableLyrics(lyrics.rawContent) ?: return@forEachIndexed
+                        if (!seen.add(lyrics.rawContent)) return@forEachIndexed
 
-                candidates += LyricsCandidate(
-                    id = "${kind.name.lowercase()}#$index",
-                    provider = kind,
-                    wordByWord = parsed.isWordByWord,
-                    label = lyrics.label,
-                    preview = parsed.lines.firstNotNullOfOrNull { it.preview() },
-                    isCurrent = lyrics.rawContent == inUse,
-                    rawContent = lyrics.rawContent
-                )
+                        versions += LyricsCandidate(
+                            id = "${kind.name.lowercase()}#$index",
+                            provider = kind,
+                            wordByWord = parsed.isWordByWord,
+                            label = lyrics.label,
+                            preview = parsed.lines.firstNotNullOfOrNull { it.preview() },
+                            isCurrent = lyrics.rawContent == inUse,
+                            rawContent = lyrics.rawContent
+                        )
+                    }
+                    send(LyricsCandidatesBatch(kind, versions))
+                }
             }
         }
-        return candidates
     }
 
     override suspend fun selectLyricsCandidate(song: Song, candidate: LyricsCandidate): Lyrics {
@@ -206,7 +263,8 @@ class LyricsRepositoryImpl @Inject constructor(
 
         // The cache row is the whole of the memory: the next lookup reads it back, which is why the
         // choice survives a restart without any schema of its own.
-        cacheLyrics(query, candidate.provider.name.lowercase(), candidate.rawContent)
+        // 带上 `*` 后缀：这个选择要压过本地文件与内嵌标签，否则「有歌词时切换」等于没切
+        cacheLyrics(query, candidate.provider.name.lowercase() + PINNED_SUFFIX, candidate.rawContent)
         index(song.id, candidate.rawContent)
         return Lyrics(
             syncedLyrics = parsed,
@@ -232,6 +290,15 @@ class LyricsRepositoryImpl @Inject constructor(
 
     override suspend fun clearLyrics(song: Song) {
         lyricsOverrideDao.delete(song.id)
+        // 「清除歌词」要连带清掉用户选过的在线版本，否则清完看到的还是它。自动下载的缓存留着 ——
+        // 那是下一次解析的正常起点，不该被这个动作一起抹掉。
+        try {
+            val key = LyricsQuery.of(song).cacheKey
+            val cached = lyricsCacheDao.get(key)
+            if (cached != null && cached.source.endsWith(PINNED_SUFFIX)) lyricsCacheDao.delete(key)
+        } catch (e: Exception) {
+            Timber.w(e, "clearLyrics: could not drop the pinned pick for songId=${song.id}")
+        }
         // The index may still hold text copied from the deleted override; the next successful
         // resolution (sidecar, cache or online) will rebuild it.
         try {
@@ -368,8 +435,10 @@ class LyricsRepositoryImpl @Inject constructor(
      * so the round trip is a case-insensitive lookup. An unknown value — an old row written by a
      * provider that has since been removed — is reported as `null` rather than guessed.
      */
-    private fun providerOf(source: String): LyricsProvider? =
-        LyricsProvider.entries.firstOrNull { it.name.equals(source, ignoreCase = true) }
+    private fun providerOf(source: String): LyricsProvider? {
+        val name = source.removeSuffix(PINNED_SUFFIX)
+        return LyricsProvider.entries.firstOrNull { it.name.equals(name, ignoreCase = true) }
+    }
 
     /** The first line's text, used to tell two versions apart when the source gave no label. */
     private fun ISyncedLine.preview(): String? {
@@ -456,6 +525,13 @@ class LyricsRepositoryImpl @Inject constructor(
 
         /** Marks a cache row that records failure rather than lyrics; see [hasExpired]. */
         const val MISS_SOURCE = "none"
+
+        /**
+         * 后缀：这一行是用户在「切换歌词」里亲手挑的，不是自动挑的。
+         *
+         * 有它就该压过旁车文件与内嵌标签 —— 用户既然点了切换，说明他不认自动找到的那一份。
+         */
+        const val PINNED_SUFFIX = "*"
 
         /** How long an answer that cannot be improved on — lyrics, or a remembered miss — is kept. */
         const val SETTLED_TTL_MS = 7L * 24 * 60 * 60 * 1000

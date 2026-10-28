@@ -39,6 +39,13 @@ internal data class AmllSongItemDto(
     val musicNames: List<String> = emptyList(),
     val artistNames: List<String> = emptyList(),
     val albumNames: List<String> = emptyList(),
+    /**
+     * 各平台里**同一条录音**的 id。词库里每份文档都登记了提交者填写的平台 id，网易云与 QQ
+     * 的 id 能直接和本地「在线曲目」的 `onlineSongId` 对上 —— 那是比曲名、专辑都硬的证据：
+     * 平台 id 相同就是同一份母带，不是"同名歌"。
+     */
+    val ncmMusicIds: List<String> = emptyList(),
+    val qqMusicIds: List<String> = emptyList(),
     /** GitHub usernames of the TTML's contributors — what tells two submissions apart. */
     val authorUsernames: List<String> = emptyList(),
     /** The TTML document itself. Only the get endpoint sends it; search leaves it null. */
