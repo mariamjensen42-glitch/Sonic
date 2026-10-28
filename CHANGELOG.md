@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-10-28
+
 ### Fixed
 - 🐞 **底部导航启动即崩（`Unknown command for: R`）**：`ic_flamingo_tab_library` 的 pathData 尾部
   混进了 aapt2 dump 的 `(Raw: …)` 残段，运行到 `painterResource` 时 `PathParser` 直接抛
